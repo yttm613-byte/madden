@@ -1071,6 +1071,11 @@
       const back=new THREE.Mesh(new THREE.PlaneGeometry(0.36,0.36), nMat); back.position.set(0,0.13,-0.205); back.rotation.y=Math.PI; chest.add(back);
       const front=new THREE.Mesh(new THREE.PlaneGeometry(0.24,0.24), nMat); front.position.set(0,0.11,0.205); chest.add(front);
     }
+    // soft contact shadow so players read as planted on the turf
+    if(!makePlayer._sh){ const c=document.createElement('canvas'); c.width=c.height=64; const cg=c.getContext('2d');
+      const gr=cg.createRadialGradient(32,32,2,32,32,30); gr.addColorStop(0,'rgba(0,0,0,0.5)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+      cg.fillStyle=gr; cg.fillRect(0,0,64,64); makePlayer._sh=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,fog:false}); }
+    const blob=new THREE.Mesh(new THREE.CircleGeometry(0.62,18), makePlayer._sh); blob.rotation.x=-Math.PI/2; blob.position.y=0.015; grp.add(blob);
     // per-player gait variation so the 11 don't move in lockstep
     grp.userData={mixer,actions,cur:'idle',mats,phase:Math.random()*6.28,
       gait:0.85+Math.random()*0.30, runPhase:Math.random()*runDur, idlePhase:Math.random()*idleDur, setDur:actions.set.getClip().duration};
@@ -1187,7 +1192,9 @@
       ballMesh.rotation.y=Math.atan2((G.ball.tx-G.ball.x),(G.ball.ty-G.ball.y)); ballMesh.rotation.x+=0.6; }
     else ballMesh.visible=false;
     if(G._fgFlight && G.ball && G.ball.active){ const bx=WX(G.ball.x), bz=WZ(G.ball.y);
-      camPos.lerp(new THREE.Vector3(bx-15,8,bz),0.14); camLook.lerp(new THREE.Vector3(119.5,3.5,WZ(fieldMid)),0.14);
+      // sit low behind the kick and frame the uprights up the field
+      camPos.lerp(new THREE.Vector3(bx-17,6.5,WZ(fieldMid)+(bz-WZ(fieldMid))*0.4),0.14);
+      camLook.lerp(new THREE.Vector3(119.5,4.5,WZ(fieldMid)),0.14);
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(G.carrier){ const cx=WX(G.carrier.x), cz=WZ(G.carrier.y);
       // broadcast-style chase: higher and further back, biased toward the middle of the field
