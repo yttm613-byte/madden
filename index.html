@@ -78,6 +78,7 @@
 <script src="vendor/three.min.js"></script>
 <script src="vendor/GLTFLoader.js"></script>
 <script src="vendor/SkeletonUtils.js"></script>
+<script src="vendor/RGBELoader.js"></script>
 </head>
 <body>
 <div id="app">
@@ -1188,8 +1189,11 @@
     renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true}); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     if(THREE.sRGBEncoding) renderer.outputEncoding=THREE.sRGBEncoding;
     if(THREE.ACESFilmicToneMapping){ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.12; }
-    // image-based lighting so helmets/pads pick up soft stadium reflections (reads as 3D)
-    try{ const pmrem=new THREE.PMREMGenerator(renderer); const et=skyTexture(); if(THREE.EquirectangularReflectionMapping) et.mapping=THREE.EquirectangularReflectionMapping; scene.environment=pmrem.fromEquirectangular(et).texture; et.dispose&&et.dispose(); }catch(e){}
+    // image-based lighting: real HDRI for soft reflections, with a gradient fallback until it loads
+    try{ const pmrem=new THREE.PMREMGenerator(renderer); pmrem.compileEquirectangularShader();
+      const et=skyTexture(); if(THREE.EquirectangularReflectionMapping) et.mapping=THREE.EquirectangularReflectionMapping; scene.environment=pmrem.fromEquirectangular(et).texture;
+      if(THREE.RGBELoader){ new THREE.RGBELoader().load('assets/env.hdr',(hdr)=>{ try{ hdr.mapping=THREE.EquirectangularReflectionMapping; scene.environment=pmrem.fromEquirectangular(hdr).texture; hdr.dispose(); }catch(e){} }); }
+    }catch(e){}
     document.getElementById('gl').appendChild(cv);
     const sky=new THREE.Mesh(new THREE.SphereGeometry(340,24,16), new THREE.MeshBasicMaterial({map:skyTexture(),side:THREE.BackSide,fog:false})); scene.add(sky);
     scene.add(new THREE.AmbientLight(0x3a4a66,0.42));   // cooler, dimmer fill for a night game
