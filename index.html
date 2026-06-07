@@ -386,35 +386,40 @@
   function norm(x,y){ const m=Math.hypot(x,y)||1; return {x:x/m,y:y/m}; }
   function mk(x,y,n){ return {x,y,vx:0,vy:0,n,target:null}; }
   function def(x,y,delay,n,job,assign){ return {x,y,vx:0,vy:0,n,react:delay,whiff:0,blocked:0,homeY:y,job,assign,_takenBy:null}; }
-  // Pad both sides to a full 11 with a believable formation. Extra offense become
-  // offensive linemen / split ends (they block); extra defense become a back line
-  // of DBs/safeties that play zone depth, so the field looks full without the
-  // play turning into an instant gang-tackle.
+  // Pad both sides to a full, real-looking 11: a tight offensive line, receivers
+  // split out wide, corners pressed over them, linebackers in the box, and deep
+  // safeties. Filler defenders play run defense but don't blanket the pass.
   function fillFormation(cx, type){
     const offCount = ()=> 1 + G.receivers.length + G.blockers.length;
-    // --- offensive line across the LOS, filling open interior slots first ---
-    const olY=[0,-1.7,1.7,-3.4,3.4,-5.1,5.1];
-    for(const oy of olY){ if(offCount()>=11) break;
+    // --- 5-man offensive line, tight at center ---
+    for(const oy of [0,-1.6,1.6,-3.2,3.2]){ if(offCount()>=11) break;
       const sy=fieldMid+yd(oy);
-      const taken=G.blockers.some(b=>Math.abs(b.y-sy)<yd(1.3)&&b.x>cx-yd(2.2));
-      if(!taken) G.blockers.push(mk(cx-yd(0.8),sy,60+((oy*10)&7)));
+      if(!G.blockers.some(b=>Math.abs(b.y-sy)<yd(1.2)&&b.x>cx-yd(2.4))) G.blockers.push(mk(cx-yd(0.8),sy,60+((oy*7)&7)));
     }
-    // --- any remaining offense: split receivers/TE out wide (stand & seal) ---
-    const splitY=[fieldTop+yd(2),fieldBot-yd(2),fieldTop+PLAYH*0.32,fieldBot-PLAYH*0.32];
-    for(const sy of splitY){ if(offCount()>=11) break; G.blockers.push(mk(cx-yd(0.6),sy,80+((sy|0)&7))); }
-    // --- defensive back seven: pad to 11 with zone DBs/safeties at depth ---
-    const dbSlots=[0.5,0.16,0.84,0.32,0.68];
-    for(const p of dbSlots){ if(G.defenders.length>=11) break;
-      const sy=fieldTop+PLAYH*p;
-      const taken=G.defenders.some(d=>Math.abs(d.y-sy)<yd(2)&&d.x>cx+yd(7));
-      if(taken) continue;
-      const deep=(p<0.2||p>0.8);
-      const depth = type==='pass' ? yd(deep?15:11) : yd(deep?13:8.5);
-      const d=def(cx+depth, sy, 0.05, 40+((p*10)|0), type==='pass'?'cover':'pursue', null);
-      d.deep=deep; d.fill=true; G.defenders.push(d);   // formation fillers: full run defense, but don't blanket the pass contest
+    // --- split the rest out wide (WR / TE) at the numbers and sidelines ---
+    const wides=[];
+    const wideSpots=[fieldTop+yd(4),fieldBot-yd(4),fieldTop+yd(13),fieldBot-yd(13)];
+    for(const sy of wideSpots){ if(offCount()>=11) break;
+      if(!G.blockers.some(b=>Math.abs(b.y-sy)<yd(2.5)) && !G.receivers.some(r=>Math.abs(r.y-sy)<yd(2.5))){
+        G.blockers.push(mk(cx-yd(0.5),sy,80+(wides.length))); wides.push(sy); }
     }
-    while(G.defenders.length<11){ const k=G.defenders.length; const sy=fieldMid+yd((k%2?1:-1)*2.5*(1+(k%3)));
-      const d=def(cx+yd(5),Math.max(fieldTop+yd(1),Math.min(fieldBot-yd(1),sy)),0.06,70+k,'pursue',null); d.fill=true; G.defenders.push(d); }
+    // guarantee a full 11 offense (tight ends / wings / slots)
+    { const exY=[-6,6,-2,2,-8,8,-4.5,4.5]; let ei=0;
+      while(offCount()<11){ const sy=fieldMid+yd(exY[ei++%exY.length]);
+        G.blockers.push(mk(cx-yd(0.6),Math.max(fieldTop+yd(1),Math.min(fieldBot-yd(1),sy)),86+ei)); if(ei>40) break; } }
+    // --- defense to 11: corners over the wide men, deep safeties, then box LBs ---
+    let need=()=>11-G.defenders.length;
+    for(const wy of wides){ if(need()<=0) break;
+      if(!G.defenders.some(d=>Math.abs(d.y-wy)<yd(2.5)&&d.x>cx+yd(0.5))){
+        const d=def(cx+yd(2.0), wy, 0.05, 40+G.defenders.length, type==='pass'?'cover':'pursue', null); d.fill=true; G.defenders.push(d); }
+    }
+    for(const sy of [fieldMid-yd(7.5), fieldMid+yd(7.5)]){ if(need()<=0) break;
+      const d=def(cx+yd(type==='pass'?15:11), sy, 0.06, 50+G.defenders.length, type==='pass'?'cover':'pursue', null); d.deep=true; d.fill=true; G.defenders.push(d);
+    }
+    const lbY=[0,-3.5,3.5,-6.5,6.5];
+    for(let i=0; need()>0; i++){ const sy=fieldMid+yd(lbY[i%lbY.length]);
+      const d=def(cx+yd(5), Math.max(fieldTop+yd(1),Math.min(fieldBot-yd(1),sy)), 0.06, 70+G.defenders.length, 'pursue', null); d.fill=true; G.defenders.push(d);
+    }
   }
 
   // ---- input ----
@@ -1006,6 +1011,12 @@
     const sx=c.width/120, h=c.height;
     for(let l=0;l<120;l+=5){ g.fillStyle=((l/5)%2===0)?'#2f8040':'#2a763a'; g.fillRect(l*sx,0,5*sx,h); }
     for(let i=0;i<4200;i++){ const a=(0.03+Math.random()*0.06).toFixed(2); g.fillStyle='rgba('+(20+(Math.random()*28|0))+',105,'+(48+(Math.random()*30|0))+','+a+')'; const w=2+Math.random()*5; g.fillRect(Math.random()*c.width,Math.random()*h,w,w); }
+    // midfield logo (circle + star), lines overlay it
+    (function(){ const cxp=60*sx, cyp=h/2, R=h*0.21; g.save(); g.globalAlpha=0.85;
+      g.lineWidth=7; g.strokeStyle='rgba(240,246,255,0.8)'; g.beginPath(); g.arc(cxp,cyp,R,0,7); g.stroke();
+      g.translate(cxp,cyp); g.fillStyle='rgba(240,246,255,0.85)'; g.beginPath();
+      for(let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, rr=(i%2?R*0.4:R*0.82); const px=Math.cos(a)*rr, py=Math.sin(a)*rr; i?g.lineTo(px,py):g.moveTo(px,py); }
+      g.closePath(); g.fill(); g.restore(); })();
     g.fillStyle='#16486a'; g.fillRect(0,0,10*sx,h); g.fillStyle='#5a1d24'; g.fillRect(110*sx,0,10*sx,h);
     g.strokeStyle='rgba(255,255,255,.92)';
     for(let l=10;l<=110;l+=5){ g.lineWidth=(l%10===0)?5:2.5; g.beginPath(); g.moveTo(l*sx,0); g.lineTo(l*sx,h); g.stroke(); }
@@ -1040,11 +1051,21 @@
     const t=new THREE.CanvasTexture(c); if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
   }
   function crowdTexture(){
-    const c=document.createElement('canvas'); c.width=512; c.height=128; const g=c.getContext('2d');
-    g.fillStyle='#0c1220'; g.fillRect(0,0,512,128);
-    const cols=['#cdd6e4','#d9a05b','#6e8cc0','#c0626a','#7bbf8a','#b9b0c8','#e0c66a','#8893a6'];
-    for(let i=0;i<3000;i++){ g.fillStyle=cols[(Math.random()*cols.length)|0]; g.fillRect(Math.random()*512,Math.random()*128,3,3); }
-    const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
+    const c=document.createElement('canvas'); c.width=1024; c.height=256; const g=c.getContext('2d');
+    g.fillStyle='#0a0f18'; g.fillRect(0,0,1024,256);
+    const shirt=['#cdd6e4','#d9a05b','#6e8cc0','#c0626a','#7bbf8a','#b9b0c8','#e0c66a','#8893a6','#d04a4a','#3a6bd0','#e8e8ec','#2a3550','#9a4a8a','#4aa080'];
+    const skin=['#e8b890','#c89060','#a06840','#7a4a28','#f0c8a0'];
+    const rows=15, rh=256/rows;
+    for(let r=0;r<rows;r++){ const y=256-(r+0.5)*rh, perRow=78, jit=rh*0.28;
+      for(let i=0;i<perRow;i++){ const x=((i+(r%2?0.5:0))/perRow)*1024+(Math.random()-0.5)*7, yy=y+(Math.random()-0.5)*jit;
+        g.fillStyle=shirt[(Math.random()*shirt.length)|0]; g.fillRect(x-3.4,yy-0.5,6.8,5);            // torso/shoulders
+        g.fillStyle=skin[(Math.random()*skin.length)|0]; g.beginPath(); g.arc(x,yy-2.6,2.1,0,7); g.fill(); // head
+      }
+    }
+    // depth shading: darker high (under roof) and at the very bottom rail
+    const sh=g.createLinearGradient(0,0,0,256); sh.addColorStop(0,'rgba(0,0,0,0.55)'); sh.addColorStop(0.45,'rgba(0,0,0,0.12)'); sh.addColorStop(1,'rgba(0,0,0,0.4)');
+    g.fillStyle=sh; g.fillRect(0,0,1024,256);
+    const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
   }
   function numberTex(n){
     const c=document.createElement('canvas'); c.width=128; c.height=128; const g=c.getContext('2d');
