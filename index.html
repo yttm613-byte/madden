@@ -1146,10 +1146,16 @@
     stand(60,-24,196,30, 0,-1); stand(60,77,196,30, 0,1);
     stand(-26,26.65,30,164, -1,0); stand(144,26.65,30,164, 1,0);
   }
+  let _glowTex=null;
+  function glowTex(){ if(_glowTex) return _glowTex; const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d');
+    const gr=g.createRadialGradient(32,32,0,32,32,32); gr.addColorStop(0,'rgba(255,250,228,0.95)'); gr.addColorStop(0.4,'rgba(255,244,210,0.32)'); gr.addColorStop(1,'rgba(255,244,210,0)');
+    g.fillStyle=gr; g.fillRect(0,0,64,64); _glowTex=new THREE.CanvasTexture(c); return _glowTex; }
   function lightTower(x,z){
     const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,30,8), new THREE.MeshStandardMaterial({color:0x2a2f3a,roughness:0.8})); pole.position.set(x,15,z); scene.add(pole);
-    const bank=new THREE.Mesh(new THREE.BoxGeometry(9,4.5,1.2), new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff2c0,emissiveIntensity:1.1})); bank.position.set(x,30,z); bank.lookAt(60,0,26.65); scene.add(bank);
-    const lp=new THREE.PointLight(0xfff4e0,0.5,280,1.5); lp.position.set(x,30,z); scene.add(lp);
+    const bank=new THREE.Mesh(new THREE.BoxGeometry(9,4.5,1.2), new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff2c0,emissiveIntensity:1.2})); bank.position.set(x,30,z); bank.lookAt(60,0,26.65); scene.add(bank);
+    const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(),color:0xfff4e0,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+    glow.scale.set(16,9,1); glow.position.set(x,30,z); scene.add(glow);
+    const lp=new THREE.PointLight(0xfff4e0,0.6,300,1.5); lp.position.set(x,30,z); scene.add(lp);
   }
   function buildFlashes(){
     const geo=new THREE.PlaneGeometry(0.7,0.7);
