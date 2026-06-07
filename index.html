@@ -1062,15 +1062,18 @@
       tackle:mixer.clipAction(clip('tackle')), celebrate:mixer.clipAction(clip('celebrate')),
       throw:mixer.clipAction(clip('throw')), kick:mixer.clipAction(clip('kick')), set:mixer.clipAction(clip('set')) };
     [actions.tackle,actions.throw,actions.kick].forEach(a=>{ a.setLoop(THREE.LoopOnce); a.clampWhenFinished=true; });
-    actions.idle.play();
+    const idleDur=actions.idle.getClip().duration, runDur=actions.run.getClip().duration;
+    actions.idle.play(); actions.idle.time=Math.random()*idleDur;   // desync idles
     // jersey number on chest + back, parented to the chest bone so it deforms with the body
     const chest=grp.getObjectByName('chest');
     if(chest){ const nt=numberTex(Math.floor(Math.random()*89)+10);
       const nMat=new THREE.MeshBasicMaterial({map:nt,transparent:true});
-      const back=new THREE.Mesh(new THREE.PlaneGeometry(0.30,0.30), nMat); back.position.set(0,0.12,-0.2); back.rotation.y=Math.PI; chest.add(back);
-      const front=new THREE.Mesh(new THREE.PlaneGeometry(0.20,0.20), nMat); front.position.set(0,0.10,0.205); chest.add(front);
+      const back=new THREE.Mesh(new THREE.PlaneGeometry(0.36,0.36), nMat); back.position.set(0,0.13,-0.205); back.rotation.y=Math.PI; chest.add(back);
+      const front=new THREE.Mesh(new THREE.PlaneGeometry(0.24,0.24), nMat); front.position.set(0,0.11,0.205); chest.add(front);
     }
-    grp.userData={mixer,actions,cur:'idle',mats,phase:Math.random()*6.28};
+    // per-player gait variation so the 11 don't move in lockstep
+    grp.userData={mixer,actions,cur:'idle',mats,phase:Math.random()*6.28,
+      gait:0.85+Math.random()*0.30, runPhase:Math.random()*runDur, idlePhase:Math.random()*idleDur, setDur:actions.set.getClip().duration};
     grp.visible=false; scene.add(grp); return grp;
   }
   // Asynchronously load the player model, then fill the reusable pool.
@@ -1171,10 +1174,12 @@
         else if(G.phase==='presnap' && spy<1 && (o.kind==='block' || (o.kind==='def' && G.carrier && Math.abs(e.x-G.los)<yd(3.4)))) want='set'; // line gets in stance
         if(u.cur!==want){ const to=u.actions[want], from=u.actions[u.cur];
           to.reset().setEffectiveWeight(1).play();
+          if(want==='run') to.time=u.runPhase; else if(want==='idle') to.time=u.idlePhase; else if(want==='set') to.time=Math.random()*u.setDur; // desync
           if(from && from!==to) to.crossFadeFrom(from,0.18,false); u.cur=want; }
-        if(u.cur==='run') u.actions.run.timeScale=Math.max(0.65,Math.min(2.5, spy/6.0));
+        if(u.cur==='run') u.actions.run.timeScale=Math.max(0.65,Math.min(2.5, spy/6.0))*u.gait; // slight per-player stride speed
         u.mixer.update(lastDt);
-        if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring); r.position.set(WX(e.x),0.06,WZ(e.y)); }
+        if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
+          const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.06,WZ(e.y)); }
       } else g.visible=false; }
     if(G.ball&&G.ball.active){ ballMesh.visible=true; const t=Math.min(1,G.ball.t/G.ball.dur);
       const h = G.ball.fg ? (G.ball.short ? 1+Math.sin(t*Math.PI)*4 : 1+Math.sin(t*Math.PI*0.82)*7.5) : 1+Math.sin(t*Math.PI)*4.8;
