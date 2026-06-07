@@ -64,8 +64,8 @@ BONES.forEach(([name, parent, x, y, z], i) => {
 const root = bones[0];
 
 // --------------------------------------------------------------- geometry ----
-// material slots: 0 jersey, 1 helmet, 2 skin, 3 pants, 4 dark
-const slots = { jersey: [], helmet: [], skin: [], pants: [], dark: [] };
+// material slots: jersey, helmet, skin, pants, dark, trim
+const slots = { jersey: [], helmet: [], skin: [], pants: [], dark: [], trim: [] };
 
 function skinTo(geo, bIdx) {
   const n = geo.attributes.position.count;
@@ -85,9 +85,10 @@ function part(slot, boneName, geo, pos, rot) {
   skinTo(geo, boneIndex[boneName]);
   slots[slot].push(geo);
 }
-const cyl = (rt, rb, h, rs=10) => new THREE.CylinderGeometry(rt, rb, h, rs);
-const box = (w,h,d) => new THREE.BoxGeometry(w,h,d);
-const sph = (r) => new THREE.SphereGeometry(r, 12, 10);
+// rounder, smoother primitives so the silhouette reads as 3D rather than faceted
+const cyl = (rt, rb, h, rs=18) => new THREE.CylinderGeometry(rt, rb, h, rs);
+const box = (w,h,d) => new THREE.BoxGeometry(w,h,d, 2,2,2);
+const sph = (r) => new THREE.SphereGeometry(r, 22, 16);
 
 // torso / pelvis
 part('pants',  'hips',  box(0.34,0.20,0.24), [0,0.92,0]);
@@ -100,7 +101,7 @@ part('jersey', 'chest', sph(0.12), [ 0.31,1.40,0]);
 part('skin',   'neck',  cyl(0.08,0.08,0.12), [0,1.47,0]);
 part('helmet', 'head',  sph(0.18), [0,1.57,0.01]);
 part('dark',   'head',  box(0.20,0.11,0.10), [0,1.54,0.17]);          // facemask
-part('helmet', 'head',  box(0.05,0.20,0.30), [0,1.66,0.0]);           // helmet stripe (recolors w/ helmet)
+part('trim',   'head',  box(0.06,0.20,0.32), [0,1.66,0.0]);           // contrasting helmet stripe
 // arms (hang straight down in bind)
 part('jersey', 'upperArmL', cyl(0.075,0.065,0.30), [-0.22,1.25,0]);
 part('skin',   'forearmL',  cyl(0.062,0.052,0.26), [-0.22,0.97,0]);
@@ -116,16 +117,17 @@ part('pants',  'upperLegR', cyl(0.105,0.085,0.44), [ 0.10,0.68,0]);
 part('pants',  'lowerLegR', cyl(0.082,0.062,0.40), [ 0.10,0.27,0]);
 part('dark',   'footR',     box(0.13,0.09,0.28),   [ 0.10,0.04,0.06]);
 
-const slotOrder = ['jersey','helmet','skin','pants','dark'];
+const slotOrder = ['jersey','helmet','skin','pants','dark','trim'];
 const slotGeos = slotOrder.map(s => merge(slots[s], false));
 const geometry = merge(slotGeos, true);   // grouped -> one group/material per slot
 
 const materials = [
-  new THREE.MeshStandardMaterial({ name:'jersey', color:0xffffff, roughness:0.62, metalness:0.0 }),
-  new THREE.MeshStandardMaterial({ name:'helmet', color:0xffffff, roughness:0.32, metalness:0.30 }),
-  new THREE.MeshStandardMaterial({ name:'skin',   color:0x9c6b43, roughness:0.85 }),
-  new THREE.MeshStandardMaterial({ name:'pants',  color:0xe7eaf0, roughness:0.85 }),
-  new THREE.MeshStandardMaterial({ name:'dark',   color:0x14161c, roughness:0.5 }),
+  new THREE.MeshStandardMaterial({ name:'jersey', color:0xffffff, roughness:0.55, metalness:0.05 }),
+  new THREE.MeshStandardMaterial({ name:'helmet', color:0xffffff, roughness:0.22, metalness:0.45 }),
+  new THREE.MeshStandardMaterial({ name:'skin',   color:0x9c6b43, roughness:0.8 }),
+  new THREE.MeshStandardMaterial({ name:'pants',  color:0xe7eaf0, roughness:0.8 }),
+  new THREE.MeshStandardMaterial({ name:'dark',   color:0x14161c, roughness:0.4, metalness:0.3 }),
+  new THREE.MeshStandardMaterial({ name:'trim',   color:0xffffff, roughness:0.35 }),
 ];
 
 // ------------------------------------------------------------------ bind -----
