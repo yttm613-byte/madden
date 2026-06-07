@@ -1,0 +1,7 @@
+node_modules/
+.qa/
+# test-only build of the game (debug hook injected) + screenshot harness output
+index.test.html
+tools/*.png
+tools/*.mjs
+*.log

@@ -1,0 +1,34 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#222;overflow:hidden}</style>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/GLTFLoader.js"></script>
+</head><body>
+<script>
+const W=520,H=560;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x223044);
+const cam=new THREE.PerspectiveCamera(40,W/H,0.1,100); cam.position.set(2.6,1.5,3.4); cam.lookAt(0,0.9,0);
+const rend=new THREE.WebGLRenderer({antialias:true}); rend.setSize(W,H); rend.outputEncoding=THREE.sRGBEncoding;
+rend.shadowMap.enabled=true; document.body.appendChild(rend.domElement);
+scene.add(new THREE.AmbientLight(0xffffff,0.7));
+const dl=new THREE.DirectionalLight(0xffffff,1.1); dl.position.set(3,6,4); dl.castShadow=true; scene.add(dl);
+const grid=new THREE.GridHelper(6,12,0x556,0x445); scene.add(grid);
+let mixer,action,clips,model;
+window.__ready=false; window.__clipNames=[];
+new THREE.GLTFLoader().load('../assets/player.glb',(g)=>{
+  model=g.scene; scene.add(model);
+  model.traverse(o=>{ if(o.isMesh){o.castShadow=true;} });
+  clips=g.animations; window.__clipNames=clips.map(c=>c.name);
+  mixer=new THREE.AnimationMixer(model);
+  window.__setClip=(name,timeFrac)=>{
+    mixer.stopAllAction();
+    const c=clips.find(x=>x.name===name); if(!c){return false;}
+    action=mixer.clipAction(c); action.play();
+    mixer.setTime((timeFrac||0)*c.duration);
+    rend.render(scene,cam); return true;
+  };
+  window.__spin=(deg)=>{ if(model) model.rotation.y=deg*Math.PI/180; rend.render(scene,cam); };
+  window.__ready=true;
+  rend.render(scene,cam);
+},undefined,(e)=>{ window.__err=String(e); });
+function loop(){ rend.render(scene,cam); requestAnimationFrame(loop);} loop();
+</script>
+</body></html>

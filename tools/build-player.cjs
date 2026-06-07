@@ -1,0 +1,241 @@
+/*
+ * build-player.cjs — generates assets/player.glb
+ * A rigged skinned humanoid (American-football player) with a real skeleton
+ * and authored animation clips: idle / run / tackle / celebrate.
+ * Rigid per-segment skinning (each body part bound 100% to one bone) keeps the
+ * exporter simple while giving true skeletal deformation at the joints.
+ *
+ * Runs fully offline: uses the locally-vendored three (UMD) + examples utils.
+ */
+const fs = require('fs');
+const path = require('path');
+
+// --- minimal DOM shims so GLTFExporter's GLB assembly works under Node ---
+global.Blob = global.Blob || require('buffer').Blob;
+global.window = global.window || {};
+global.window.FileReader = class {
+  readAsArrayBuffer(blob) { blob.arrayBuffer().then(ab => { this.result = ab; this.onloadend && this.onloadend(); }); }
+};
+
+global.THREE = require('three');
+require(path.join(__dirname, '..', 'vendor', 'BufferGeometryUtils.js'));
+require(path.join(__dirname, '..', 'vendor', 'exporters', 'GLTFExporter.js'));
+const THREE = global.THREE;
+const BGU = THREE.BufferGeometryUtils;
+const merge = (geos, useGroups) => BGU.mergeBufferGeometries(geos, useGroups);
+
+// ---------------------------------------------------------------- skeleton ---
+// [name, parentName, worldX, worldY, worldZ] — bind pose, facing +Z.
+const BONES = [
+  ['hips',      null,       0.00, 0.92, 0],
+  ['spine',     'hips',     0.00, 1.06, 0],
+  ['chest',     'spine',    0.00, 1.24, 0],
+  ['neck',      'chest',    0.00, 1.42, 0],
+  ['head',      'neck',     0.00, 1.54, 0],
+  ['upperArmL', 'chest',   -0.22, 1.40, 0],
+  ['forearmL',  'upperArmL',-0.22, 1.10, 0],
+  ['handL',     'forearmL', -0.22, 0.84, 0],
+  ['upperArmR', 'chest',    0.22, 1.40, 0],
+  ['forearmR',  'upperArmR', 0.22, 1.10, 0],
+  ['handR',     'forearmR',  0.22, 0.84, 0],
+  ['upperLegL', 'hips',    -0.10, 0.90, 0],
+  ['lowerLegL', 'upperLegL',-0.10, 0.47, 0],
+  ['footL',     'lowerLegL',-0.10, 0.07, 0],
+  ['upperLegR', 'hips',     0.10, 0.90, 0],
+  ['lowerLegR', 'upperLegR', 0.10, 0.47, 0],
+  ['footR',     'lowerLegR', 0.10, 0.07, 0],
+];
+const boneIndex = {};
+BONES.forEach((b, i) => boneIndex[b[0]] = i);
+
+const bones = BONES.map(([name, , x, y, z]) => {
+  const b = new THREE.Bone(); b.name = name; return b;
+});
+BONES.forEach(([name, parent, x, y, z], i) => {
+  const b = bones[i];
+  if (parent) {
+    const p = BONES[boneIndex[parent]];
+    b.position.set(x - p[2], y - p[3], z - p[4]);   // local offset from parent
+    bones[boneIndex[parent]].add(b);
+  } else {
+    b.position.set(x, y, z);
+  }
+});
+const root = bones[0];
+
+// --------------------------------------------------------------- geometry ----
+// material slots: 0 jersey, 1 helmet, 2 skin, 3 pants, 4 dark
+const slots = { jersey: [], helmet: [], skin: [], pants: [], dark: [] };
+
+function skinTo(geo, bIdx) {
+  const n = geo.attributes.position.count;
+  const si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) { si[i*4] = bIdx; sw[i*4] = 1; }
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+  geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+  if (!geo.attributes.uv) {  // ensure uv exists so merges stay compatible
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n*2), 2));
+  }
+  geo.deleteAttribute('color');
+  return geo;
+}
+function part(slot, boneName, geo, pos, rot) {
+  geo.translate(pos[0], pos[1], pos[2]);
+  if (rot) geo.rotateX(rot);
+  skinTo(geo, boneIndex[boneName]);
+  slots[slot].push(geo);
+}
+const cyl = (rt, rb, h, rs=10) => new THREE.CylinderGeometry(rt, rb, h, rs);
+const box = (w,h,d) => new THREE.BoxGeometry(w,h,d);
+const sph = (r) => new THREE.SphereGeometry(r, 12, 10);
+
+// torso / pelvis
+part('pants',  'hips',  box(0.34,0.20,0.24), [0,0.92,0]);
+part('jersey', 'spine', cyl(0.21,0.23,0.22), [0,1.06,0]);
+part('jersey', 'chest', cyl(0.25,0.21,0.24), [0,1.24,0]);
+part('jersey', 'chest', box(0.66,0.18,0.36), [0,1.40,0]);              // shoulder pads
+part('jersey', 'chest', sph(0.12), [-0.31,1.40,0]);
+part('jersey', 'chest', sph(0.12), [ 0.31,1.40,0]);
+// neck + head
+part('skin',   'neck',  cyl(0.08,0.08,0.12), [0,1.47,0]);
+part('helmet', 'head',  sph(0.18), [0,1.57,0.01]);
+part('dark',   'head',  box(0.20,0.11,0.10), [0,1.54,0.17]);          // facemask
+part('helmet', 'head',  box(0.05,0.20,0.30), [0,1.66,0.0]);           // helmet stripe (recolors w/ helmet)
+// arms (hang straight down in bind)
+part('jersey', 'upperArmL', cyl(0.075,0.065,0.30), [-0.22,1.25,0]);
+part('skin',   'forearmL',  cyl(0.062,0.052,0.26), [-0.22,0.97,0]);
+part('dark',   'handL',     sph(0.075), [-0.22,0.82,0]);
+part('jersey', 'upperArmR', cyl(0.075,0.065,0.30), [ 0.22,1.25,0]);
+part('skin',   'forearmR',  cyl(0.062,0.052,0.26), [ 0.22,0.97,0]);
+part('dark',   'handR',     sph(0.075), [ 0.22,0.82,0]);
+// legs
+part('pants',  'upperLegL', cyl(0.105,0.085,0.44), [-0.10,0.68,0]);
+part('pants',  'lowerLegL', cyl(0.082,0.062,0.40), [-0.10,0.27,0]);
+part('dark',   'footL',     box(0.13,0.09,0.28),   [-0.10,0.04,0.06]);
+part('pants',  'upperLegR', cyl(0.105,0.085,0.44), [ 0.10,0.68,0]);
+part('pants',  'lowerLegR', cyl(0.082,0.062,0.40), [ 0.10,0.27,0]);
+part('dark',   'footR',     box(0.13,0.09,0.28),   [ 0.10,0.04,0.06]);
+
+const slotOrder = ['jersey','helmet','skin','pants','dark'];
+const slotGeos = slotOrder.map(s => merge(slots[s], false));
+const geometry = merge(slotGeos, true);   // grouped -> one group/material per slot
+
+const materials = [
+  new THREE.MeshStandardMaterial({ name:'jersey', color:0xffffff, roughness:0.62, metalness:0.0 }),
+  new THREE.MeshStandardMaterial({ name:'helmet', color:0xffffff, roughness:0.32, metalness:0.30 }),
+  new THREE.MeshStandardMaterial({ name:'skin',   color:0x9c6b43, roughness:0.85 }),
+  new THREE.MeshStandardMaterial({ name:'pants',  color:0xe7eaf0, roughness:0.85 }),
+  new THREE.MeshStandardMaterial({ name:'dark',   color:0x14161c, roughness:0.5 }),
+];
+
+// ------------------------------------------------------------------ bind -----
+const mesh = new THREE.SkinnedMesh(geometry, materials);
+mesh.name = 'Player';
+mesh.add(root);
+mesh.updateMatrixWorld(true);
+const skeleton = new THREE.Skeleton(bones);   // inverses computed from bind pose
+mesh.bind(skeleton);
+
+// --------------------------------------------------------------- clips -------
+const _e = new THREE.Euler(), _q = new THREE.Quaternion();
+function quatTrack(boneName, times, eulers) {  // eulers: array of [x,y,z]
+  const vals = [];
+  for (const e of eulers) { _q.setFromEuler(_e.set(e[0]||0, e[1]||0, e[2]||0)); vals.push(_q.x,_q.y,_q.z,_q.w); }
+  return new THREE.QuaternionKeyframeTrack(boneName + '.quaternion', times, vals);
+}
+function posTrack(boneName, times, ys) {
+  const base = bones[boneIndex[boneName]].position;
+  const vals = [];
+  for (const y of ys) vals.push(base.x, y, base.z);
+  return new THREE.VectorKeyframeTrack(boneName + '.position', times, vals);
+}
+
+// RUN — sampled sinusoidal gait
+function runClip() {
+  const D = 0.7, N = 12, t = [];
+  const data = {};
+  const add = (b, e) => (data[b] = data[b] || []).push(e);
+  for (let i = 0; i < N; i++) {
+    const tt = i / (N - 1) * D; t.push(tt);
+    const ph = (i / (N - 1)) * Math.PI * 2;
+    const legA = 0.85, armA = 0.6;
+    const lL = Math.sin(ph), lR = Math.sin(ph + Math.PI);
+    add('upperLegL', [ legA*lL, 0, 0]);
+    add('upperLegR', [ legA*lR, 0, 0]);
+    add('lowerLegL', [ Math.max(0,-lL)*1.6, 0, 0]);   // knee folds back
+    add('lowerLegR', [ Math.max(0,-lR)*1.6, 0, 0]);
+    add('footL',     [ -0.2 + Math.max(0,lL)*0.4, 0, 0]);
+    add('footR',     [ -0.2 + Math.max(0,lR)*0.4, 0, 0]);
+    add('upperArmL', [ -armA*lL, 0, 0.12]);            // arms opposite, slight out
+    add('upperArmR', [ -armA*lR, 0, -0.12]);
+    add('forearmL',  [ -0.7 - Math.max(0,-lL)*0.4, 0, 0]);
+    add('forearmR',  [ -0.7 - Math.max(0,-lR)*0.4, 0, 0]);
+    add('chest',     [ 0.20, 0.06*Math.sin(ph), 0]);   // forward lean + counter-rotate
+    add('hips',      [ 0.0, -0.06*Math.sin(ph), 0]);
+    add('head',      [ -0.12, 0, 0]);
+  }
+  const tracks = Object.keys(data).map(b => quatTrack(b, t, data[b]));
+  tracks.push(posTrack('hips', t, t.map((_,i)=>0.92 + 0.035*Math.abs(Math.sin(i/(N-1)*Math.PI*2)) )));
+  return new THREE.AnimationClip('run', D, tracks);
+}
+
+// IDLE — subtle breathing / weight shift
+function idleClip() {
+  const D = 2.6, t = [0, D/2, D];
+  const tracks = [
+    quatTrack('chest',     t, [[0.05,0,0],[0.09,0,0],[0.05,0,0]]),
+    quatTrack('upperArmL', t, [[0.05,0,0.06],[0.0,0,0.06],[0.05,0,0.06]]),
+    quatTrack('upperArmR', t, [[0.05,0,-0.06],[0.0,0,-0.06],[0.05,0,-0.06]]),
+    quatTrack('head',      t, [[0,-0.05,0],[0,0.05,0],[0,-0.05,0]]),
+    posTrack('hips',       t, [0.92, 0.935, 0.92]),
+  ];
+  return new THREE.AnimationClip('idle', D, tracks);
+}
+
+// TACKLE — explosive lunge forward, arms wrap
+function tackleClip() {
+  const D = 0.5, t = [0, 0.22, 0.5];
+  const tracks = [
+    quatTrack('chest',     t, [[0.1,0,0],[0.55,0,0],[0.5,0,0]]),
+    quatTrack('hips',      t, [[0,0,0],[0.25,0,0],[0.2,0,0]]),
+    quatTrack('upperArmL', t, [[0,0,0.1],[-1.5,0,0.3],[-1.3,0,0.3]]),
+    quatTrack('upperArmR', t, [[0,0,-0.1],[-1.5,0,-0.3],[-1.3,0,-0.3]]),
+    quatTrack('forearmL',  t, [[-0.7,0,0],[-0.4,0,0],[-0.5,0,0]]),
+    quatTrack('forearmR',  t, [[-0.7,0,0],[-0.4,0,0],[-0.5,0,0]]),
+    quatTrack('upperLegL', t, [[0,0,0],[-0.5,0,0],[-0.3,0,0]]),
+    quatTrack('upperLegR', t, [[0,0,0],[0.6,0,0],[0.4,0,0]]),
+    quatTrack('lowerLegR', t, [[0,0,0],[0.7,0,0],[0.5,0,0]]),
+    posTrack('hips',       t, [0.92, 0.80, 0.84]),
+  ];
+  return new THREE.AnimationClip('tackle', D, tracks);
+}
+
+// CELEBRATE — arms up, little hop
+function celebrateClip() {
+  const D = 1.4, t = [0, 0.35, 0.7, 1.05, 1.4];
+  const tracks = [
+    quatTrack('upperArmL', t, [[0,0,2.5],[0.3,0,2.6],[0,0,2.5],[0.3,0,2.6],[0,0,2.5]]),
+    quatTrack('upperArmR', t, [[0,0,-2.5],[0.3,0,-2.6],[0,0,-2.5],[0.3,0,-2.6],[0,0,-2.5]]),
+    quatTrack('forearmL',  t, [[-0.3,0,0],[-0.1,0,0],[-0.3,0,0],[-0.1,0,0],[-0.3,0,0]]),
+    quatTrack('forearmR',  t, [[-0.3,0,0],[-0.1,0,0],[-0.3,0,0],[-0.1,0,0],[-0.3,0,0]]),
+    quatTrack('chest',     t, [[-0.1,0,0],[-0.18,0,0],[-0.1,0,0],[-0.18,0,0],[-0.1,0,0]]),
+    quatTrack('head',      t, [[-0.2,0,0],[-0.3,0,0],[-0.2,0,0],[-0.3,0,0],[-0.2,0,0]]),
+    posTrack('hips',       t, [0.92, 1.0, 0.92, 1.0, 0.92]),
+  ];
+  return new THREE.AnimationClip('celebrate', D, tracks);
+}
+
+const clips = [idleClip(), runClip(), tackleClip(), celebrateClip()];
+
+// ----------------------------------------------------------------- export ----
+const exporter = new THREE.GLTFExporter();
+const scene = new THREE.Scene();
+scene.add(mesh);
+exporter.parse(scene, (result) => {
+  const buf = Buffer.from(result);
+  const out = path.join(__dirname, '..', 'assets', 'player.glb');
+  fs.writeFileSync(out, buf);
+  console.log('wrote', out, buf.length, 'bytes;',
+    'bones', bones.length, 'verts', geometry.attributes.position.count,
+    'clips', clips.map(c => c.name + '(' + c.duration + 's)').join(','));
+}, { binary: true, animations: clips, onlyVisible: false });
