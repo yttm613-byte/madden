@@ -1027,7 +1027,7 @@
     const clip=n=>playerProto.animations.find(c=>c.name===n);
     const actions={ idle:mixer.clipAction(clip('idle')), run:mixer.clipAction(clip('run')),
       tackle:mixer.clipAction(clip('tackle')), celebrate:mixer.clipAction(clip('celebrate')),
-      throw:mixer.clipAction(clip('throw')), kick:mixer.clipAction(clip('kick')) };
+      throw:mixer.clipAction(clip('throw')), kick:mixer.clipAction(clip('kick')), set:mixer.clipAction(clip('set')) };
     [actions.tackle,actions.throw,actions.kick].forEach(a=>{ a.setLoop(THREE.LoopOnce); a.clampWhenFinished=true; });
     actions.idle.play();
     // jersey number on chest + back, parented to the chest bone so it deforms with the body
@@ -1114,11 +1114,11 @@
     const off=G.offense;
     const defJ=off==='user'?0xd23b34:0x2f6bd6, defH=off==='user'?0x9e2a25:0x244e86;
     const ents=[];
-    for(const b of G.blockers) ents.push({e:b, jc:off==='user'?0x2f6bd6:0xa33b42, hc:off==='user'?0x244e86:0x7a2a30, ring:0, def:false});
-    for(const r of G.receivers) ents.push({e:r, jc:0x1f7a52, hc:0x165c3e, ring:0, def:false});
-    for(const d of G.defenders) ents.push({e:d, jc:defJ, hc:defH, ring:(off==='cpu'&&d===G.userDef)?0x46e3ff:0, def:true});
+    for(const b of G.blockers) ents.push({e:b, jc:off==='user'?0x2f6bd6:0xa33b42, hc:off==='user'?0x244e86:0x7a2a30, ring:0, def:false, kind:'block'});
+    for(const r of G.receivers) ents.push({e:r, jc:0x1f7a52, hc:0x165c3e, ring:0, def:false, kind:'rec'});
+    for(const d of G.defenders) ents.push({e:d, jc:defJ, hc:defH, ring:(off==='cpu'&&d===G.userDef)?0x46e3ff:0, def:true, kind:'def'});
     if(off==='user' && G.phase==='live' && G.playType==='pass' && G.passState==='drop' && G.receivers[G.sel]){ const sel=G.receivers[G.sel], f=ents.find(o=>o.e===sel); if(f) f.ring=0xffd24a; }
-    if(G.carrier) ents.push({e:G.carrier, jc:off==='user'?0x13284a:0x7a1d22, hc:0xffd24a, ring:0xffd24a, def:false});
+    if(G.carrier) ents.push({e:G.carrier, jc:off==='user'?0x13284a:0x7a1d22, hc:0xffd24a, ring:0xffd24a, def:false, kind:'carry'});
     let ringI=0; for(const r of ringPool) r.visible=false;
     for(let i=0;i<pPool.length;i++){ const g=pPool[i], u=g.userData;
       if(i<ents.length){ const o=ents[i], e=o.e; g.visible=true;
@@ -1129,10 +1129,13 @@
         if(u.mats.helmet) u.mats.helmet.color.setHex(o.hc);
         // animation state machine: run / idle, with tackle & celebrate on dead plays
         let want = spy>1.4 ? 'run' : 'idle';
+        const onDead = G.phase==='dead' && !G._td && !G._fg;
         if(G._fgFlight && e===G.carrier) want='kick';                                  // place-kicker swing
         else if(e===G.carrier && e.role==='qb' && G.passState==='air') want='throw';   // QB release
         else if(G._td && G.phase==='dead' && e===G.carrier) want='celebrate';
-        else if(G.phase==='dead' && !G._td && !G._fg && e===G.carrier && spy<3.5) want='tackle';
+        else if(onDead && e===G.carrier && spy<3.5) want='tackle';                     // ball carrier goes down
+        else if(onDead && o.kind==='def' && G.carrier && dist(e,G.carrier)<yd(2.4)) want='tackle'; // tacklers wrap up
+        else if(G.phase==='presnap' && spy<1 && (o.kind==='block' || (o.kind==='def' && G.carrier && Math.abs(e.x-G.los)<yd(3.4)))) want='set'; // line gets in stance
         if(u.cur!==want){ const to=u.actions[want], from=u.actions[u.cur];
           to.reset().setEffectiveWeight(1).play();
           if(from && from!==to) to.crossFadeFrom(from,0.18,false); u.cur=want; }

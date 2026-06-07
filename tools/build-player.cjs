@@ -258,7 +258,27 @@ function kickClip() {
   return new THREE.AnimationClip('kick', D, tracks);
 }
 
-const clips = [idleClip(), runClip(), tackleClip(), celebrateClip(), throwClip(), kickClip()];
+// SET — pre-snap athletic ready stance (knees bent, hands ready, leaning in)
+function setClip() {
+  const D = 1.6, t = [0, 0.8, 1.6];
+  const tracks = [
+    quatTrack('chest',     t, [[0.42,0,0],[0.46,0,0],[0.42,0,0]]),
+    quatTrack('hips',      t, [[0.18,0,0],[0.2,0,0],[0.18,0,0]]),
+    quatTrack('upperLegL', t, [[0.30,0,0.04],[0.33,0,0.04],[0.30,0,0.04]]),
+    quatTrack('upperLegR', t, [[0.30,0,-0.04],[0.33,0,-0.04],[0.30,0,-0.04]]),
+    quatTrack('lowerLegL', t, [[0.5,0,0],[0.54,0,0],[0.5,0,0]]),
+    quatTrack('lowerLegR', t, [[0.5,0,0],[0.54,0,0],[0.5,0,0]]),
+    quatTrack('upperArmL', t, [[-0.55,0,0.12],[-0.6,0,0.12],[-0.55,0,0.12]]),
+    quatTrack('upperArmR', t, [[-0.55,0,-0.12],[-0.6,0,-0.12],[-0.55,0,-0.12]]),
+    quatTrack('forearmL',  t, [[-1.1,0,0],[-1.05,0,0],[-1.1,0,0]]),
+    quatTrack('forearmR',  t, [[-1.1,0,0],[-1.05,0,0],[-1.1,0,0]]),
+    quatTrack('head',      t, [[-0.32,0,0],[-0.3,0,0],[-0.32,0,0]]),
+    posTrack('hips',       t, [0.80, 0.785, 0.80]),
+  ];
+  return new THREE.AnimationClip('set', D, tracks);
+}
+
+const clips = [idleClip(), runClip(), tackleClip(), celebrateClip(), throwClip(), kickClip(), setClip()];
 
 // ----------------------------------------------------------------- export ----
 const exporter = new THREE.GLTFExporter();
