@@ -1002,7 +1002,7 @@
 
   // ---- 3D rendering (three.js r128) ----
   let scene, camera, renderer, ballMesh, pPool=[], camPos, camLook, flashes=[];
-  let playerProto=null, playersReady=false, lastDt=0.016, ringPool=[];
+  let playerProto=null, playersReady=false, lastDt=0.016, ringPool=[], losLine, firstLine;
   const SKIN_TONES=[0x8d5a3c,0x6b4226,0xb98a5e,0x4a2f1c,0xa06a40,0xd8a878,0xefc7a2,0x5a3a22,0x7a4a2c];
   function WX(px){ return px/PPY; }
   function WZ(py){ return (py-fieldTop)/PPY; }
@@ -1200,6 +1200,10 @@
     const rim=new THREE.DirectionalLight(0x88aaff,0.35); rim.position.set(50,40,-40); scene.add(rim);
     const field=new THREE.Mesh(new THREE.PlaneGeometry(120,53.3), new THREE.MeshStandardMaterial({map:fieldTexture(),roughness:0.95}));
     field.rotation.x=-Math.PI/2; field.position.set(60,0,26.65); field.receiveShadow=true; scene.add(field);
+    // broadcast lines: blue line of scrimmage + yellow first-down line (positioned per play)
+    function fieldLine(color){ const m=new THREE.Mesh(new THREE.PlaneGeometry(0.34,53.3), new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.8,depthWrite:false,fog:false}));
+      m.rotation.x=-Math.PI/2; m.position.set(60,0.04,26.65); m.visible=false; scene.add(m); return m; }
+    losLine=fieldLine(0x3aa0ff); firstLine=fieldLine(0xffe23a);
     const ground=new THREE.Mesh(new THREE.PlaneGeometry(620,480), new THREE.MeshStandardMaterial({color:0x0b1018,roughness:1})); ground.rotation.x=-Math.PI/2; ground.position.set(60,-0.06,26.65); ground.receiveShadow=true; scene.add(ground);
     buildStands();
     buildSidelines();
@@ -1216,6 +1220,10 @@
   function resize3D(){ if(!renderer) return; const st=document.getElementById('stage'); const w=st.clientWidth||760,h=st.clientHeight||560; renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
   function render3D(){
     if(!renderer) return;
+    // broadcast scrimmage/first-down lines (only during normal downs)
+    if(losLine){ const showL=!G._koFlight && !G._fgFlight && !G._returning && (G.phase==='presnap'||G.phase==='live'||G.phase==='dead');
+      losLine.visible=firstLine.visible=showL;
+      if(showL){ losLine.position.x=WX(G.los); firstLine.position.x=Math.min(WX(GOAL_X), WX(G.firstX)); firstLine.visible=G.firstX<GOAL_X; } }
     const off=G.offense;
     const defJ=off==='user'?0xd23b34:0x2f6bd6, defH=off==='user'?0x9e2a25:0x244e86;
     const ents=[];
