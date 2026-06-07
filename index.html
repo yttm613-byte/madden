@@ -980,6 +980,13 @@
       tackle:mixer.clipAction(clip('tackle')), celebrate:mixer.clipAction(clip('celebrate')) };
     actions.tackle.setLoop(THREE.LoopOnce); actions.tackle.clampWhenFinished=true;
     actions.idle.play();
+    // jersey number on chest + back, parented to the chest bone so it deforms with the body
+    const chest=grp.getObjectByName('chest');
+    if(chest){ const nt=numberTex(Math.floor(Math.random()*89)+10);
+      const nMat=new THREE.MeshBasicMaterial({map:nt,transparent:true});
+      const back=new THREE.Mesh(new THREE.PlaneGeometry(0.30,0.30), nMat); back.position.set(0,0.12,-0.2); back.rotation.y=Math.PI; chest.add(back);
+      const front=new THREE.Mesh(new THREE.PlaneGeometry(0.20,0.20), nMat); front.position.set(0,0.10,0.205); chest.add(front);
+    }
     grp.userData={mixer,actions,cur:'idle',mats,phase:Math.random()*6.28};
     grp.visible=false; scene.add(grp); return grp;
   }
@@ -1028,11 +1035,11 @@
     camera=new THREE.PerspectiveCamera(54,760/560,0.1,700);
     renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true}); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     if(THREE.sRGBEncoding) renderer.outputEncoding=THREE.sRGBEncoding;
-    if(THREE.ACESFilmicToneMapping){ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.3; }
+    if(THREE.ACESFilmicToneMapping){ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.12; }
     document.getElementById('gl').appendChild(cv);
     const sky=new THREE.Mesh(new THREE.SphereGeometry(340,24,16), new THREE.MeshBasicMaterial({map:skyTexture(),side:THREE.BackSide,fog:false})); scene.add(sky);
-    scene.add(new THREE.AmbientLight(0x6b7ea0,0.62));
-    const sun=new THREE.DirectionalLight(0xfff2d8,1.25); sun.position.set(70,95,18); sun.castShadow=true;
+    scene.add(new THREE.AmbientLight(0x3a4a66,0.42));   // cooler, dimmer fill for a night game
+    const sun=new THREE.DirectionalLight(0xfff2d8,1.18); sun.position.set(70,95,18); sun.castShadow=true;
     sun.target.position.set(60,0,26.65); scene.add(sun.target);
     sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0004;
     const sc=sun.shadow.camera; sc.left=-80; sc.right=80; sc.top=48; sc.bottom=-48; sc.near=1; sc.far=280; scene.add(sun);
@@ -1090,7 +1097,9 @@
       camPos.lerp(new THREE.Vector3(bx-15,8,bz),0.14); camLook.lerp(new THREE.Vector3(119.5,3.5,WZ(fieldMid)),0.14);
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(G.carrier){ const cx=WX(G.carrier.x), cz=WZ(G.carrier.y);
-      camPos.lerp(new THREE.Vector3(cx-14,9,cz),0.08); camLook.lerp(new THREE.Vector3(cx+9,1.2,cz),0.12);
+      // broadcast-style chase: higher and further back, biased toward the middle of the field
+      const cmid=cz+(WZ(fieldMid)-cz)*0.25;
+      camPos.lerp(new THREE.Vector3(cx-18,13.5,cmid),0.08); camLook.lerp(new THREE.Vector3(cx+12,1.6,cz),0.12);
       const s=G.shake>0?Math.min(0.7,G.shake*3.2):0;
       camera.position.set(camPos.x+(Math.random()-0.5)*s, camPos.y+(Math.random()-0.5)*s, camPos.z+(Math.random()-0.5)*s);
       camera.lookAt(camLook); }
