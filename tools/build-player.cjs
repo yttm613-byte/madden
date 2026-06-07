@@ -90,32 +90,37 @@ const cyl = (rt, rb, h, rs=18) => new THREE.CylinderGeometry(rt, rb, h, rs);
 const box = (w,h,d) => new THREE.BoxGeometry(w,h,d, 2,2,2);
 const sph = (r) => new THREE.SphereGeometry(r, 22, 16);
 
-// torso / pelvis
-part('pants',  'hips',  box(0.34,0.20,0.24), [0,0.92,0]);
-part('jersey', 'spine', cyl(0.21,0.23,0.22), [0,1.06,0]);
-part('jersey', 'chest', cyl(0.25,0.21,0.24), [0,1.24,0]);
-part('jersey', 'chest', box(0.66,0.18,0.36), [0,1.40,0]);              // shoulder pads
-part('jersey', 'chest', sph(0.12), [-0.31,1.40,0]);
-part('jersey', 'chest', sph(0.12), [ 0.31,1.40,0]);
+// torso / pelvis — athletic V-taper
+part('pants',  'hips',  cyl(0.205,0.17,0.20,16), [0,0.93,0]);
+part('jersey', 'spine', cyl(0.185,0.22,0.22), [0,1.06,0]);              // narrow waist
+part('jersey', 'chest', cyl(0.275,0.20,0.26), [0,1.25,0]);             // broad chest
+part('jersey', 'chest', box(0.62,0.20,0.40), [0,1.40,0]);              // shoulder pads
+part('jersey', 'chest', sph(0.145), [-0.30,1.40,0]);                   // rounded pad caps
+part('jersey', 'chest', sph(0.145), [ 0.30,1.40,0]);
+part('jersey', 'chest', sph(0.135), [0,1.45,0.0]);                     // neck roll / collar
 // neck + head
-part('skin',   'neck',  cyl(0.08,0.08,0.12), [0,1.47,0]);
-part('helmet', 'head',  sph(0.18), [0,1.57,0.01]);
-part('dark',   'head',  box(0.20,0.11,0.10), [0,1.54,0.17]);          // facemask
-part('trim',   'head',  box(0.06,0.20,0.32), [0,1.66,0.0]);           // contrasting helmet stripe
-// arms (hang straight down in bind)
-part('jersey', 'upperArmL', cyl(0.075,0.065,0.30), [-0.22,1.25,0]);
-part('skin',   'forearmL',  cyl(0.062,0.052,0.26), [-0.22,0.97,0]);
-part('dark',   'handL',     sph(0.075), [-0.22,0.82,0]);
-part('jersey', 'upperArmR', cyl(0.075,0.065,0.30), [ 0.22,1.25,0]);
-part('skin',   'forearmR',  cyl(0.062,0.052,0.26), [ 0.22,0.97,0]);
-part('dark',   'handR',     sph(0.075), [ 0.22,0.82,0]);
-// legs
-part('pants',  'upperLegL', cyl(0.105,0.085,0.44), [-0.10,0.68,0]);
-part('pants',  'lowerLegL', cyl(0.082,0.062,0.40), [-0.10,0.27,0]);
-part('dark',   'footL',     box(0.13,0.09,0.28),   [-0.10,0.04,0.06]);
-part('pants',  'upperLegR', cyl(0.105,0.085,0.44), [ 0.10,0.68,0]);
-part('pants',  'lowerLegR', cyl(0.082,0.062,0.40), [ 0.10,0.27,0]);
-part('dark',   'footR',     box(0.13,0.09,0.28),   [ 0.10,0.04,0.06]);
+part('skin',   'neck',  cyl(0.092,0.085,0.12), [0,1.47,0]);
+part('helmet', 'head',  sph(0.185), [0,1.57,0.01]);
+part('trim',   'head',  box(0.06,0.22,0.34), [0,1.66,0.0]);            // helmet stripe
+// facemask cage (bars)
+part('dark','head', box(0.24,0.022,0.05),[0,1.585,0.175]);
+part('dark','head', box(0.24,0.022,0.05),[0,1.540,0.190]);
+part('dark','head', box(0.22,0.022,0.05),[0,1.495,0.175]);
+part('dark','head', box(0.030,0.11,0.05),[0,1.540,0.190]);             // vertical bar
+// arms — bicep + tapered forearm + glove
+part('jersey', 'upperArmL', cyl(0.090,0.070,0.30), [-0.22,1.25,0]);
+part('skin',   'forearmL',  cyl(0.066,0.050,0.26), [-0.22,0.97,0]);
+part('dark',   'handL',     sph(0.082), [-0.22,0.81,0]);
+part('jersey', 'upperArmR', cyl(0.090,0.070,0.30), [ 0.22,1.25,0]);
+part('skin',   'forearmR',  cyl(0.066,0.050,0.26), [ 0.22,0.97,0]);
+part('dark',   'handR',     sph(0.082), [ 0.22,0.81,0]);
+// legs — fuller thigh, calf, rounded cleat
+part('pants',  'upperLegL', cyl(0.120,0.085,0.44), [-0.10,0.68,0]);
+part('pants',  'lowerLegL', cyl(0.090,0.058,0.40), [-0.10,0.27,0]);
+part('dark',   'footL',     box(0.115,0.08,0.30),  [-0.10,0.045,0.07]);
+part('pants',  'upperLegR', cyl(0.120,0.085,0.44), [ 0.10,0.68,0]);
+part('pants',  'lowerLegR', cyl(0.090,0.058,0.40), [ 0.10,0.27,0]);
+part('dark',   'footR',     box(0.115,0.08,0.30),  [ 0.10,0.045,0.07]);
 
 const slotOrder = ['jersey','helmet','skin','pants','dark','trim'];
 const slotGeos = slotOrder.map(s => merge(slots[s], false));
