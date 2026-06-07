@@ -1025,9 +1025,18 @@
     const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; if(THREE.sRGBEncoding) tex.encoding=THREE.sRGBEncoding; return tex;
   }
   function skyTexture(){
-    const c=document.createElement('canvas'); c.width=16; c.height=256; const g=c.getContext('2d');
-    const grd=g.createLinearGradient(0,0,0,256); grd.addColorStop(0,'#05080f'); grd.addColorStop(0.5,'#0e1b30'); grd.addColorStop(1,'#2c476a');
-    g.fillStyle=grd; g.fillRect(0,0,16,256);
+    const c=document.createElement('canvas'); c.width=1024; c.height=512; const g=c.getContext('2d');
+    const grd=g.createLinearGradient(0,0,0,512); grd.addColorStop(0,'#04060d'); grd.addColorStop(0.55,'#0c1730'); grd.addColorStop(1,'#243c5c');
+    g.fillStyle=grd; g.fillRect(0,0,1024,512);
+    // stars in the upper sky
+    for(let i=0;i<300;i++){ const x=Math.random()*1024, y=Math.random()*300; const a=(0.3+Math.random()*0.7).toFixed(2);
+      g.fillStyle='rgba(255,255,255,'+a+')'; const s=Math.random()<0.12?1.6:0.9; g.fillRect(x,y,s,s); }
+    // moon with soft glow
+    const mx=748, my=92, mr=26;
+    const gl=g.createRadialGradient(mx,my,2,mx,my,mr*3.2); gl.addColorStop(0,'rgba(230,238,255,0.5)'); gl.addColorStop(1,'rgba(230,238,255,0)');
+    g.fillStyle=gl; g.beginPath(); g.arc(mx,my,mr*3.2,0,7); g.fill();
+    g.fillStyle='#eef3ff'; g.beginPath(); g.arc(mx,my,mr,0,7); g.fill();
+    g.fillStyle='rgba(190,205,230,0.35)'; g.beginPath(); g.arc(mx+8,my-6,6,0,7); g.arc(mx-7,my+8,4,0,7); g.fill();
     const t=new THREE.CanvasTexture(c); if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
   }
   function crowdTexture(){
@@ -1094,17 +1103,27 @@
     }, undefined, (e)=>{ console.error('player.glb load failed', e); });
   }
   function goalpost3D(x){
-    const m=new THREE.MeshStandardMaterial({color:0xffe44a,emissive:0x5a4a0c,roughness:0.4});
-    const base=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,3,10), m); base.position.set(x,1.5,26.65); base.castShadow=true; scene.add(base);
-    const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.11,6.6,10), m); bar.rotation.x=Math.PI/2; bar.position.set(x,3,26.65); scene.add(bar);
-    [-3.3,3.3].forEach(z=>{ const up=new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.11,3.2,10), m); up.position.set(x,4.5,26.65+z); scene.add(up); });
+    const m=new THREE.MeshStandardMaterial({color:0xffe44a,emissive:0x6a560e,emissiveIntensity:0.6,roughness:0.3,metalness:0.35});
+    const z0=26.65, crossH=3.3, halfW=3.05;
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.2,crossH,14), m); base.position.set(x,crossH/2,z0); base.castShadow=true; scene.add(base);
+    const pad=new THREE.Mesh(new THREE.CylinderGeometry(0.33,0.33,1.5,14), new THREE.MeshStandardMaterial({color:0xc22,roughness:0.85})); pad.position.set(x,0.75,z0); scene.add(pad);
+    const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,halfW*2,14), m); bar.rotation.x=Math.PI/2; bar.position.set(x,crossH,z0); bar.castShadow=true; scene.add(bar);
+    [-halfW,halfW].forEach(z=>{ const up=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,6.8,14), m); up.position.set(x,crossH+3.4,z0+z); up.castShadow=true; scene.add(up); });
   }
   function buildStands(){
     const ct=crowdTexture();
-    function stand(cx,cz,w,d){ const t=ct.clone(); t.needsUpdate=true; t.repeat.set(Math.max(4,w/8),3);
-      const m=new THREE.Mesh(new THREE.BoxGeometry(w,18,d), new THREE.MeshStandardMaterial({map:t,roughness:1})); m.position.set(cx,7,cz); scene.add(m);
-      const base=new THREE.Mesh(new THREE.BoxGeometry(w+2,4,d+2), new THREE.MeshStandardMaterial({color:0x141a26,roughness:1})); base.position.set(cx,2,cz); scene.add(base); }
-    stand(60,-21,180,26); stand(60,74,180,26); stand(-23,26.65,26,150); stand(143,26.65,26,150);
+    function stand(cx,cz,w,d,ox,oz){
+      const t1=ct.clone(); t1.needsUpdate=true; t1.repeat.set(Math.max(4,w/7),3);
+      const lower=new THREE.Mesh(new THREE.BoxGeometry(w,14,d), new THREE.MeshStandardMaterial({map:t1,roughness:1})); lower.position.set(cx,7,cz); scene.add(lower);
+      const t2=ct.clone(); t2.needsUpdate=true; t2.repeat.set(Math.max(4,w/7),2.4);
+      const upper=new THREE.Mesh(new THREE.BoxGeometry(w*0.98,11,d*0.78), new THREE.MeshStandardMaterial({map:t2,roughness:1}));
+      upper.position.set(cx+ox*d*0.55,18.5,cz+oz*d*0.55); scene.add(upper);
+      const roof=new THREE.Mesh(new THREE.BoxGeometry(w+5,1.4,d*0.95), new THREE.MeshStandardMaterial({color:0x0f1521,roughness:0.9,metalness:0.25}));
+      roof.position.set(cx+ox*d*0.55,25,cz+oz*d*0.55); scene.add(roof);
+      const skirt=new THREE.Mesh(new THREE.BoxGeometry(w+2,4,d+2), new THREE.MeshStandardMaterial({color:0x121826,roughness:1})); skirt.position.set(cx,2,cz); scene.add(skirt);
+    }
+    stand(60,-24,196,30, 0,-1); stand(60,77,196,30, 0,1);
+    stand(-26,26.65,30,164, -1,0); stand(144,26.65,30,164, 1,0);
   }
   function lightTower(x,z){
     const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,30,8), new THREE.MeshStandardMaterial({color:0x2a2f3a,roughness:0.8})); pole.position.set(x,15,z); scene.add(pole);
