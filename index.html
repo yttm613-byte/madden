@@ -234,9 +234,11 @@
     G.los=yd(25); G.firstX=yd(35); G.down=1;
     const W=fieldBot-fieldTop;
     G.carrier={x:yd(7), y:fieldMid, vx:0, vy:0, n:Math.floor(Math.random()*30)+20, role:'kr'}; G._retStart=G.carrier.x;
-    G.blockers=[]; for(let i=0;i<4;i++) G.blockers.push({x:yd(15+i*3.5), y:fieldTop+W*(0.25+0.16*i), vx:0,vy:0,n:60+i,target:null,_takenBy:null});
-    G.defenders=[]; for(let i=0;i<6;i++){ const yy=fieldTop+W*((i+0.5)/6); G.defenders.push({x:yd(44+(i%2)*5), y:yy, vx:0,vy:0,n:30+i,react:0.12,whiff:0,blocked:0,homeY:yy,job:'pursue',assign:null,_takenBy:null}); }
-    G.defenders[0].contain=true; G.defenders[5].contain=true;
+    G.blockers=[];
+    for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5); G.blockers.push(mk(yd(34), yy, 60+i)); }      // front return wall
+    for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5+0.05); G.blockers.push(mk(yd(22), yy, 70+i)); }  // second wave
+    G.defenders=[]; for(let i=0;i<11;i++){ const yy=fieldTop+W*((i+0.5)/11); G.defenders.push(def(yd(46+(i%2)*4), yy, 0.12, 30+i, 'pursue', null)); } // coverage team
+    G.defenders[0].contain=true; G.defenders[10].contain=true;
     G.receivers=[]; G.trail=[];
     G._koFlight=true; const kx=GOAL_X-yd(35);
     G.ball={active:true, x:kx, y:fieldMid, fromX:kx, fromY:fieldMid, tx:G.carrier.x, ty:G.carrier.y, t:0, dur:1.1};
@@ -363,6 +365,7 @@
       [0.34,0.66].forEach((p,i)=> G.defenders.push(def(cx+yd(13),fieldTop+PLAYH*p,0.0,20+i,'pursue',null)));
       if(playId==='draw'){ for(const d of G.defenders){ if(d.homeY!==undefined && Math.abs(d.x-(cx+yd(0.8)))<1) d.draw=0.55; } } // front overcommits
     }
+    fillFormation(cx, type);
     G.cam=clampCam(G.carrier.x); G.trail=[];
     const sorted=[...G.defenders].sort((a,b)=>a.homeY-b.homeY);
     if(sorted[0]) sorted[0].contain=true; if(sorted[sorted.length-1]) sorted[sorted.length-1].contain=true;
@@ -383,6 +386,36 @@
   function norm(x,y){ const m=Math.hypot(x,y)||1; return {x:x/m,y:y/m}; }
   function mk(x,y,n){ return {x,y,vx:0,vy:0,n,target:null}; }
   function def(x,y,delay,n,job,assign){ return {x,y,vx:0,vy:0,n,react:delay,whiff:0,blocked:0,homeY:y,job,assign,_takenBy:null}; }
+  // Pad both sides to a full 11 with a believable formation. Extra offense become
+  // offensive linemen / split ends (they block); extra defense become a back line
+  // of DBs/safeties that play zone depth, so the field looks full without the
+  // play turning into an instant gang-tackle.
+  function fillFormation(cx, type){
+    const offCount = ()=> 1 + G.receivers.length + G.blockers.length;
+    // --- offensive line across the LOS, filling open interior slots first ---
+    const olY=[0,-1.7,1.7,-3.4,3.4,-5.1,5.1];
+    for(const oy of olY){ if(offCount()>=11) break;
+      const sy=fieldMid+yd(oy);
+      const taken=G.blockers.some(b=>Math.abs(b.y-sy)<yd(1.3)&&b.x>cx-yd(2.2));
+      if(!taken) G.blockers.push(mk(cx-yd(0.8),sy,60+((oy*10)&7)));
+    }
+    // --- any remaining offense: split receivers/TE out wide (stand & seal) ---
+    const splitY=[fieldTop+yd(2),fieldBot-yd(2),fieldTop+PLAYH*0.32,fieldBot-PLAYH*0.32];
+    for(const sy of splitY){ if(offCount()>=11) break; G.blockers.push(mk(cx-yd(0.6),sy,80+((sy|0)&7))); }
+    // --- defensive back seven: pad to 11 with zone DBs/safeties at depth ---
+    const dbSlots=[0.5,0.16,0.84,0.32,0.68];
+    for(const p of dbSlots){ if(G.defenders.length>=11) break;
+      const sy=fieldTop+PLAYH*p;
+      const taken=G.defenders.some(d=>Math.abs(d.y-sy)<yd(2)&&d.x>cx+yd(7));
+      if(taken) continue;
+      const deep=(p<0.2||p>0.8);
+      const depth = type==='pass' ? yd(deep?15:11) : yd(deep?13:8.5);
+      const d=def(cx+depth, sy, 0.05, 40+((p*10)|0), type==='pass'?'cover':'pursue', null);
+      d.deep=deep; G.defenders.push(d);
+    }
+    while(G.defenders.length<11){ const k=G.defenders.length; const sy=fieldMid+yd((k%2?1:-1)*2.5*(1+(k%3)));
+      G.defenders.push(def(cx+yd(5),Math.max(fieldTop+yd(1),Math.min(fieldBot-yd(1),sy)),0.06,70+k,'pursue',null)); }
+  }
 
   // ---- input ----
   const keys={}; let touchDir=null, sprintHeld=false;
@@ -803,9 +836,11 @@
     G.los=yd(25); G.firstX=yd(35); G.down=1;
     const W=fieldBot-fieldTop;
     G.carrier={x:retX, y:fieldMid, vx:0,vy:0, n:Math.floor(Math.random()*30)+20, role:'pr'}; G._retStart=retX;
-    G.blockers=[]; for(let i=0;i<3;i++) G.blockers.push({x:retX+yd(7+i*4), y:fieldTop+W*(0.3+0.2*i), vx:0,vy:0,n:60+i,target:null,_takenBy:null});
-    G.defenders=[]; for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5); G.defenders.push({x:kickX-yd(4+(i%2)*4), y:yy, vx:0,vy:0,n:30+i,react:0.12,whiff:0,blocked:0,homeY:yy,job:'pursue',assign:null,_takenBy:null}); }
-    G.defenders[0].contain=true; G.defenders[G.defenders.length-1].contain=true;
+    G.blockers=[];
+    for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5); G.blockers.push(mk(retX+yd(9), yy, 60+i)); }
+    for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5+0.05); G.blockers.push(mk(retX+yd(20), yy, 70+i)); }
+    G.defenders=[]; for(let i=0;i<11;i++){ const yy=fieldTop+W*((i+0.5)/11); G.defenders.push(def(kickX-yd(4+(i%2)*5), yy, 0.12, 30+i,'pursue',null)); } // punt coverage
+    G.defenders[0].contain=true; G.defenders[10].contain=true;
     G.receivers=[]; G.trail=[]; G._koFlight=true;
     G.ball={active:true, x:kickX, y:fieldMid, fromX:kickX, fromY:fieldMid, tx:retX, ty:fieldMid, t:0, dur:1.1};
     G.userDef=(G.offense==='cpu')? nearestDefToBall(): null;
@@ -835,9 +870,23 @@
   // ---- field goal (user mini-game) ----
   function fgYards(){ return Math.round((GOAL_X-G.los)/PPY)+17; }
   function startFG(){ startKick('fg'); }
+  // Stand up a proper field-goal unit so the kick isn't taken with the previous
+  // play's personnel scattered around the field.
+  function buildFGFormation(){
+    const losX=G.los, holderX=losX-yd(7);
+    G.receivers=[]; G.passState=null; G.trail=[];
+    G.carrier={x:holderX-yd(1.6), y:fieldMid, vx:0,vy:0, n:1+(Math.random()*8|0), role:'k'};  // kicker
+    G.blockers=[ mk(holderX, fieldMid, 7) ];                                                   // holder
+    [-4.5,-3,-1.5,0,1.5,3,4.5].forEach((o,i)=> G.blockers.push(mk(losX, fieldMid+yd(o), 60+i)));// 7-man wall
+    G.blockers.push(mk(losX-yd(1.4), fieldMid-yd(5.6), 80));                                    // wings
+    G.blockers.push(mk(losX-yd(1.4), fieldMid+yd(5.6), 81));
+    G.defenders=[]; for(let i=0;i<11;i++){ const yy=fieldTop+(fieldBot-fieldTop)*((i+0.5)/11);
+      G.defenders.push(def(losX+yd(1), yy, 0, 30+i, 'rush', null)); }                           // 11-man rush
+    G.userDef=null;
+  }
   function startKick(kind){
     G.kickKind=kind;
-    const fy = kind==='pat'? 33 : fgYards(); G.phase='fg';
+    const fy = kind==='pat'? 33 : fgYards(); G.phase='fg'; buildFGFormation();
     const req = kind==='pat'? 42 : Math.max(30,Math.min(95,30+(fy-17)*1.45));
     const aimWin = kind==='pat'? 32 : Math.max(12,30-(fy-17)*0.32);
     G.fg={stage:'power',power:0,pdir:1,aim:0,adir:1,req,lockedP:0,lockedA:0,res:null,t:0,fy,aimWin};
@@ -887,7 +936,7 @@
   }
   function cpuKick(fy){
     const prob=Math.max(0.3,Math.min(0.96,(0.92-(fy-20)*0.02)*G.diff.fg)); const good=Math.random()<prob;
-    G.kickKind='fg'; G.phase='fg';
+    G.kickKind='fg'; G.phase='fg'; buildFGFormation();
     launchFGKick(good, good?0:yd(5)*(Math.random()<0.5?1:-1), !good && Math.random()<0.4);
     setMsg('CPU FIELD GOAL ATTEMPT',0.9);
   }
