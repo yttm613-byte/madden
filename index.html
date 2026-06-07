@@ -1026,8 +1026,9 @@
     const mixer=new THREE.AnimationMixer(grp);
     const clip=n=>playerProto.animations.find(c=>c.name===n);
     const actions={ idle:mixer.clipAction(clip('idle')), run:mixer.clipAction(clip('run')),
-      tackle:mixer.clipAction(clip('tackle')), celebrate:mixer.clipAction(clip('celebrate')) };
-    actions.tackle.setLoop(THREE.LoopOnce); actions.tackle.clampWhenFinished=true;
+      tackle:mixer.clipAction(clip('tackle')), celebrate:mixer.clipAction(clip('celebrate')),
+      throw:mixer.clipAction(clip('throw')), kick:mixer.clipAction(clip('kick')) };
+    [actions.tackle,actions.throw,actions.kick].forEach(a=>{ a.setLoop(THREE.LoopOnce); a.clampWhenFinished=true; });
     actions.idle.play();
     // jersey number on chest + back, parented to the chest bone so it deforms with the body
     const chest=grp.getObjectByName('chest');
@@ -1128,7 +1129,9 @@
         if(u.mats.helmet) u.mats.helmet.color.setHex(o.hc);
         // animation state machine: run / idle, with tackle & celebrate on dead plays
         let want = spy>1.4 ? 'run' : 'idle';
-        if(G._td && G.phase==='dead' && e===G.carrier) want='celebrate';
+        if(G._fgFlight && e===G.carrier) want='kick';                                  // place-kicker swing
+        else if(e===G.carrier && e.role==='qb' && G.passState==='air') want='throw';   // QB release
+        else if(G._td && G.phase==='dead' && e===G.carrier) want='celebrate';
         else if(G.phase==='dead' && !G._td && !G._fg && e===G.carrier && spy<3.5) want='tackle';
         if(u.cur!==want){ const to=u.actions[want], from=u.actions[u.cur];
           to.reset().setEffectiveWeight(1).play();

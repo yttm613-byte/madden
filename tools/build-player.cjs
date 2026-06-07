@@ -225,7 +225,40 @@ function celebrateClip() {
   return new THREE.AnimationClip('celebrate', D, tracks);
 }
 
-const clips = [idleClip(), runClip(), tackleClip(), celebrateClip()];
+// THROW — QB overhand: wind up, rotate, release & follow through
+function throwClip() {
+  const D = 0.5, t = [0, 0.18, 0.34, 0.5];
+  const tracks = [
+    quatTrack('chest',     t, [[0.1,0.35,0],[0.05,0.55,0],[0.1,-0.25,0],[0.12,-0.1,0]]),
+    quatTrack('upperArmR', t, [[-0.2,0,-0.2],[-2.5,0,-0.7],[-1.4,0,-0.3],[-0.9,0,-0.15]]),
+    quatTrack('forearmR',  t, [[-0.8,0,0],[-1.7,0,0],[-0.3,0,0],[-0.5,0,0]]),
+    quatTrack('upperArmL', t, [[-0.1,0,0.15],[-1.0,0,0.4],[-0.5,0,0.25],[-0.2,0,0.15]]),
+    quatTrack('forearmL',  t, [[-0.7,0,0],[-1.0,0,0],[-0.6,0,0],[-0.5,0,0]]),
+    quatTrack('head',      t, [[-0.1,0.2,0],[-0.1,0.3,0],[-0.1,-0.1,0],[-0.1,0,0]]),
+    quatTrack('upperLegL', t, [[0,0,0],[0.15,0,0],[-0.2,0,0],[-0.1,0,0]]),
+    quatTrack('upperLegR', t, [[0,0,0],[-0.15,0,0],[0.2,0,0],[0.1,0,0]]),
+  ];
+  return new THREE.AnimationClip('throw', D, tracks);
+}
+
+// KICK — place-kicker: plant left, swing right leg through the ball
+function kickClip() {
+  const D = 0.5, t = [0, 0.16, 0.32, 0.5];
+  const tracks = [
+    quatTrack('upperLegR', t, [[0,0,0],[0.55,0,0],[-1.5,0,0],[-0.9,0,0]]),
+    quatTrack('lowerLegR', t, [[0,0,0],[0.9,0,0],[0.1,0,0],[0.0,0,0]]),
+    quatTrack('upperLegL', t, [[0,0,0],[-0.1,0,0],[-0.15,0,0],[-0.1,0,0]]),
+    quatTrack('chest',     t, [[0.05,0,0],[0.18,0,0.1],[-0.12,0,-0.1],[-0.05,0,0]]),
+    quatTrack('upperArmL', t, [[0,0,0.5],[0,0,0.9],[0,0,1.1],[0,0,0.8]]),
+    quatTrack('upperArmR', t, [[0,0,-0.4],[0,0,-0.7],[0,0,-0.9],[0,0,-0.6]]),
+    quatTrack('forearmL',  t, [[-0.4,0,0],[-0.5,0,0],[-0.5,0,0],[-0.4,0,0]]),
+    quatTrack('forearmR',  t, [[-0.4,0,0],[-0.5,0,0],[-0.5,0,0],[-0.4,0,0]]),
+    posTrack('hips',       t, [0.92, 0.95, 0.94, 0.92]),
+  ];
+  return new THREE.AnimationClip('kick', D, tracks);
+}
+
+const clips = [idleClip(), runClip(), tackleClip(), celebrateClip(), throwClip(), kickClip()];
 
 // ----------------------------------------------------------------- export ----
 const exporter = new THREE.GLTFExporter();
