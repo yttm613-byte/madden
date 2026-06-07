@@ -348,7 +348,7 @@
         G.blockers=[ mk(cx-yd(1.2),fieldMid-yd(2.2),74), mk(cx-yd(1.2),fieldMid+yd(2.2),76) ];
       }
       [-2.4,0,2.4].forEach((o,i)=> G.defenders.push(def(cx+yd(0.9),fieldMid+yd(o),0.10,90+i,'rush',null)));
-      G.receivers.forEach((r,i)=> G.defenders.push(def(cx+yd(2.2),r.y,0.0,24+i,'cover',r)));
+      G.receivers.forEach((r,i)=>{ const d=def(cx+yd(2.2),r.y,0.0,24+i,'cover',r); d.cush=PPY*(0.9+Math.random()*1.1); G.defenders.push(d); }); // trail cushion -> realistic separation
       G.defenders.push(def(cx+yd(14),fieldMid,0.0,31,'spy',null));
       if(play.pa){ for(const d of G.defenders){ if(d.job==='cover'||d.job==='spy') d.pa=0.65; } } // linebackers/safeties bite the fake
     } else {
@@ -411,10 +411,10 @@
       const deep=(p<0.2||p>0.8);
       const depth = type==='pass' ? yd(deep?15:11) : yd(deep?13:8.5);
       const d=def(cx+depth, sy, 0.05, 40+((p*10)|0), type==='pass'?'cover':'pursue', null);
-      d.deep=deep; G.defenders.push(d);
+      d.deep=deep; d.fill=true; G.defenders.push(d);   // formation fillers: full run defense, but don't blanket the pass contest
     }
     while(G.defenders.length<11){ const k=G.defenders.length; const sy=fieldMid+yd((k%2?1:-1)*2.5*(1+(k%3)));
-      G.defenders.push(def(cx+yd(5),Math.max(fieldTop+yd(1),Math.min(fieldBot-yd(1),sy)),0.06,70+k,'pursue',null)); }
+      const d=def(cx+yd(5),Math.max(fieldTop+yd(1),Math.min(fieldBot-yd(1),sy)),0.06,70+k,'pursue',null); d.fill=true; G.defenders.push(d); }
   }
 
   // ---- input ----
@@ -482,21 +482,42 @@
   if(typeof window!=='undefined' && window.speechSynthesis){ pickVoices(); try{ window.speechSynthesis.addEventListener('voiceschanged',pickVoices); }catch(e){} }
   function pick(a){ return a[(Math.random()*a.length)|0]; }
   function caption(t){ const el=document.getElementById('comm'); if(el){ el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),3400); } }
-  function speak(text,opt){ opt=opt||{};
+  // Expressive delivery: break the line into clauses and speak each with a
+  // rising pitch/rate contour + per-clause jitter, so it carries real intonation
+  // instead of one flat monotone read.
+  function speakExpressive(text,o){ o=o||{};
     if(!commOn||typeof window==='undefined'||!window.speechSynthesis) return;
-    try{ if(opt.cancel) window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text);
-      const v=opt.analyst?colVoice:pbVoice; if(v) u.voice=v;
-      u.pitch=opt.pitch; u.rate=opt.rate; u.volume=opt.vol||1; window.speechSynthesis.speak(u); }catch(e){}
+    try{
+      if(o.cancel) window.speechSynthesis.cancel();
+      const v=o.analyst?colVoice:pbVoice;
+      const segs=(String(text).match(/[^,;:!?.]+[,;:!?.]*/g)||[text]).map(s=>s.trim()).filter(Boolean);
+      const bang=/[!?]/.test(text);
+      segs.forEach((seg,i)=>{
+        const u=new SpeechSynthesisUtterance(seg); if(v) u.voice=v;
+        const j=Math.random()-0.5, last=(i===segs.length-1);
+        let pitch=o.pitch + (o.rampPitch||0)*i + j*0.13 + (last&&bang?0.12:0);
+        let rate =o.rate  + (o.rampRate||0)*i  + j*0.09;
+        u.pitch=Math.max(0.4,Math.min(2,pitch));
+        u.rate =Math.max(0.6,Math.min(2,rate));
+        u.volume=o.vol||1;
+        window.speechSynthesis.speak(u);
+      });
+    }catch(e){}
   }
-  function say(text,important){ // play-by-play: dynamic delivery — excited on big plays, measured otherwise (no monotone)
+  function say(text,important){ // play-by-play: dynamic, momentum-aware delivery (no monotone)
     caption(text);
     if(!commOn) return;
     const now=(typeof performance!=='undefined'?performance.now():Date.now());
     if(!important && now-lastComm<240) return; lastComm=now;
-    if(important) speak(text,{cancel:true, pitch:1.18+Math.random()*0.16, rate:1.26+Math.random()*0.16, vol:1});
-    else speak(text,{cancel:true, pitch:0.98+Math.random()*0.16, rate:1.1+Math.random()*0.16, vol:0.95});
+    const hype=Math.min(1,(important?0.55:0)+hypeStreak*0.16+Math.random()*0.18);
+    speakExpressive(text,{ cancel:true,
+      pitch:(important?1.12:0.95)+hype*0.26,
+      rate:(important?1.20:1.05)+hype*0.20,
+      vol:important?1:0.95,
+      rampPitch:important?0.17:0.07, rampRate:important?0.10:0.04 });
   }
-  function color(text){ if(text) speak(text,{cancel:false, analyst:true, pitch:0.76+Math.random()*0.1, rate:0.98+Math.random()*0.12, vol:0.94}); } // analyst: distinct deeper voice
+  function color(text){ if(text) speakExpressive(text,{ cancel:false, analyst:true, // deeper, drawling analyst with its own swing
+    pitch:0.74+Math.random()*0.14, rate:0.95+Math.random()*0.16, vol:0.94, rampPitch:0.06, rampRate:0.05 }); }
   const COLOR_HYPE=["You love to see that, baby!","Are you KIDDING me right now?","That's a poster — frame it!","Put that one in the Hall of Fame!","He is absolutely COOKING out there!","The crowd has completely lost it!","That's grown-man football right there!","Somebody check on that defender — he got embarrassed!","I have not seen feet like that in years!","Get this man a cape!","Call the police, because that was a ROBBERY!","Did you see the JUKE?! My goodness!","He turned that man's ankles into spaghetti!","That's a SportsCenter top-ten, no doubt!"];
   const COLOR_DEF=["That's a coaching clinic on defense!","They wanted that one BAD.","You simply cannot block that.","Sniffed it out the whole way — beautiful.","Defense wins championships, baby!","That's how you set the tone!","He read the quarterback's mail on that one!","Textbook tackling — wrap and drive!"];
   const COLOR_OOPS=["He's gonna want that one back.","That's a teaching-tape moment — the bad kind.","Somebody blew the assignment, no question.","You cannot do that at this level.","The coordinator is FUMING up in the box.","That's a throw he makes in his sleep — and he missed it.","Put that one on the bloopers reel."];
@@ -657,11 +678,13 @@
             aiPursue(d, c.x+c.vx*0.22, c.y+c.vy*0.22, dt, S.def*(d.blitz?1.12:1)*ds);
           }
         }
-        else if(mode==='air'){ if(d.job!=='rush') aiPursue(d, G.ball.tx, G.ball.ty, dt, S.cover*1.04*ds); }
+        else if(mode==='air'){ // man defenders stay on their receiver (separation carries to the catch); zone/spy break on the ball
+          if(d.job==='cover' && d.assign && !d.fill){ const r=d.assign,sp=Math.hypot(r.vx||0,r.vy||0)||1,c=d.cush||PPY*1.2; aiPursue(d, r.x-(r.vx/sp)*c, r.y-(r.vy/sp)*c, dt, S.cover*1.0*ds); }
+          else if(d.job!=='rush') aiPursue(d, G.ball.tx, G.ball.ty, dt, S.cover*0.98*ds); }
         else { // drop
           if(d.pa>0){ d.pa-=dt; aiPursue(d, G.los+yd(1), d.homeY, dt, S.cover*0.85*ds); } // bite the play-action fake
           else if(d.job==='rush') aiPursue(d,c.x,c.y,dt,S.rush*(d.blitz?1.12:1)*ds);
-          else if(d.job==='cover'&&d.assign) aiPursue(d,d.assign.x+yd(0.3),d.assign.y,dt,S.cover*ds);
+          else if(d.job==='cover'&&d.assign){ const r=d.assign,sp=Math.hypot(r.vx||0,r.vy||0)||1,c=d.cush||PPY*1.2; aiPursue(d, r.x-(r.vx/sp)*c, r.y-(r.vy/sp)*c, dt, S.cover*ds); } // trail by a cushion
           else { const depth=d.deep?yd(15):yd(10); aiPursue(d, Math.max(c.x+depth,G.los+depth), fieldMid+(c.y-fieldMid)*0.5, dt, S.cover*0.95*ds); }
         }
       }
@@ -738,7 +761,8 @@
   function mirrorEnt(e){ if(!e) return; e.x=WORLD_W-e.x; e.vx=-(e.vx||0); }
   function liveInterception(){
     const pt={x:G.ball.tx,y:G.ball.ty};
-    let pick=null,pd=1e9; for(const d of G.defenders){ if(d.job==='rush') continue; const dd=dist(d,pt); if(dd<pd){pd=dd;pick=d;} }
+    let pick=null,pd=1e9; for(const d of G.defenders){ if(d.job==='rush'||d.fill) continue; const dd=dist(d,pt); if(dd<pd){pd=dd;pick=d;} }
+    if(!pick) for(const d of G.defenders){ if(d.job==='rush') continue; const dd=dist(d,pt); if(dd<pd){pd=dd;pick=d;} }
     if(!pick) return endPlay('INTERCEPTED', G.ball.tx, true);
     G.ball.active=false;
     const newOff=other(G.offense);
@@ -756,17 +780,26 @@
   }
   function resolveCatch(){
     const b=G.ball, r=b.rec, pt={x:b.tx,y:b.ty};
-    let nd=1e9; for(const d of G.defenders) if(d.job!=='rush') nd=Math.min(nd,dist(d,pt));
-    const rd=dist(r,pt); G.ball.active=false;
-    if(nd<S.intR && Math.random()<0.5){ if(G.conv){ setMsg('PICKED OFF — NO GOOD',1.3); SFX.whistle(); G.conv=null;G.twoPt=false;G._td=true;G._turn=false;G._fg=false;G.phase='dead';G.deadT=1.1; return; } return liveInterception(); }
-    if(rd<S.catchR && nd>S.contestR){
+    // separation = tightest REAL (non-fill) defender's distance to the receiver, in yards
+    let nd=1e9; for(const d of G.defenders) if(d.job!=='rush' && !d.fill) nd=Math.min(nd,dist(d,r));
+    const sepY=nd/PPY, rd=dist(r,pt), overthrown = rd>S.catchR*1.7; G.ball.active=false;
+    // realistic outcome odds by how open the receiver is (normal completion & INT rates)
+    let pCatch,pInt;
+    if(overthrown){ pCatch=0.04; pInt=0.0; }
+    else if(sepY>2.2){ pCatch=0.95; pInt=0.005; }
+    else if(sepY>1.3){ pCatch=0.82; pInt=0.02; }
+    else if(sepY>0.8){ pCatch=0.60; pInt=0.055; }
+    else            { pCatch=0.38; pInt=0.11; }
+    const roll=Math.random();
+    if(roll<pInt){ if(G.conv){ setMsg('PICKED OFF — NO GOOD',1.3); SFX.whistle(); G.conv=null;G.twoPt=false;G._td=true;G._turn=false;G._fg=false;G.phase='dead';G.deadT=1.1; return; } return liveInterception(); }
+    if(roll<pInt+pCatch){
       G.carrier={x:r.x,y:r.y,vx:r.vx*0.4,vy:r.vy*0.4,n:r.n,role:'wr'};
       const others=G.receivers.filter(x=>x!==r); G.receivers=[];
       for(const o of others){ o.target=null; o._takenBy=null; G.blockers.push(o); }
       for(const d of G.defenders) d.job='pursue';
       if(G.offense==='cpu') G.userDef=nearestDefToBall();
       G.passState='caught'; setMsg(G.offense==='user'?'CAUGHT!':'CPU CATCH',0.7); SFX.catch();
-    } else { setMsg(nd<S.contestR?'BROKEN UP':'INCOMPLETE',1.0); endPlay('INCOMPLETE', G.los); }
+    } else { setMsg(sepY<1.2?'BROKEN UP':'INCOMPLETE',1.0); endPlay('INCOMPLETE', G.los); }
   }
 
   function updateRun(dt){
