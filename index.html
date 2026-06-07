@@ -1210,6 +1210,7 @@
         g.position.set(WX(e.x), 0, WZ(e.y));
         if(u.mats.jersey) u.mats.jersey.color.setHex(o.jc);
         if(u.mats.helmet) u.mats.helmet.color.setHex(o.hc);
+        if(u.mats.accent) u.mats.accent.color.setHex(o.hc);   // sleeve/pant/chest stripes follow team 2nd color
         // animation state machine: run / idle, with tackle & celebrate on dead plays
         let want = spy>1.4 ? 'run' : 'idle';
         const onDead = G.phase==='dead' && !G._td && !G._fg;

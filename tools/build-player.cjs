@@ -64,8 +64,8 @@ BONES.forEach(([name, parent, x, y, z], i) => {
 const root = bones[0];
 
 // --------------------------------------------------------------- geometry ----
-// material slots: jersey, helmet, skin, pants, dark, trim
-const slots = { jersey: [], helmet: [], skin: [], pants: [], dark: [], trim: [] };
+// material slots: jersey, helmet, skin, pants, dark, trim, accent (team 2nd color)
+const slots = { jersey: [], helmet: [], skin: [], pants: [], dark: [], trim: [], accent: [] };
 
 function skinTo(geo, bIdx) {
   const n = geo.attributes.position.count;
@@ -121,18 +121,25 @@ part('dark',   'footL',     box(0.115,0.08,0.30),  [-0.10,0.045,0.07]);
 part('pants',  'upperLegR', cyl(0.120,0.085,0.44), [ 0.10,0.68,0]);
 part('pants',  'lowerLegR', cyl(0.090,0.058,0.40), [ 0.10,0.27,0]);
 part('dark',   'footR',     box(0.115,0.08,0.30),  [ 0.10,0.045,0.07]);
+// team-color accents (recolored in-game): sleeve bands, pant stripes, chest stripe
+part('accent', 'upperArmL', cyl(0.094,0.094,0.06), [-0.22,1.12,0]);
+part('accent', 'upperArmR', cyl(0.094,0.094,0.06), [ 0.22,1.12,0]);
+part('accent', 'upperLegL', box(0.03,0.42,0.075),  [-0.205,0.68,0]);
+part('accent', 'upperLegR', box(0.03,0.42,0.075),  [ 0.205,0.68,0]);
+part('accent', 'chest',     box(0.50,0.055,0.42),  [0,1.32,0]);
 
-const slotOrder = ['jersey','helmet','skin','pants','dark','trim'];
+const slotOrder = ['jersey','helmet','skin','pants','dark','trim','accent'];
 const slotGeos = slotOrder.map(s => merge(slots[s], false));
 const geometry = merge(slotGeos, true);   // grouped -> one group/material per slot
 
 const materials = [
   new THREE.MeshStandardMaterial({ name:'jersey', color:0xffffff, roughness:0.55, metalness:0.05 }),
-  new THREE.MeshStandardMaterial({ name:'helmet', color:0xffffff, roughness:0.22, metalness:0.45 }),
+  new THREE.MeshStandardMaterial({ name:'helmet', color:0xffffff, roughness:0.16, metalness:0.5 }),
   new THREE.MeshStandardMaterial({ name:'skin',   color:0x9c6b43, roughness:0.8 }),
   new THREE.MeshStandardMaterial({ name:'pants',  color:0xe7eaf0, roughness:0.8 }),
   new THREE.MeshStandardMaterial({ name:'dark',   color:0x14161c, roughness:0.4, metalness:0.3 }),
   new THREE.MeshStandardMaterial({ name:'trim',   color:0xffffff, roughness:0.35 }),
+  new THREE.MeshStandardMaterial({ name:'accent', color:0x224488, roughness:0.5 }),
 ];
 
 // ------------------------------------------------------------------ bind -----
