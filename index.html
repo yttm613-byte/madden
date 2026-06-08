@@ -1076,53 +1076,59 @@
   }
   // Clone one instance of the rigged GLB player, with its own materials, build
   // variation and animation mixer (idle / run / tackle / celebrate).
+  // ---- realistic rigged player (Mixamo-skeleton GLB), driven procedurally ----
+  const _axX=new THREE.Vector3(1,0,0), _tq=new THREE.Quaternion();
+  function findBone(root,sub){ let f=null; root.traverse(o=>{ if(!f && o.isBone && o.name.indexOf(sub)>=0) f=o; }); return f; }
+  function setBone(b,ax,ang){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromAxisAngle(ax,ang); b.quaternion.multiply(_tq); }
   function makePlayer(){
-    const grp=THREE.SkeletonUtils.clone(playerProto.scene);
-    // glTF splits the grouped mesh into one (skinned) primitive per material;
-    // clone each material per-instance and index by name so recolor is independent.
-    const mats={};
-    grp.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.castShadow=true; const m=o.material.clone(); m.name=o.material.name; o.material=m; mats[m.name]=m; } });
-    if(mats.skin) mats.skin.color.setHex(SKIN_TONES[(Math.random()*SKIN_TONES.length)|0]);
-    if(mats.pants) mats.pants.color.offsetHSL(0,0,(Math.random()-0.5)*0.06);
-    // build variation: heavier linemen vs. lean skill players
-    const lean=Math.random(), tall=0.98+lean*0.18, girth=1.12-lean*0.22;
-    grp.scale.set(1.16*girth, 1.16*tall, 1.16*girth);
-    const mixer=new THREE.AnimationMixer(grp);
-    const clip=n=>playerProto.animations.find(c=>c.name===n);
-    const actions={ idle:mixer.clipAction(clip('idle')), run:mixer.clipAction(clip('run')),
-      tackle:mixer.clipAction(clip('tackle')), celebrate:mixer.clipAction(clip('celebrate')),
-      throw:mixer.clipAction(clip('throw')), kick:mixer.clipAction(clip('kick')), set:mixer.clipAction(clip('set')) };
-    [actions.tackle,actions.throw,actions.kick].forEach(a=>{ a.setLoop(THREE.LoopOnce); a.clampWhenFinished=true; });
-    const idleDur=actions.idle.getClip().duration, runDur=actions.run.getClip().duration;
-    actions.idle.play(); actions.idle.time=Math.random()*idleDur;   // desync idles
-    // jersey number on chest + back, parented to the chest bone so it deforms with the body
-    const chest=grp.getObjectByName('chest');
-    if(chest){ const nt=numberTex(Math.floor(Math.random()*89)+10);
-      const nMat=new THREE.MeshBasicMaterial({map:nt,transparent:true});
-      const back=new THREE.Mesh(new THREE.PlaneGeometry(0.36,0.36), nMat); back.position.set(0,0.13,-0.205); back.rotation.y=Math.PI; chest.add(back);
-      const front=new THREE.Mesh(new THREE.PlaneGeometry(0.24,0.24), nMat); front.position.set(0,0.11,0.205); chest.add(front);
-    }
-    // soft contact shadow so players read as planted on the turf
+    const grp=new THREE.Group();
+    const model=THREE.SkeletonUtils.clone(playerProto.scene);
+    const box=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); box.getSize(sz);
+    // scale to ~2 yards tall, with per-player size variants
+    const vh=0.94+Math.random()*0.16, vg=1.05-(vh-0.94)*0.9;   // taller players a touch leaner
+    const s=2.0/(sz.y||1); model.scale.set(s*vg, s*vh, s*vg);
+    const box2=new THREE.Box3().setFromObject(model); model.position.y=-box2.min.y;
+    model.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.castShadow=true; } });
+    grp.add(model);
+    const B={};
+    ['Hips','Spine2','Spine','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg','LeftArm','LeftForeArm','RightArm','RightForeArm'].forEach(k=>{
+      const b=findBone(model,k); if(b){ b.userData.bind=b.quaternion.clone(); B[k]=b; } });
+    // team ring (reliable team distinction since both teams wear the same kit)
+    const ring=new THREE.Mesh(new THREE.RingGeometry(0.66,0.92,28), new THREE.MeshBasicMaterial({color:0x3a86ff,transparent:true,opacity:0.55,side:THREE.DoubleSide,depthWrite:false,fog:false}));
+    ring.rotation.x=-Math.PI/2; ring.position.y=0.03; grp.add(ring);
     if(!makePlayer._sh){ const c=document.createElement('canvas'); c.width=c.height=64; const cg=c.getContext('2d');
       const gr=cg.createRadialGradient(32,32,2,32,32,30); gr.addColorStop(0,'rgba(0,0,0,0.5)'); gr.addColorStop(1,'rgba(0,0,0,0)');
       cg.fillStyle=gr; cg.fillRect(0,0,64,64); makePlayer._sh=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,fog:false}); }
-    const blob=new THREE.Mesh(new THREE.CircleGeometry(0.62,18), makePlayer._sh); blob.rotation.x=-Math.PI/2; blob.position.y=0.015; grp.add(blob);
-    // per-player gait variation so the 11 don't move in lockstep
-    grp.userData={mixer,actions,cur:'idle',mats,phase:Math.random()*6.28,
-      gait:0.85+Math.random()*0.30, runPhase:Math.random()*runDur, idlePhase:Math.random()*idleDur, setDur:actions.set.getClip().duration};
+    const blob=new THREE.Mesh(new THREE.CircleGeometry(0.62,18), makePlayer._sh); blob.rotation.x=-Math.PI/2; blob.position.y=0.02; grp.add(blob);
+    grp.userData={B,ring,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
     grp.visible=false; scene.add(grp); return grp;
   }
-  // Asynchronously load the player model, then fill the reusable pool.
+  // Drive a running / idle gait directly on the Mixamo rig (no run clip needed).
+  function driveGait(u,spy){
+    const B=u.B; if(!B) return;
+    const moving=spy>1.2;
+    u.phase += moving ? Math.min(0.5, 0.06+spy*0.055) : 0.025*u.gait;
+    const A = moving ? Math.min(1.05, 0.3+spy*0.085) : 0.0;
+    const sn=Math.sin(u.phase), sn2=Math.sin(u.phase+Math.PI);
+    setBone(B.LeftUpLeg,  _axX,  sn*A);
+    setBone(B.RightUpLeg, _axX,  sn2*A);
+    setBone(B.LeftLeg,    _axX,  Math.max(0,-sn)*A*1.4);
+    setBone(B.RightLeg,   _axX,  Math.max(0,-sn2)*A*1.4);
+    setBone(B.LeftArm,    _axX, -sn*A*0.7);
+    setBone(B.RightArm,   _axX, -sn2*A*0.7);
+    setBone(B.LeftForeArm, _axX, -(0.3+Math.max(0,sn)*0.5)*(moving?1:0));
+    setBone(B.RightForeArm,_axX, -(0.3+Math.max(0,sn2)*0.5)*(moving?1:0));
+    if(B.Spine2) setBone(B.Spine2, _axX, moving? Math.min(0.3,spy*0.03) : 0.02*Math.sin(u.phase));
+  }
   function loadPlayers(){
-    new THREE.GLTFLoader().load('assets/player.glb', (gltf)=>{
+    new THREE.GLTFLoader().load('assets/fbplayer_opt.glb', (gltf)=>{
       playerProto=gltf;
-      for(let i=0;i<26;i++) pPool.push(makePlayer());
-      // selection / ball-carrier ground rings (separate from the skinned mesh)
+      for(let i=0;i<22;i++) pPool.push(makePlayer());
       for(let i=0;i<6;i++){ const r=new THREE.Mesh(new THREE.RingGeometry(0.95,1.3,28),
         new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.DoubleSide,transparent:true,opacity:0.85,fog:false}));
         r.rotation.x=-Math.PI/2; r.position.y=0.06; r.visible=false; scene.add(r); ringPool.push(r); }
       playersReady=true;
-    }, undefined, (e)=>{ console.error('player.glb load failed', e); });
+    }, undefined, (e)=>{ console.error('player glb load failed', e); });
   }
   function goalpost3D(x){
     const m=new THREE.MeshStandardMaterial({color:0xffe44a,emissive:0x6a560e,emissiveIntensity:0.6,roughness:0.3,metalness:0.35});
@@ -1242,27 +1248,13 @@
         const sp=Math.hypot(e.vx||0,e.vy||0), spy=sp/PPY;
         if(sp>6) g.rotation.y=Math.atan2(e.vx,e.vy); else g.rotation.y=o.def?-Math.PI/2:Math.PI/2;
         g.position.set(WX(e.x), 0, WZ(e.y));
-        if(u.mats.jersey) u.mats.jersey.color.setHex(o.jc);
-        if(u.mats.helmet) u.mats.helmet.color.setHex(o.hc);
-        if(u.mats.accent) u.mats.accent.color.setHex(o.hc);   // sleeve/pant/chest stripes follow team 2nd color
-        // animation state machine: run / idle, with tackle & celebrate on dead plays
-        let want = spy>1.4 ? 'run' : 'idle';
-        const onDead = G.phase==='dead' && !G._td && !G._fg;
-        if(G._fgFlight && e===G.carrier) want='kick';                                  // place-kicker swing
-        else if(e===G.carrier && e.role==='qb' && G.passState==='air') want='throw';   // QB release
-        else if(G._td && G.phase==='dead' && e===G.carrier) want='celebrate';
-        else if(onDead && e===G.carrier && spy<3.5) want='tackle';                     // ball carrier goes down
-        else if(onDead && o.kind==='def' && G.carrier && dist(e,G.carrier)<yd(2.4)) want='tackle'; // tacklers wrap up
-        else if(G.phase==='presnap' && spy<1 && (o.kind==='block' || (o.kind==='def' && G.carrier && Math.abs(e.x-G.los)<yd(3.4)))) want='set'; // line gets in stance
-        if(u.cur!==want){ const to=u.actions[want], from=u.actions[u.cur];
-          to.reset().setEffectiveWeight(1).play();
-          if(want==='run') to.time=u.runPhase; else if(want==='idle') to.time=u.idlePhase; else if(want==='set') to.time=Math.random()*u.setDur; // desync
-          if(from && from!==to) to.crossFadeFrom(from,0.18,false); u.cur=want; }
-        if(u.cur==='run') u.actions.run.timeScale=Math.max(0.65,Math.min(2.5, spy/6.0))*u.gait; // slight per-player stride speed
-        u.mixer.update(lastDt);
+        // team-colored ground ring (blue = user's team, red = CPU's team) for distinction
+        const team = o.def ? other(G.offense) : G.offense;
+        u.ring.visible=true; u.ring.material.color.setHex(team==='user'?0x3a86ff:0xff5340);
+        driveGait(u, spy);                                   // real running legs on the rig
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
-          const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.06,WZ(e.y)); }
-      } else g.visible=false; }
+          const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
+      } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
     if(G.ball&&G.ball.active){ ballMesh.visible=true; const t=Math.min(1,G.ball.t/G.ball.dur);
       const h = G.ball.fg ? (G.ball.short ? 1+Math.sin(t*Math.PI)*4 : 1+Math.sin(t*Math.PI*0.82)*7.5) : 1+Math.sin(t*Math.PI)*4.8;
       ballMesh.position.set(WX(G.ball.x),h,WZ(G.ball.y));

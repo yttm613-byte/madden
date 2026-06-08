@@ -5,11 +5,16 @@
   "private": true,
   "scripts": {
     "build:player": "node tools/build-player.cjs",
+    "optimize:player": "node tools/optimize-model.mjs",
     "serve": "http-server -p 8088 -c-1 .",
     "start": "http-server -p 8088 -c-1 ."
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.0.0",
+    "@gltf-transform/functions": "^4.0.0",
     "http-server": "^14.1.1",
+    "meshoptimizer": "^0.20.0",
+    "sharp": "^0.33.0",
     "three": "0.128.0"
   }
 }

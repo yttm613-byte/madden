@@ -5,3 +5,5 @@ index.test.html
 tools/*.png
 tools/*.mjs
 *.log
+assets/fbplayer2.glb
+assets/fbplayer.glb

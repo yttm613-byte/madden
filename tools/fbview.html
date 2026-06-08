@@ -1,21 +1,25 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#223044;overflow:hidden}</style>
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#2a3a4f;overflow:hidden}</style>
 <script src="../vendor/three.min.js"></script>
 <script src="../vendor/GLTFLoader.js"></script>
 </head><body><script>
-const W=520,H=600;
-const scene=new THREE.Scene(); scene.background=new THREE.Color(0x223044);
-const cam=new THREE.PerspectiveCamera(45,W/H,0.01,5000);
+const W=540,H=640;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x2a3a4f);
+const cam=new THREE.PerspectiveCamera(45,W/H,0.01,9000);
 const rend=new THREE.WebGLRenderer({antialias:true}); rend.setSize(W,H); rend.outputEncoding=THREE.sRGBEncoding; document.body.appendChild(rend.domElement);
-scene.add(new THREE.AmbientLight(0xffffff,0.9)); const d=new THREE.DirectionalLight(0xffffff,1.2); d.position.set(3,6,4); scene.add(d);
-scene.add(new THREE.GridHelper(10,10,0x556,0x445));
+scene.add(new THREE.AmbientLight(0xffffff,0.9)); const d=new THREE.DirectionalLight(0xffffff,1.3); d.position.set(3,6,4); scene.add(d);
+scene.add(new THREE.GridHelper(400,20,0x556,0x445));
+let mixer,clips,model;
 window.__ready=false;
-new THREE.GLTFLoader().load('../assets/fbplayer.glb',(g)=>{
-  const m=g.scene; scene.add(m);
-  const box=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); box.getSize(sz); const ctr=new THREE.Vector3(); box.getCenter(ctr);
-  window.__size={x:+sz.x.toFixed(2),y:+sz.y.toFixed(2),z:+sz.z.toFixed(2),cy:+ctr.y.toFixed(2)};
-  // frame it
-  const maxd=Math.max(sz.x,sz.y,sz.z); cam.position.set(ctr.x+maxd*0.8, ctr.y+maxd*0.2, ctr.z+maxd*1.6); cam.lookAt(ctr.x,ctr.y,ctr.z);
-  window.__spin=(deg)=>{ m.rotation.y=deg*Math.PI/180; rend.render(scene,cam); };
+new THREE.GLTFLoader().load('../assets/fbplayer2.glb',(g)=>{
+  model=g.scene; scene.add(model); clips=g.animations; window.__clips=clips.map(c=>({name:c.name,dur:+c.duration.toFixed(2)}));
+  model.traverse(o=>{ if(o.isMesh) o.frustumCulled=false; });
+  const box=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(),ctr=new THREE.Vector3(); box.getSize(sz); box.getCenter(ctr);
+  window.__size={x:+sz.x.toFixed(2),y:+sz.y.toFixed(2),z:+sz.z.toFixed(2),minY:+box.min.y.toFixed(2)};
+  const maxd=Math.max(sz.x,sz.y,sz.z); cam.position.set(ctr.x+maxd*0.7,ctr.y+maxd*0.15,ctr.z+maxd*1.5); cam.lookAt(ctr.x,ctr.y,ctr.z);
+  mixer=new THREE.AnimationMixer(model);
+  if(clips.length){ const a=mixer.clipAction(clips[0]); a.play(); window.__a=a; }
+  window.__setTime=(frac)=>{ if(window.__a){ mixer.setTime(frac*clips[0].duration); } rend.render(scene,cam); };
+  window.__spin=(deg)=>{ model.rotation.y=deg*Math.PI/180; rend.render(scene,cam); };
   window.__ready=true; rend.render(scene,cam);
 },undefined,(e)=>{window.__err=String(e&&e.message||e);});
 function loop(){ rend.render(scene,cam); requestAnimationFrame(loop);} loop();

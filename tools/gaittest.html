@@ -1,0 +1,34 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#2a3a4f;overflow:hidden}</style>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/GLTFLoader.js"></script>
+</head><body><script>
+const W=520,H=640;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x2a3a4f);
+const cam=new THREE.PerspectiveCamera(40,W/H,0.01,9000);
+const rend=new THREE.WebGLRenderer({antialias:true}); rend.setSize(W,H); rend.outputEncoding=THREE.sRGBEncoding; document.body.appendChild(rend.domElement);
+scene.add(new THREE.AmbientLight(0xffffff,0.95)); const d=new THREE.DirectionalLight(0xffffff,1.2); d.position.set(3,6,4); scene.add(d);
+scene.add(new THREE.GridHelper(8,16,0x556,0x445));
+const _axX=new THREE.Vector3(1,0,0), _tq=new THREE.Quaternion();
+let model,B={};
+function findBone(root,sub){let f=null;root.traverse(o=>{if(!f&&o.isBone&&o.name.indexOf(sub)>=0)f=o;});return f;}
+function setBone(b,ax,ang){if(!b||!b.userData.bind)return;b.quaternion.copy(b.userData.bind);_tq.setFromAxisAngle(ax,ang);b.quaternion.multiply(_tq);}
+window.__ready=false;
+new THREE.GLTFLoader().load('../assets/fbplayer_opt.glb',(g)=>{
+  model=g.scene; scene.add(model);
+  const box=new THREE.Box3().setFromObject(model);const sz=new THREE.Vector3(),ctr=new THREE.Vector3();box.getSize(sz);box.getCenter(ctr);
+  const s=2/sz.y; model.scale.setScalar(s);
+  const b2=new THREE.Box3().setFromObject(model); model.position.y=-b2.min.y;
+  ['Hips','Spine2','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg','LeftArm','LeftForeArm','RightArm','RightForeArm'].forEach(k=>{const b=findBone(model,k);if(b){b.userData.bind=b.quaternion.clone();B[k]=b;}});
+  window.__bones=Object.keys(B);
+  cam.position.set(2.2,1.2,3.0); cam.lookAt(0,1,0);
+  window.__pose=(ph,A)=>{ const sn=Math.sin(ph),sn2=Math.sin(ph+Math.PI);
+    setBone(B.LeftUpLeg,_axX,sn*A); setBone(B.RightUpLeg,_axX,sn2*A);
+    setBone(B.LeftLeg,_axX,Math.max(0,-sn)*A*1.4); setBone(B.RightLeg,_axX,Math.max(0,-sn2)*A*1.4);
+    setBone(B.LeftArm,_axX,-sn*A*0.7); setBone(B.RightArm,_axX,-sn2*A*0.7);
+    if(B.Spine2) setBone(B.Spine2,_axX,0.2);
+    rend.render(scene,cam); };
+  window.__spin=(deg)=>{model.rotation.y=deg*Math.PI/180;rend.render(scene,cam);};
+  window.__ready=true; rend.render(scene,cam);
+},undefined,e=>{window.__err=String(e&&e.message||e);});
+function loop(){rend.render(scene,cam);requestAnimationFrame(loop);}loop();
+</script></body></html>
