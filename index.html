@@ -328,7 +328,7 @@
   function setupPlay(playId){
     const play=PLAYS[playId]||PLAYS.dive; const type=play.kind; const cx=G.los;
     G.playId=playId; G.playType=type;
-    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false};
+    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null;
     G.passState = type==='pass'?'drop':null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0;
     document.getElementById('spinpip').textContent='SPIN READY';
     if(type==='pass'){
@@ -361,6 +361,7 @@
       if(playId==='sweep') G.blockers=[ mk(cx+yd(0.5),fieldMid+side*yd(3),70), mk(cx+yd(1),fieldMid+side*yd(6),76), mk(cx-yd(0.5),fieldMid+side*yd(1),65) ];
       else if(playId==='dive') G.blockers=[ mk(cx-yd(0.3),fieldMid-yd(2),70), mk(cx-yd(0.3),fieldMid,76), mk(cx-yd(0.3),fieldMid+yd(2),65) ];
       else G.blockers=[ mk(cx-yd(0.5),fieldTop+PLAYH*0.38,70), mk(cx-yd(0.5),fieldMid,76), mk(cx-yd(0.5),fieldTop+PLAYH*0.62,65) ];
+      { const qb=mk(cx-yd(1.4),fieldMid,12); qb.role='qb'; qb.noblock=true; G.blockers.push(qb); G.runQB=qb; }   // QB hands off to the RB
       [0.20,0.40,0.60,0.80].forEach((p,i)=> G.defenders.push(def(cx+yd(0.8),fieldTop+PLAYH*p,0.14,90+i,'pursue',null)));
       [0.28,0.52,0.72].forEach((p,i)=> G.defenders.push(def(cx+yd(5.5),fieldTop+PLAYH*p,0.07,50+i,'pursue',null)));
       [0.34,0.66].forEach((p,i)=> G.defenders.push(def(cx+yd(13),fieldTop+PLAYH*p,0.0,20+i,'pursue',null)));
@@ -444,7 +445,7 @@
     else if(G.phase==='live'){ if(G.playType==='pass'&&G.passState==='drop') throwBall(); else spin(); }
   }
   function switchDef(){ G.userDef = nearestDefToBall(); }
-  function snap(){ if(G.phase!=='presnap') return; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); SFX.snap(); setMsg('',0); snapCall(); }
+  function snap(){ if(G.phase!=='presnap') return; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); SFX.snap(); setMsg('',0); if(G.playType==='run'&&G.runQB) G.handoff={t:0}; snapCall(); }
   function spin(){
     if(G.phase!=='live'||G.spinCd>0) return;
     G.spinCd=2.2; G.burst=0.28;
@@ -591,6 +592,7 @@
 
   function blockNearest(dt,pool){
     for(const b of G.blockers){
+      if(b.noblock) continue;   // QB stands and hands off
       let best=null,bd=1e9;
       for(const d of pool){ if(d._takenBy&&d._takenBy!==b) continue; const dd=dist(d,G.carrier); if(dd<bd){bd=dd;best=d;} }
       b.target=best;
@@ -810,6 +812,7 @@
 
   function updateRun(dt){
     const c=G.carrier;
+    if(G.handoff){ G.handoff.t+=dt; if(G.handoff.t>0.45) G.handoff=null; }
     if(G.offense==='user') moveEntity(c,dt,S.carrier,S.sprint);
     else cpuRunAI(c,dt);
     if(Math.hypot(c.vx,c.vy) > S.carrier*1.03){ G.trail.push({x:c.x,y:c.y}); if(G.trail.length>9) G.trail.shift(); }
@@ -1296,7 +1299,7 @@
         if(u.B){
           if(o.kind==='carry' && want==='run'){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
             if(nd<yd(2.5) && !(u.spinT>0)){ setBone(u.B.RightArm,_axX,-1.45); setBone(u.B.RightForeArm,_axX,-0.05); } } // stiff-arm
-          else if(o.kind==='block' && (G.phase==='live')){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
+          else if(o.kind==='block' && !e.noblock && (G.phase==='live')){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
             if(nd<yd(1.7)){ setBone(u.B.Spine2,_axX,0.5); setBone(u.B.LeftArm,_axX,-1.15); setBone(u.B.RightArm,_axX,-1.15); setBone(u.B.LeftForeArm,_axX,-0.5); setBone(u.B.RightForeArm,_axX,-0.5); } } // engaged block
         }
         // vertical stride bounce while running (plus any spin dip)
@@ -1308,6 +1311,9 @@
       const h = G.ball.fg ? (G.ball.short ? 1+Math.sin(t*Math.PI)*4 : 1+Math.sin(t*Math.PI*0.82)*7.5) : 1+Math.sin(t*Math.PI)*4.8;
       ballMesh.position.set(WX(G.ball.x),h,WZ(G.ball.y));
       ballMesh.rotation.y=Math.atan2((G.ball.tx-G.ball.x),(G.ball.ty-G.ball.y)); ballMesh.rotation.x+=0.6; }
+    else if(G.handoff && G.runQB && G.carrier){ ballMesh.visible=true; const p=Math.min(1,G.handoff.t/0.4);
+      const qx=WX(G.runQB.x), qz=WZ(G.runQB.y), cx2=WX(G.carrier.x), cz2=WZ(G.carrier.y);
+      ballMesh.position.set(qx+(cx2-qx)*p, 1.0, qz+(cz2-qz)*p); ballMesh.rotation.x+=0.3; }
     else ballMesh.visible=false;
     if(G._fgFlight && G.ball && G.ball.active){ const bx=WX(G.ball.x), bz=WZ(G.ball.y);
       // sit low behind the kick and frame the uprights up the field
