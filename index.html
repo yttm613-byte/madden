@@ -169,9 +169,9 @@
   const MARGIN=26, FIELD_YDS=53.3, PLAYH=CH-MARGIN*2, PPY=PLAYH/FIELD_YDS;
   const WORLD_W=120*PPY, fieldTop=MARGIN, fieldBot=CH-MARGIN, fieldMid=fieldTop+PLAYH/2;
   const yd=y=>y*PPY, GOAL_X=yd(110), OWN_GOAL=yd(10);
-  const S={ carrier:7.5*PPY, sprint:9.9*PPY, blocker:7.0*PPY, def:8.0*PPY, defSprint:9.7*PPY, defBlocked:1.6*PPY,
-    rec:7.7*PPY, cover:7.45*PPY, rush:7.6*PPY, throwSpd:34*PPY, cpuRun:7.55*PPY, cpuSprint:9.4*PPY,
-    tackleR:1.5*PPY, spinR:3.0*PPY, blockR:1.7*PPY, shedR:2.4*PPY, catchR:2.0*PPY, contestR:1.5*PPY, intR:0.9*PPY };
+  const S={ carrier:8.0*PPY, sprint:10.6*PPY, blocker:7.2*PPY, def:7.55*PPY, defSprint:9.2*PPY, defBlocked:1.5*PPY,
+    rec:7.7*PPY, cover:7.45*PPY, rush:7.5*PPY, throwSpd:34*PPY, cpuRun:7.55*PPY, cpuSprint:9.4*PPY,
+    tackleR:1.2*PPY, spinR:3.0*PPY, blockR:1.8*PPY, shedR:2.4*PPY, catchR:2.0*PPY, contestR:1.5*PPY, intR:0.9*PPY };
 
   // ---- synthesized sound ----
   let actx=null, muted=false;
@@ -521,17 +521,18 @@
       });
     }catch(e){}
   }
-  function say(text,important){ // play-by-play: dynamic, momentum-aware delivery (no monotone)
+  const SCREAMS=["OH MY GOODNESS!","ARE YOU KIDDING ME!","WHOA WHOA WHOA!","OH BABY!","UNBELIEVABLE!","OH MY!","HERE — WE — GO!","NO WAY! NO WAY!"];
+  function say(text,important){ // play-by-play: dynamic, momentum-aware — screams on the big ones
     caption(text);
     if(!commOn) return;
     const now=(typeof performance!=='undefined'?performance.now():Date.now());
     if(!important && now-lastComm<240) return; lastComm=now;
-    const hype=Math.min(1,(important?0.55:0)+hypeStreak*0.16+Math.random()*0.18);
+    const hype=Math.min(1,(important?0.62:0)+hypeStreak*0.18+Math.random()*0.2);
     speakExpressive(text,{ cancel:true,
-      pitch:(important?1.12:0.95)+hype*0.26,
-      rate:(important?1.20:1.05)+hype*0.20,
-      vol:important?1:0.95,
-      rampPitch:important?0.17:0.07, rampRate:important?0.10:0.04 });
+      pitch:(important?1.22:0.95)+hype*0.5,    // up toward ~1.7 — screaming on big plays
+      rate:(important?1.30:1.05)+hype*0.42,    // fast and frantic when hyped
+      vol:1,
+      rampPitch:important?0.22:0.07, rampRate:important?0.12:0.04 });
   }
   function color(text){ if(text) speakExpressive(text,{ cancel:false, analyst:true, // deeper, drawling analyst with its own swing
     pitch:0.74+Math.random()*0.14, rate:0.95+Math.random()*0.16, vol:0.94, rampPitch:0.06, rampRate:0.05 }); }
@@ -572,7 +573,13 @@
     else if(m.includes('CAUGHT')||m==='CPU CATCH'){ line=pick(["Caught! He hauls it in!","Reception — and he turns it upfield!","Snags it! Big-time grab.","Hands! He brings it in."]); }
     else if(m.includes('PUNT IS UP')){ line=pick(["The punt is UP — and it's a high one!","Booming punt — fielding it now!","He gets all of it — punt's away and the return is on!"]); force=true; }
     else if(m.includes('PUNT')){ hypeStreak=0; line=pick(["They'll punt it away.","Fourth down — out comes the punt team.","Can't convert — they boot it away.","Flipping the field with the punt."]); }
-    if(line){ say(line, force); if(aside && Math.random()<0.55) color(aside); if(force) crowdSwell(0.17,3); }
+    if(line){
+      const scream = force && /TOUCHDOWN|INTERCEPT|PICKED|GONE|MONSTER|HOUSE|SAFETY|TWO-POINT|HALL OF FAME|ELECTRIC|BANANAS/.test((m+' '+line).toUpperCase());
+      if(scream){ line = pick(SCREAMS)+' '+line; hypeStreak++; }
+      say(line, force);
+      if(aside && Math.random()<(scream?0.85:0.55)) color(aside);
+      if(force) crowdSwell(scream?0.26:0.17, scream?4:3);
+    }
   }
   function snapCall(){
     if(!G) { say(pick(["Here's the snap!","And the ball is snapped."])); return; }
@@ -675,7 +682,7 @@
   }
 
   // shared defender stepping for non-user-controlled defenders
-  function tackleHit(d,c){ const sp=Math.hypot(d.vx||0,d.vy||0); const reach=S.tackleR + Math.min(0.75*PPY, sp*0.08); return dist(d,c)<reach; }
+  function tackleHit(d,c){ const sp=Math.hypot(d.vx||0,d.vy||0); const reach=S.tackleR + Math.min(0.45*PPY, sp*0.05); return dist(d,c)<reach; }
   function stepDefenders(dt,mode,elapsed){
     const c=G.carrier;
     const ds = (G.offense==='user'?G.diff.cpu:G.diff.you);  // whose defenders these are
@@ -683,7 +690,7 @@
       const human = (G.offense==='cpu' && d===G.userDef);
       if(!human){
         if(mode==='run'){
-          if(dist(d,c)<yd(3.4)){ const cs = dist(d,c)<yd(1.9)? S.sprint*1.05 : S.def*1.12; aiPursue(d, c.x, c.y, dt, cs*ds); } // close out and dive to finish
+          if(dist(d,c)<yd(2.6)){ const cs = dist(d,c)<yd(1.4)? S.defSprint*0.98 : S.def*1.0; aiPursue(d, c.x, c.y, dt, cs*ds); } // close out (no super-dive)
           else if(d.draw>0){ d.draw-=dt; aiPursue(d, G.los+yd(3), d.homeY, dt, S.def*ds); } // overcommit upfield on the draw
           else if(d.deep){ // hold deep help, only commit once the ball reaches you
             const tx=Math.min(c.x+yd(9), GOAL_X-yd(2)), ty=fieldMid+(c.y-fieldMid)*0.6;
