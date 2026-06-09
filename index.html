@@ -1374,19 +1374,19 @@
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
-    if(G.ball&&G.ball.active){ ballMesh.visible=true; const t=Math.min(1,G.ball.t/G.ball.dur);
+    if(G.ball&&G.ball.active){ ballMesh.visible=true; ballMesh.scale.set(1.5,0.82,0.82); const t=Math.min(1,G.ball.t/G.ball.dur);
       const h = G.ball.fg ? (G.ball.short ? 1+Math.sin(t*Math.PI)*4 : 1+Math.sin(t*Math.PI*0.82)*7.5) : 1+Math.sin(t*Math.PI)*4.8;
       ballMesh.position.set(WX(G.ball.x),h,WZ(G.ball.y));
       ballMesh.rotation.y=Math.atan2((G.ball.tx-G.ball.x),(G.ball.ty-G.ball.y)); ballMesh.rotation.x+=0.6; }
-    else if(G.handoff && G.runQB && G.carrier){ ballMesh.visible=true; const p=Math.min(1,G.handoff.t/0.4);
+    else if(G.handoff && G.runQB && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(0.6,0.34,0.34); const p=Math.min(1,G.handoff.t/0.4);
       const qx=WX(G.runQB.x), qz=WZ(G.runQB.y), cx2=WX(G.carrier.x), cz2=WZ(G.carrier.y);
       ballMesh.position.set(qx+(cx2-qx)*p, 1.0, qz+(cz2-qz)*p); ballMesh.rotation.x+=0.3; }
     else if(_carrierG && (G.phase==='live'||G.phase==='dead') && !G._fgFlight && G.passState!=='air'){
       // ball tucked in the carrier's arm while running / QB holding in the pocket
-      _carrierG.updateMatrixWorld();
-      ballMesh.visible=true; ballMesh.position.copy(_tuckV.set(0.26,0.98,0.18).applyMatrix4(_carrierG.matrixWorld));
+      _carrierG.updateMatrixWorld(); ballMesh.scale.set(0.55,0.32,0.32);
+      ballMesh.visible=true; ballMesh.position.copy(_tuckV.set(0.24,0.95,0.16).applyMatrix4(_carrierG.matrixWorld));
       ballMesh.rotation.set(0.5,_carrierG.rotation.y,0); }
-    else if(G.phase==='presnap' && G.carrier){ ballMesh.visible=true; ballMesh.position.set(WX(G.los),0.16,WZ(fieldMid)); ballMesh.rotation.set(0,0,0); } // teed on the line pre-snap
+    else if(G.phase==='presnap' && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(0.62,0.34,0.34); ballMesh.position.set(WX(G.los),0.18,WZ(fieldMid)); ballMesh.rotation.set(0,0,1.4); } // ball spotted on the line
     else ballMesh.visible=false;
     if(G._fgFlight && G.ball && G.ball.active){ const bx=WX(G.ball.x), bz=WZ(G.ball.y);
       // sit low behind the kick and frame the uprights up the field
