@@ -1109,7 +1109,7 @@
       const gr=cg.createRadialGradient(32,32,2,32,32,30); gr.addColorStop(0,'rgba(0,0,0,0.5)'); gr.addColorStop(1,'rgba(0,0,0,0)');
       cg.fillStyle=gr; cg.fillRect(0,0,64,64); makePlayer._sh=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,fog:false}); }
     const blob=new THREE.Mesh(new THREE.CircleGeometry(0.62,18), makePlayer._sh); blob.rotation.x=-Math.PI/2; blob.position.y=0.02; grp.add(blob);
-    grp.userData={B,ring,jerseyMat,helmetMat,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
+    grp.userData={B,ring,jerseyMat,helmetMat,model,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
     grp.visible=false; scene.add(grp); return grp;
   }
   // Pose the Mixamo rig per state (run / idle / set / throw / kick / tackle / celebrate).
@@ -1264,7 +1264,12 @@
     for(let i=0;i<pPool.length;i++){ const g=pPool[i], u=g.userData;
       if(i<ents.length){ const o=ents[i], e=o.e; g.visible=true;
         const sp=Math.hypot(e.vx||0,e.vy||0), spy=sp/PPY;
-        if(sp>6) g.rotation.y=Math.atan2(e.vx,e.vy); else g.rotation.y=o.def?-Math.PI/2:Math.PI/2;
+        if(sp>6){ const h=Math.atan2(e.vx,e.vy);
+          let d=h-(u.heading==null?h:u.heading); while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
+          u.heading=(u.heading==null?h:u.heading)+d*Math.min(1,lastDt*12);   // smoothed facing
+          g.rotation.y=u.heading; u.bank += (Math.max(-0.45,Math.min(0.45,-d*3.5))-u.bank)*0.2;  // bank into the cut
+        } else { g.rotation.y=o.def?-Math.PI/2:Math.PI/2; u.bank*=0.85; }
+        if(u.model) u.model.rotation.z=u.bank;
         // spin move: when the ball carrier spins, whip in an extra 360 + dip
         if(e===G.carrier){ if(G.spinCd>(u.lastSpin||0)+1.5) u.spinT=0.5; u.lastSpin=G.spinCd; }
         else u.lastSpin=0;
@@ -1287,6 +1292,13 @@
         else if(G.phase==='presnap' && spy<1 && (o.kind==='block' || (o.kind==='def' && G.carrier && Math.abs(e.x-G.los)<yd(3.4)))) want='set';
         else want = spy>1.4 ? 'run' : 'idle';
         applyPose(u, want, spy);
+        // contextual overrides: stiff-arm (carrier) and blocking engagement (linemen)
+        if(u.B){
+          if(o.kind==='carry' && want==='run'){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
+            if(nd<yd(2.5) && !(u.spinT>0)){ setBone(u.B.RightArm,_axX,-1.45); setBone(u.B.RightForeArm,_axX,-0.05); } } // stiff-arm
+          else if(o.kind==='block' && (G.phase==='live')){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
+            if(nd<yd(1.7)){ setBone(u.B.Spine2,_axX,0.5); setBone(u.B.LeftArm,_axX,-1.15); setBone(u.B.RightArm,_axX,-1.15); setBone(u.B.LeftForeArm,_axX,-0.5); setBone(u.B.RightForeArm,_axX,-0.5); } } // engaged block
+        }
         // vertical stride bounce while running (plus any spin dip)
         g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.08, spy*0.012) : 0) + bob;
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
