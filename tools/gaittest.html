@@ -27,7 +27,10 @@ new THREE.GLTFLoader().load('../assets/fbplayer_opt.glb',(g)=>{
   const b2=new THREE.Box3().setFromObject(model);model.position.y=-b2.min.y;
   ['Hips','Spine2','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm'].forEach(k=>{const b=findBone(model,k);if(b){b.userData.bind=b.quaternion.clone();B[k]=b;}});
   model.traverse(o=>{if(o.isMesh&&o.material&&(o.material.name||'')==='shirt_0'){o.material=o.material.clone();jerseyMat=o.material;}});
-  u.B=B; cam.position.set(2.2,1.2,3.0);cam.lookAt(0,1,0);
+  {const nc=document.createElement("canvas");nc.width=128;nc.height=128;const ng=nc.getContext("2d");ng.font="bold 92px Arial";ng.textAlign="center";ng.textBaseline="middle";ng.lineWidth=9;ng.strokeStyle="rgba(0,0,0,0.6)";ng.strokeText("84",64,68);ng.fillStyle="rgba(255,255,255,0.97)";ng.fillText("84",64,68);
+const nm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(nc),transparent:true,depthWrite:false});
+const back=new THREE.Mesh(new THREE.PlaneGeometry(0.34,0.34),nm);back.position.set(0,0.86,-0.19);back.rotation.y=Math.PI;back.renderOrder=2;model.add(back);}
+u.B=B; cam.position.set(2.2,1.2,3.0);cam.lookAt(0,1,0);
   window.__pose=(st,spy)=>{applyPose(u,st,spy||7);};
   window.__tint=(hex)=>{if(jerseyMat){jerseyMat.color.setHex(hex);rend.render(scene,cam);}};
   window.__spin=(deg)=>{model.rotation.y=deg*Math.PI/180;rend.render(scene,cam);};
