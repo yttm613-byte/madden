@@ -13,9 +13,7 @@ let model,B={},u={phase:0,gait:1},jerseyMat=null;
 function findBone(root,sub){let f=null;root.traverse(o=>{if(!f&&o.isBone&&o.name.indexOf(sub)>=0)f=o;});return f;}
 function setBone(b,ax,ang){if(!b||!b.userData.bind)return;b.quaternion.copy(b.userData.bind);_tq.setFromAxisAngle(ax,ang);b.quaternion.multiply(_tq);}
 function applyPose(u,st,spy){const B=u.B;if(!B)return;const L=(k,a)=>setBone(B[k],_axX,a);
-  if(st==='run'){u.phase+=Math.min(0.5,0.06+spy*0.055);const A=Math.min(1.05,0.3+spy*0.085),sn=Math.sin(u.phase),sn2=Math.sin(u.phase+Math.PI);
-    L('LeftUpLeg',sn*A);L('RightUpLeg',sn2*A);L('LeftLeg',Math.max(0,-sn)*A*1.4);L('RightLeg',Math.max(0,-sn2)*A*1.4);
-    L('LeftArm',-sn*A*0.7);L('RightArm',-sn2*A*0.7);L('LeftForeArm',-(0.3+Math.max(0,sn)*0.5));L('RightForeArm',-(0.3+Math.max(0,sn2)*0.5));L('Spine2',Math.min(0.3,spy*0.03));}
+  if(st==='run'){u.phase+=Math.min(0.55,0.08+spy*0.055);const A=Math.min(0.95,0.3+spy*0.075),sn=Math.sin(u.phase),sn2=Math.sin(u.phase+Math.PI);L('LeftUpLeg',sn*A);L('RightUpLeg',sn2*A);L('LeftLeg',Math.max(0,-sn)*A*1.5);L('RightLeg',Math.max(0,-sn2)*A*1.5);L('LeftArm',-sn*A*0.8);L('RightArm',-sn2*A*0.8);L('LeftForeArm',-(0.7+Math.max(0,sn)*0.4));L('RightForeArm',-(0.7+Math.max(0,sn2)*0.4));L('Spine2',Math.min(0.32,0.12+spy*0.028));}
   else if(st==='set'){L('LeftUpLeg',0.42);L('RightUpLeg',0.42);L('LeftLeg',0.62);L('RightLeg',0.62);L('Spine2',0.5);L('LeftArm',-0.35);L('RightArm',-0.35);L('LeftForeArm',-0.7);L('RightForeArm',-0.7);}
   else if(st==='throw'){L('RightArm',-1.7);L('RightForeArm',-0.4);L('LeftArm',-0.5);L('LeftForeArm',-0.6);L('Spine2',0.2);L('LeftUpLeg',-0.15);L('RightUpLeg',0.2);}
   else if(st==='kick'){L('RightUpLeg',1.4);L('RightLeg',0.1);L('LeftUpLeg',-0.15);L('LeftLeg',0.1);L('Spine2',-0.1);L('LeftArm',-0.3);L('RightArm',0.3);}
