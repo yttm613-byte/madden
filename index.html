@@ -1128,7 +1128,10 @@
     const vh=0.94+Math.random()*0.16, vg=1.05-(vh-0.94)*0.9;   // taller players a touch leaner
     const s=2.0/(sz.y||1); model.scale.set(s*vg, s*vh, s*vg);
     const box2=new THREE.Box3().setFromObject(model); model.position.y=-box2.min.y;
-    model.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.castShadow=true; } });
+    model.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.castShadow=true;
+      const ms=Array.isArray(o.material)?o.material:[o.material];
+      for(const m of ms){ if(m&&m.isMeshStandardMaterial){ m.envMapIntensity=1.25; } }   // catch the stadium reflections
+    } });
     grp.add(model);
     const B={};
     ['Hips','Spine2','Spine','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm'].forEach(k=>{
@@ -1137,7 +1140,7 @@
     let jerseyMat=null, helmetMat=null; const skinMats=[];
     model.traverse(o=>{ if(o.isMesh && o.material){ const nm=o.material.name||'';
       if(nm==='shirt_0'){ o.material=o.material.clone(); jerseyMat=o.material; }
-      else if(nm==='Mat.3'){ o.material=o.material.clone(); helmetMat=o.material; }
+      else if(nm==='Mat.3'){ o.material=o.material.clone(); helmetMat=o.material; helmetMat.roughness=0.28; helmetMat.metalness=0.45; helmetMat.envMapIntensity=1.6; } // glossy helmet
       else if(nm==='Bodymat'){ o.material=o.material.clone(); skinMats.push(o.material); } }});
     // per-player skin tone variation (multiplies the body texture)
     { const f=0.74+Math.random()*0.32; for(const m of skinMats) m.color.setRGB(f, f*0.96, f*0.92); }
@@ -1264,7 +1267,7 @@
     camera=new THREE.PerspectiveCamera(54,760/560,0.1,700);
     renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true}); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     if(THREE.sRGBEncoding) renderer.outputEncoding=THREE.sRGBEncoding;
-    if(THREE.ACESFilmicToneMapping){ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.12; }
+    if(THREE.ACESFilmicToneMapping){ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05; }
     // image-based lighting: real HDRI for soft reflections, with a gradient fallback until it loads
     try{ const pmrem=new THREE.PMREMGenerator(renderer); pmrem.compileEquirectangularShader();
       const et=skyTexture(); if(THREE.EquirectangularReflectionMapping) et.mapping=THREE.EquirectangularReflectionMapping; scene.environment=pmrem.fromEquirectangular(et).texture;
@@ -1272,13 +1275,14 @@
     }catch(e){}
     document.getElementById('gl').appendChild(cv);
     const sky=new THREE.Mesh(new THREE.SphereGeometry(340,24,16), new THREE.MeshBasicMaterial({map:skyTexture(),side:THREE.BackSide,fog:false})); scene.add(sky);
-    scene.add(new THREE.AmbientLight(0x3a4a66,0.42));   // cooler, dimmer fill for a night game
-    const sun=new THREE.DirectionalLight(0xfff2d8,1.18); sun.position.set(70,95,18); sun.castShadow=true;
+    scene.add(new THREE.AmbientLight(0x4a5a78,0.5));    // soft cool fill
+    const sun=new THREE.DirectionalLight(0xfff4dc,1.45); sun.position.set(70,95,18); sun.castShadow=true;   // brighter key light
     sun.target.position.set(60,0,26.65); scene.add(sun.target);
-    sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0004;
-    const sc=sun.shadow.camera; sc.left=-80; sc.right=80; sc.top=48; sc.bottom=-48; sc.near=1; sc.far=280; scene.add(sun);
-    const rim=new THREE.DirectionalLight(0x88aaff,0.35); rim.position.set(50,40,-40); scene.add(rim);
-    const field=new THREE.Mesh(new THREE.PlaneGeometry(120,53.3), new THREE.MeshStandardMaterial({map:fieldTexture(),roughness:0.95}));
+    sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.00035; sun.shadow.normalBias=0.02; sun.shadow.radius=2.2;
+    const sc=sun.shadow.camera; sc.left=-70; sc.right=70; sc.top=44; sc.bottom=-44; sc.near=1; sc.far=280; scene.add(sun);
+    const rim=new THREE.DirectionalLight(0x9ab8ff,0.5); rim.position.set(40,38,-46); scene.add(rim);          // cool back rim for separation
+    const warm=new THREE.DirectionalLight(0xffd2a0,0.32); warm.position.set(90,30,70); scene.add(warm);       // warm cross-fill
+    const field=new THREE.Mesh(new THREE.PlaneGeometry(120,53.3), new THREE.MeshStandardMaterial({map:fieldTexture(),roughness:0.82,metalness:0.0,envMapIntensity:0.35}));
     field.rotation.x=-Math.PI/2; field.position.set(60,0,26.65); field.receiveShadow=true; scene.add(field);
     // broadcast lines: blue line of scrimmage + yellow first-down line (positioned per play)
     function fieldLine(color){ const m=new THREE.Mesh(new THREE.PlaneGeometry(0.34,53.3), new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.8,depthWrite:false,fog:false}));
@@ -1401,8 +1405,8 @@
     else if(G.carrier){ const cx=WX(G.carrier.x), cz=WZ(G.carrier.y);
       // broadcast-style chase: higher and further back, biased toward the middle of the field
       const cmid=cz+(WZ(fieldMid)-cz)*0.25;
-      camPos.lerp(new THREE.Vector3(cx-18,13.5,cmid),0.08); camLook.lerp(new THREE.Vector3(cx+12,1.6,cz),0.12);
-      const s=G.shake>0?Math.min(0.7,G.shake*3.2):0;
+      camPos.lerp(new THREE.Vector3(cx-18,13.0,cmid),0.07); camLook.lerp(new THREE.Vector3(cx+12,1.6,cz),0.10);
+      const s=G.shake>0?Math.min(0.45,G.shake*2.4):0;
       camera.position.set(camPos.x+(Math.random()-0.5)*s, camPos.y+(Math.random()-0.5)*s, camPos.z+(Math.random()-0.5)*s);
       camera.lookAt(camLook); }
     for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; } else if(Math.random()<0.025){ f.material.opacity=0.95; f.lookAt(camera.position); } }
