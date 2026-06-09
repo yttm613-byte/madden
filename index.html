@@ -195,7 +195,7 @@
     roar:()=>{ if(!actx||muted) return; noise(0.9,0.22,900); tone(330,0.5,'sawtooth',0.05,520); tone(440,0.5,'sawtooth',0.04,660); },
   };
   // ---- ambient crowd ----
-  let crowdGain=null; const crowdBase=0.045;
+  let crowdGain=null; const crowdBase=0.062;
   function startCrowd(){ if(!actx||crowdGain) return; try{
     const dur=4, n=Math.floor(actx.sampleRate*dur), buf=actx.createBuffer(1,n,actx.sampleRate), d=buf.getChannelData(0);
     let last=0; for(let i=0;i<n;i++){ const w=Math.random()*2-1; last=(last+0.02*w)/1.02; d[i]=last*3.2; }
@@ -455,7 +455,9 @@
     let best=cands[0],bd=1e9; for(const b of cands){ const d=dist(b,G.carrier); if(d<bd){bd=d;best=b;} }
     G.ctrlBlocker=best; setMsg('CONTROLLING BLOCKER — run them over!',0.9);
   }
-  function snap(){ if(G.phase!=='presnap') return; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); SFX.snap(); setMsg('',0); if(G.playType==='run'&&G.runQB) G.handoff={t:0}; snapCall(); }
+  function snap(){ if(G.phase!=='presnap') return; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); SFX.snap(); setMsg('',0);
+    if((GOAL_X-G.los)/PPY<=22 || G.down>=3) crowdSwell(crowdBase+0.05,1.4);   // anticipation on tense downs / red zone
+    if(G.playType==='run'&&G.runQB) G.handoff={t:0}; snapCall(); }
   function spin(){
     if(G.phase!=='live'||G.spinCd>0) return;
     G.spinCd=2.2; G.burst=0.28;
@@ -843,6 +845,12 @@
     if(c.y<fieldTop-2||c.y>fieldBot+2){ c.y=Math.max(fieldTop,Math.min(fieldBot,c.y)); return endPlay(G.offense==='user'?'OUT OF BOUNDS':'OUT',c.x); }
     if(c.x<OWN_GOAL-yd(8)) c.x=OWN_GOAL-yd(8);
     if(c.x>=GOAL_X) return scoreTD();
+    // crowd rises as the ball carrier breaks into the open downfield
+    if(G.offense==='user'){ const spd=Math.hypot(c.vx,c.vy); let nd=1e9; for(const d of G.defenders){ const dd=dist(d,c); if(dd<nd)nd=dd; }
+      if(c.x>G.los+yd(4) && nd>yd(5.5) && spd>S.carrier*0.85){ G._crowdT=(G._crowdT||0)+dt;
+        if(G._crowdT>0.35){ G._crowdT=0; crowdSwell(crowdBase+0.08+Math.min(0.12,(c.x-G.los)/yd(45)),1.1); } }
+      else G._crowdT=0;
+    }
     blockNearest(dt,G.defenders);
     if(stepDefenders(dt,'run')) return;
     G.cam+=(clampCam(c.x)-G.cam)*Math.min(1,dt*6);
@@ -878,6 +886,7 @@
     }
     if(G._td) return; G.phase='dead'; G.deadT=1.6; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false;
     spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',26,true); G.shake=0.3; G.flash=0.5; SFX.roar();
+    crowdSwell(G.offense==='user'?0.34:0.18, 4.5);   // huge home roar (muted for a CPU score)
     if(G.offense==='user'){ G.userScore+=6; G.longest=Math.max(G.longest,Math.max(0,Math.round((GOAL_X-G.los)/PPY))); }
     else G.cpuScore+=6;
     syncHUD(); startConversion(G.offense);
@@ -928,7 +937,7 @@
     if(G._turn){ startPossession(other(G.offense), flipLos(G._spot)); return; }
     if(wasReturn){ startPossession(G.offense, Math.max(yd(2),Math.min(GOAL_X-yd(2),G._spot))); return; }
     const spot=G._spot; G.los=spot;
-    if(spot>=G.firstX){ G.down=1; G.firstX=Math.min(spot+yd(10),GOAL_X); routeOffense(); setMsg(G.offense==='user'?'FIRST DOWN!':'CPU 1ST DOWN',0.9); }
+    if(spot>=G.firstX){ G.down=1; G.firstX=Math.min(spot+yd(10),GOAL_X); routeOffense(); setMsg(G.offense==='user'?'FIRST DOWN!':'CPU 1ST DOWN',0.9); if(G.offense==='user') crowdSwell(0.14,1.6); }
     else { G.down++; if(G.down>4){ setMsg('TURNOVER ON DOWNS',1.2); startPossession(other(G.offense), flipLos(spot)); } else routeOffense(); }
   }
 
