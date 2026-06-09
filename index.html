@@ -1052,21 +1052,25 @@
     const t=new THREE.CanvasTexture(c); if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
   }
   function crowdTexture(){
-    const c=document.createElement('canvas'); c.width=1024; c.height=256; const g=c.getContext('2d');
-    g.fillStyle='#0a0f18'; g.fillRect(0,0,1024,256);
-    const shirt=['#cdd6e4','#d9a05b','#6e8cc0','#c0626a','#7bbf8a','#b9b0c8','#e0c66a','#8893a6','#d04a4a','#3a6bd0','#e8e8ec','#2a3550','#9a4a8a','#4aa080'];
-    const skin=['#e8b890','#c89060','#a06840','#7a4a28','#f0c8a0'];
-    const rows=15, rh=256/rows;
-    for(let r=0;r<rows;r++){ const y=256-(r+0.5)*rh, perRow=78, jit=rh*0.28;
-      for(let i=0;i<perRow;i++){ const x=((i+(r%2?0.5:0))/perRow)*1024+(Math.random()-0.5)*7, yy=y+(Math.random()-0.5)*jit;
-        g.fillStyle=shirt[(Math.random()*shirt.length)|0]; g.fillRect(x-3.4,yy-0.5,6.8,5);            // torso/shoulders
-        g.fillStyle=skin[(Math.random()*skin.length)|0]; g.beginPath(); g.arc(x,yy-2.6,2.1,0,7); g.fill(); // head
+    const W=2048,H=512; const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
+    g.fillStyle='#0b1018'; g.fillRect(0,0,W,H);
+    const neutral=['#cdd6e4','#d9a05b','#6e8cc0','#7bbf8a','#b9b0c8','#e0c66a','#8893a6','#e8e8ec','#9a4a8a','#4aa080','#c9a24b','#5b6f8c'];
+    const home=['#2f6bd6','#3a86ff','#1f4f9e','#dfe6f2','#9fb8e8','#ffffff','#2f6bd6'];
+    const away=['#d23b34','#ff5340','#a3322c','#f0c0b8','#e88a7a','#ffffff','#d23b34'];
+    const skin=['#e8b890','#c89060','#a06840','#7a4a28','#f0c8a0','#d2a070'];
+    const palAt=(x)=>{ const seg=(x/W*8)|0; if(seg%4===1) return home; if(seg%4===3) return away; return Math.random()<0.45?(Math.random()<0.5?home:away):neutral; };
+    const rows=24, rh=H/rows;
+    for(let r=0;r<rows;r++){ const y=H-(r+0.5)*rh, perRow=170, jit=rh*0.3;
+      g.fillStyle='rgba(0,0,0,0.12)'; g.fillRect(0, y+rh*0.34, W, rh*0.16);          // seat-row shadow
+      for(let i=0;i<perRow;i++){ const x=((i+(r%2?0.5:0))/perRow)*W+(Math.random()-0.5)*5, yy=y+(Math.random()-0.5)*jit;
+        const pal=palAt(x);
+        g.fillStyle=pal[(Math.random()*pal.length)|0]; g.fillRect(x-3.6,yy-0.4,7.2,5.6);            // torso/shoulders
+        g.fillStyle=skin[(Math.random()*skin.length)|0]; g.beginPath(); g.arc(x,yy-3,2.4,0,7); g.fill(); // head
       }
     }
-    // depth shading: darker high (under roof) and at the very bottom rail
-    const sh=g.createLinearGradient(0,0,0,256); sh.addColorStop(0,'rgba(0,0,0,0.55)'); sh.addColorStop(0.45,'rgba(0,0,0,0.12)'); sh.addColorStop(1,'rgba(0,0,0,0.4)');
-    g.fillStyle=sh; g.fillRect(0,0,1024,256);
-    const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
+    const sh=g.createLinearGradient(0,0,0,H); sh.addColorStop(0,'rgba(0,0,0,0.5)'); sh.addColorStop(0.45,'rgba(0,0,0,0.08)'); sh.addColorStop(1,'rgba(0,0,0,0.34)');
+    g.fillStyle=sh; g.fillRect(0,0,W,H);
+    const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=8; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
   }
   function numberTex(n){
     const c=document.createElement('canvas'); c.width=128; c.height=128; const g=c.getContext('2d');
@@ -1112,13 +1116,13 @@
   function applyPose(u, st, spy){
     const B=u.B; if(!B) return; const L=(k,a)=>setBone(B[k],_axX,a);
     if(st==='run'){
-      u.phase += Math.min(0.5, 0.06+spy*0.055);
-      const A=Math.min(1.05,0.3+spy*0.085), sn=Math.sin(u.phase), sn2=Math.sin(u.phase+Math.PI);
-      L('LeftUpLeg',sn*A); L('RightUpLeg',sn2*A);
-      L('LeftLeg',Math.max(0,-sn)*A*1.4); L('RightLeg',Math.max(0,-sn2)*A*1.4);
-      L('LeftArm',-sn*A*0.7); L('RightArm',-sn2*A*0.7);
-      L('LeftForeArm',-(0.3+Math.max(0,sn)*0.5)); L('RightForeArm',-(0.3+Math.max(0,sn2)*0.5));
-      L('Spine2',Math.min(0.3,spy*0.03));
+      u.phase += Math.min(0.6, 0.08+spy*0.06);
+      const A=Math.min(1.18,0.35+spy*0.092), sn=Math.sin(u.phase), sn2=Math.sin(u.phase+Math.PI);
+      L('LeftUpLeg', sn*A); L('RightUpLeg', sn2*A);
+      L('LeftLeg', Math.max(0,-sn)*A*1.7); L('RightLeg', Math.max(0,-sn2)*A*1.7);     // high knee drive
+      L('LeftArm', -sn*A*0.95); L('RightArm', -sn2*A*0.95);                            // strong arm pump
+      L('LeftForeArm', -(0.85+Math.max(0,sn)*0.5)); L('RightForeArm', -(0.85+Math.max(0,sn2)*0.5)); // elbows ~90
+      L('Spine2', Math.min(0.45, 0.16+spy*0.035));                                     // forward lean
     } else if(st==='set'){            // pre-snap crouch
       L('LeftUpLeg',0.42); L('RightUpLeg',0.42); L('LeftLeg',0.62); L('RightLeg',0.62);
       L('Spine2',0.5); L('LeftArm',-0.35); L('RightArm',-0.35); L('LeftForeArm',-0.7); L('RightForeArm',-0.7);
@@ -1186,18 +1190,12 @@
   }
   // team benches + a row of standing sideline players to frame the field with life
   function buildSidelines(){
-    const headG=new THREE.SphereGeometry(0.55,10,8), bodyG=new THREE.CylinderGeometry(0.5,0.62,2.6,8);
-    function sideline(z, jc, hc){
-      const bench=new THREE.Mesh(new THREE.BoxGeometry(34,0.8,2.4), new THREE.MeshStandardMaterial({color:0x10151f,roughness:1})); bench.position.set(60,0.6,z); scene.add(bench);
-      const tent=new THREE.Mesh(new THREE.BoxGeometry(14,0.4,3.4), new THREE.MeshStandardMaterial({color:0x1a2230,roughness:1})); tent.position.set(60,5,z); scene.add(tent);
-      const jm=new THREE.MeshStandardMaterial({color:jc,roughness:0.7}), hm=new THREE.MeshStandardMaterial({color:hc,roughness:0.3,metalness:0.3}), sm=new THREE.MeshStandardMaterial({color:0xc89060,roughness:0.85});
-      for(let i=0;i<16;i++){ const x=18+i*5.3+(Math.random()-0.5)*2, zz=z+(Math.random()-0.5)*2.2;
-        const body=new THREE.Mesh(bodyG, Math.random()<0.78?jm:sm); body.position.set(x,1.5,zz); body.castShadow=true; scene.add(body);
-        const head=new THREE.Mesh(headG, Math.random()<0.6?hm:sm); head.position.set(x,3.1,zz); scene.add(head);
-      }
+    // benches/tents only — no stick-figure sideline players (they clashed with the real models)
+    function sideline(z){
+      const bench=new THREE.Mesh(new THREE.BoxGeometry(34,0.8,2.4), new THREE.MeshStandardMaterial({color:0x10151f,roughness:1})); bench.position.set(60,0.5,z); scene.add(bench);
+      const tent=new THREE.Mesh(new THREE.BoxGeometry(16,0.4,3.6), new THREE.MeshStandardMaterial({color:0x1a2230,roughness:1})); tent.position.set(60,4.6,z); scene.add(tent);
     }
-    sideline(-2.6, 0x2f6bd6, 0x244e86);   // near sideline (blue)
-    sideline(55.9, 0xd23b34, 0x9e2a25);   // far sideline (red)
+    sideline(-3.0); sideline(56.3);
   }
   function buildFlashes(){
     const geo=new THREE.PlaneGeometry(0.7,0.7);
@@ -1267,6 +1265,11 @@
       if(i<ents.length){ const o=ents[i], e=o.e; g.visible=true;
         const sp=Math.hypot(e.vx||0,e.vy||0), spy=sp/PPY;
         if(sp>6) g.rotation.y=Math.atan2(e.vx,e.vy); else g.rotation.y=o.def?-Math.PI/2:Math.PI/2;
+        // spin move: when the ball carrier spins, whip in an extra 360 + dip
+        if(e===G.carrier){ if(G.spinCd>(u.lastSpin||0)+1.5) u.spinT=0.5; u.lastSpin=G.spinCd; }
+        else u.lastSpin=0;
+        let bob=0;
+        if(u.spinT>0){ u.spinT-=lastDt; const k=Math.max(0,u.spinT/0.5); g.rotation.y+=k*Math.PI*2; bob=-Math.sin(k*Math.PI)*0.12; }
         g.position.set(WX(e.x), 0, WZ(e.y));
         // team identity: ground ring + jersey tint (white-ish home vs red away)
         const team = o.def ? other(G.offense) : G.offense;
@@ -1284,6 +1287,8 @@
         else if(G.phase==='presnap' && spy<1 && (o.kind==='block' || (o.kind==='def' && G.carrier && Math.abs(e.x-G.los)<yd(3.4)))) want='set';
         else want = spy>1.4 ? 'run' : 'idle';
         applyPose(u, want, spy);
+        // vertical stride bounce while running (plus any spin dip)
+        g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.08, spy*0.012) : 0) + bob;
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }

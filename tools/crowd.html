@@ -1,0 +1,22 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#222}</style></head>
+<body><canvas id="c" width="1024" height="256"></canvas><script>
+const W=2048,H=512; const big=document.createElement('canvas'); big.width=W; big.height=H; const g=big.getContext('2d');
+g.fillStyle='#0b1018'; g.fillRect(0,0,W,H);
+const neutral=['#cdd6e4','#d9a05b','#6e8cc0','#7bbf8a','#b9b0c8','#e0c66a','#8893a6','#e8e8ec','#9a4a8a','#4aa080','#c9a24b','#5b6f8c'];
+const home=['#2f6bd6','#3a86ff','#1f4f9e','#dfe6f2','#9fb8e8','#ffffff','#2f6bd6'];
+const away=['#d23b34','#ff5340','#a3322c','#f0c0b8','#e88a7a','#ffffff','#d23b34'];
+const skin=['#e8b890','#c89060','#a06840','#7a4a28','#f0c8a0','#d2a070'];
+const palAt=(x)=>{const seg=(x/W*8)|0;if(seg%4===1)return home;if(seg%4===3)return away;return Math.random()<0.45?(Math.random()<0.5?home:away):neutral;};
+const rows=24, rh=H/rows;
+for(let r=0;r<rows;r++){const y=H-(r+0.5)*rh,perRow=170,jit=rh*0.3;
+  g.fillStyle='rgba(0,0,0,0.12)';g.fillRect(0,y+rh*0.34,W,rh*0.16);
+  for(let i=0;i<perRow;i++){const x=((i+(r%2?0.5:0))/perRow)*W+(Math.random()-0.5)*5,yy=y+(Math.random()-0.5)*jit;
+    const pal=palAt(x);g.fillStyle=pal[(Math.random()*pal.length)|0];g.fillRect(x-3.6,yy-0.4,7.2,5.6);
+    g.fillStyle=skin[(Math.random()*skin.length)|0];g.beginPath();g.arc(x,yy-3,2.4,0,7);g.fill();}}
+const sh=g.createLinearGradient(0,0,0,H);sh.addColorStop(0,'rgba(0,0,0,0.5)');sh.addColorStop(0.45,'rgba(0,0,0,0.08)');sh.addColorStop(1,'rgba(0,0,0,0.34)');
+g.fillStyle=sh;g.fillRect(0,0,W,H);
+// show a zoomed crop (one section) on the visible canvas
+const c=document.getElementById('c').getContext('2d');
+c.drawImage(big, 200,180, 1024,256, 0,0, 1024,256);
+window.__done=true;
+</script></body></html>
