@@ -53,6 +53,10 @@
   #commtog.off{opacity:.4;}
   #comm{position:absolute; left:50%; bottom:70px; transform:translateX(-50%); max-width:78%; font-family:'Oswald',sans-serif; font-weight:600; font-size:clamp(12px,2.7vw,16px); letter-spacing:.01em; color:#eaf2ff; background:rgba(8,12,20,.74); border-left:3px solid var(--gold); padding:6px 13px; border-radius:4px; opacity:0; transition:opacity .25s; pointer-events:none; text-align:center; box-shadow:0 6px 20px rgba(0,0,0,.45);}
   #comm.show{opacity:1;}
+  #replay{position:absolute; left:14px; top:12px; z-index:6; display:none; align-items:center; gap:7px; font-family:'Anton',sans-serif; font-size:15px; letter-spacing:.16em; color:#fff; background:rgba(180,20,20,.82); padding:5px 12px; border-radius:4px; box-shadow:0 4px 16px rgba(0,0,0,.5);}
+  #replay.show{display:flex;}
+  #replay i{width:9px; height:9px; border-radius:50%; background:#fff; animation:rblink 1s infinite;}
+  @keyframes rblink{0%,49%{opacity:1}50%,100%{opacity:.25}}
   #fg{position:absolute; inset:0; background:rgba(6,10,16,.86); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:20px;}
   #fg h2{font-family:'Anton',sans-serif; font-size:clamp(22px,5vw,38px); margin:0;}
   #fg .dist{color:var(--gold); font-size:18px; letter-spacing:.1em;}
@@ -103,6 +107,7 @@
       <div class="tbtn" id="t-sprint">SPRINT</div>
     </div>
 
+    <div id="replay"><i></i>INSTANT REPLAY</div>
     <div id="commtog" title="Commentary voice on/off">🎙️</div>
     <div id="mute" title="Sound on/off">🔊</div>
     <div id="comm"></div>
@@ -139,7 +144,7 @@
     <div class="overlay" id="start">
       <h1 class="title">GRIDIRON<br>BLITZ<small>HEAD TO HEAD</small></h1>
       <div class="keys">
-        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker.<br>
+        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · <b>Q·E juke</b> · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker.<br>
         <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down.<br>
         Call your plays, stop the CPU's drives, win on the scoreboard before time runs out.
       </div>
@@ -217,7 +222,7 @@
         offense:'user', playType:'run', passState:null, carrier:null, blockers:[], receivers:[], defenders:[],
         userDef:null, ball:{active:false}, cam:0, msgT:0, deadT:0, spinCd:0, stamina:100, burst:0,
         snapTime:0, sel:0, selLock:0, autoSnap:0, defCall:'balanced', fg:null,
-        fx:[], shake:0, flash:0, trail:[], _td:false, _fg:false, _turn:false, _spot:0,
+        fx:[], shake:0, flash:0, trail:[], rec:[], replay:null, _td:false, _fg:false, _turn:false, _spot:0,
         _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false };
     startKickoff('user');
   }
@@ -429,6 +434,7 @@
   addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
     if(k===' ') action(); if(k==='shift') sprintHeld=true;
+    if(k==='q') juke(-1); if(k==='e') juke(1);   // hard lateral cut
     if(k==='b') toggleBlockerControl();   // run plays: take control of a lineman and block
     if((k==='1'||k==='2'||k==='3') && G.offense==='user'){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
     keys[k]=true;
@@ -456,6 +462,7 @@
     G.ctrlBlocker=best; setMsg('CONTROLLING BLOCKER — run them over!',0.9);
   }
   function snap(){ if(G.phase!=='presnap') return; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); SFX.snap(); setMsg('',0);
+    G.rec=[]; G._recT=0; stopReplay();   // fresh replay buffer each snap
     if((GOAL_X-G.los)/PPY<=22 || G.down>=3) crowdSwell(crowdBase+0.05,1.4);   // anticipation on tense downs / red zone
     if(G.playType==='run'&&G.runQB) G.handoff={t:0}; snapCall(); }
   function spin(){
@@ -463,6 +470,15 @@
     G.spinCd=2.2; G.burst=0.28;
     for(const d of G.defenders){ if(dist(d,G.carrier)<S.spinR) d.whiff=0.65; }
     if(G.offense==='user') document.getElementById('spinpip').textContent='SPIN!';
+  }
+  // Juke: a sharp sideways cut that leaves close defenders grabbing air.
+  function juke(dir){
+    if(G.phase!=='live' || G.offense!=='user' || (G.jukeCd||0)>0) return;
+    const c=G.ctrlBlocker||G.carrier; if(!c) return;
+    G.jukeCd=1.1; G.jukeT=0.34; G.jukeDir=dir;
+    c.vy += dir*S.sprint*0.85; c.y += dir*yd(0.5);          // pop laterally
+    for(const d of G.defenders){ if(dist(d,c)<yd(2.6)) d.whiff=0.5; }   // they bite on the cut
+    SFX.throw(); crowdSwell(crowdBase+0.05,1.0);
   }
 
   const action_btn=document.getElementById('t-action'), sprint_btn=document.getElementById('t-sprint'), next_btn=document.getElementById('t-next');
@@ -632,7 +648,9 @@
 
   // ---- loop ----
   let last=performance.now();
-  function loop(now){ let dt=(now-last)/1000; last=now; if(dt>0.05) dt=0.05; lastDt=dt; if(G&&G.phase!=='start') update(dt); render3D(); requestAnimationFrame(loop); }
+  function loop(now){ let dt=(now-last)/1000; last=now; if(dt>0.05) dt=0.05; lastDt=dt;
+    if(G&&G.phase!=='start'){ update(dt); if(G.phase==='live'&&G.rec) recordFrame(); }
+    render3D(); requestAnimationFrame(loop); }
 
   function spawnBurst(x,y,color,n,big){
     G.fx.push({ring:true,x,y,r:big?8:4,max:big?70:38,life:big?0.55:0.36,t:0,color});
@@ -657,6 +675,7 @@
     if(G.clock<=0 && (G.phase==='presnap')) return gameOver();
 
     if(G.spinCd>0){ G.spinCd-=dt; if(G.spinCd<=0){ G.spinCd=0; if(G.offense==='user') document.getElementById('spinpip').textContent='SPIN READY'; } }
+    if(G.jukeCd>0) G.jukeCd-=dt; if(G.jukeT>0) G.jukeT-=dt;
     if(G.msgT>0){ G.msgT-=dt; if(G.msgT<=0) setMsg('',0); }
     if(G.selLock>0) G.selLock-=dt;
 
@@ -829,6 +848,31 @@
     } else { setMsg(sepY<1.2?'BROKEN UP':'INCOMPLETE',1.0); endPlay('INCOMPLETE', G.los); }
   }
 
+  // ---- instant replay: snapshot every live frame, play the tail back in slow motion ----
+  const REPLAY_SECS=1.7, REPLAY_SPD=0.5;   // capture the last 1.7s, play it at half speed
+  function recordFrame(){
+    const e=[];
+    for(const b of G.blockers) e.push({x:b.x,y:b.y,vx:b.vx,vy:b.vy,k:'block'});
+    for(const r of G.receivers) e.push({x:r.x,y:r.y,vx:r.vx,vy:r.vy,k:'rec'});
+    for(const d of G.defenders) e.push({x:d.x,y:d.y,vx:d.vx,vy:d.vy,k:'def'});
+    if(G.carrier) e.push({x:G.carrier.x,y:G.carrier.y,vx:G.carrier.vx,vy:G.carrier.vy,k:'carry'});
+    G._recT=(G._recT||0)+lastDt;
+    G.rec.push({t:G._recT,off:G.offense,e:e});
+    // keep a rolling window slightly longer than we ever replay
+    while(G.rec.length>2 && G._recT-G.rec[0].t > REPLAY_SECS*1.6) G.rec.shift();
+  }
+  // Playhead runs on wall-clock seconds (not frames), so the replay lasts the same
+  // real time regardless of framerate.
+  function startReplay(){
+    if(!G.rec || G.rec.length<8) return false;
+    const endT=G.rec[G.rec.length-1].t, span=endT-G.rec[0].t;
+    if(span<0.4) return false;
+    G.replay={ t:Math.max(G.rec[0].t, endT-REPLAY_SECS), end:endT, spd:REPLAY_SPD };
+    const el=document.getElementById('replay'); if(el) el.classList.add('show');
+    return true;
+  }
+  function stopReplay(){ G.replay=null; const el=document.getElementById('replay'); if(el) el.classList.remove('show'); }
+
   function updateRun(dt){
     const c=G.carrier;
     if(G.handoff){ G.handoff.t+=dt; if(G.handoff.t>0.45) G.handoff=null; }
@@ -885,6 +929,7 @@
       G.conv=null; G.twoPt=false; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false; G.phase='dead'; G.deadT=1.4; syncHUD(); return;
     }
     if(G._td) return; G.phase='dead'; G.deadT=1.6; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false;
+    if(startReplay()) G.deadT=3.4;   // hold the whistle so the replay can run
     spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',26,true); G.shake=0.3; G.flash=0.5; SFX.roar();
     crowdSwell(G.offense==='user'?0.34:0.18, 4.5);   // huge home roar (muted for a CPU score)
     if(G.offense==='user'){ G.userScore+=6; G.longest=Math.max(G.longest,Math.max(0,Math.round((GOAL_X-G.los)/PPY))); }
@@ -930,6 +975,7 @@
     document.getElementById('playcall').classList.remove('hidden');
   }
   function finishDead(){
+    stopReplay();
     if(G.clock<=0) return gameOver();
     const wasReturn=G._returning; G._returning=false;
     if(G._td || G._fg){ startKickoff(other(G.offense)); return; }
@@ -1163,8 +1209,11 @@
   function applyPose(u, st, spy){
     const B=u.B; if(!B) return; const L=(k,a)=>setBone(B[k],_axX,a);
     if(st==='run'){
-      u.phase += Math.min(0.55, 0.08+spy*0.055);
-      const A=Math.min(0.95,0.3+spy*0.075), sn=Math.sin(u.phase), sn2=Math.sin(u.phase+Math.PI);
+      // stride is locked to ground distance travelled (distance / stride length), so the
+      // feet cycle at exactly the rate the body moves — this is what kills foot-sliding.
+      const STRIDE=1.85;                                   // yards covered per half-cycle
+      u.phase += (Math.max(0.6,spy)*lastDt/STRIDE)*Math.PI;
+      const A=Math.min(1.0, 0.22+spy*0.085), sn=Math.sin(u.phase), sn2=Math.sin(u.phase+Math.PI);
       L('LeftUpLeg', sn*A); L('RightUpLeg', sn2*A);
       L('LeftLeg', Math.max(0,-sn)*A*1.5); L('RightLeg', Math.max(0,-sn2)*A*1.5);   // knee drive
       L('LeftArm', -sn*A*0.8); L('RightArm', -sn2*A*0.8);                            // arm pump
@@ -1172,7 +1221,7 @@
       L('LeftFoot', sn>0?0.45:-0.25); L('RightFoot', sn2>0?0.45:-0.25);              // toe-off on push, lift the swing foot
       L('Spine2', Math.min(0.32, 0.12+spy*0.028));                                   // slight lean
     } else if(st==='reach'){          // receiver tracking the ball: arms up, legs keep striding
-      u.phase += Math.min(0.5, 0.08+spy*0.05);
+      u.phase += (Math.max(0.6,spy)*lastDt/1.85)*Math.PI;
       const A=Math.min(0.7,0.25+spy*0.06), sn=Math.sin(u.phase), sn2=Math.sin(u.phase+Math.PI);
       L('LeftUpLeg', sn*A); L('RightUpLeg', sn2*A);
       L('LeftLeg', Math.max(0,-sn)*A*1.4); L('RightLeg', Math.max(0,-sn2)*A*1.4);
@@ -1319,14 +1368,32 @@
       if(downPole){ downPole.visible=firstPole.visible=showL; }
       if(showL){ losLine.position.x=WX(G.los); firstLine.position.x=Math.min(WX(GOAL_X), WX(G.firstX)); firstLine.visible=G.firstX<GOAL_X;
         if(downPole){ downPole.position.set(WX(G.los),0,54.6); firstPole.position.set(firstLine.position.x,0,54.6); firstPole.visible=firstLine.visible; } } }
-    const off=G.offense;
+    // ---- instant replay playback: drive the render off recorded frames ----
+    let repFrame=null;
+    if(G.replay){
+      G.replay.t += lastDt*G.replay.spd;
+      if(G.replay.t>=G.replay.end) stopReplay();
+      else { const rc=G.rec; let lo=0; for(let k=0;k<rc.length;k++){ if(rc[k].t<=G.replay.t) lo=k; else break; } repFrame=rc[lo]; }
+      if(losLine){ losLine.visible=firstLine.visible=false; if(downPole) downPole.visible=firstPole.visible=false; }
+    }
+    const off = repFrame? repFrame.off : G.offense;
     const defJ=off==='user'?0xd23b34:0x2f6bd6, defH=off==='user'?0x9e2a25:0x244e86;
     const ents=[];
+    if(repFrame){
+      for(const it of repFrame.e){
+        const isDef=it.k==='def';
+        ents.push({ e:it, def:isDef, kind:it.k,
+          jc: isDef?defJ:(it.k==='carry'?(off==='user'?0x13284a:0x7a1d22):(off==='user'?0x2f6bd6:0xa33b42)),
+          hc: isDef?defH:(it.k==='carry'?0xffd24a:(off==='user'?0x244e86:0x7a2a30)),
+          ring: it.k==='carry'?0xffd24a:0 });
+      }
+    } else {
     for(const b of G.blockers) ents.push({e:b, jc:off==='user'?0x2f6bd6:0xa33b42, hc:off==='user'?0x244e86:0x7a2a30, ring:(b===G.ctrlBlocker)?0x46e3ff:0, def:false, kind:'block'});
     for(const r of G.receivers) ents.push({e:r, jc:0x1f7a52, hc:0x165c3e, ring:0, def:false, kind:'rec'});
     for(const d of G.defenders) ents.push({e:d, jc:defJ, hc:defH, ring:(off==='cpu'&&d===G.userDef)?0x46e3ff:0, def:true, kind:'def'});
     if(off==='user' && G.phase==='live' && G.playType==='pass' && G.passState==='drop' && G.receivers[G.sel]){ const sel=G.receivers[G.sel], f=ents.find(o=>o.e===sel); if(f) f.ring=0xffd24a; }
     if(G.carrier) ents.push({e:G.carrier, jc:off==='user'?0x13284a:0x7a1d22, hc:0xffd24a, ring:0xffd24a, def:false, kind:'carry'});
+    }
     let ringI=0; for(const r of ringPool) r.visible=false;
     _frameNo++; _carrierG=null;
     for(let i=0;i<pPool.length;i++){ const g=pPool[i], u=g.userData;
@@ -1340,7 +1407,9 @@
           u.heading=(u.heading==null?h:u.heading)+d*Math.min(1,lastDt*12);   // smoothed facing
           g.rotation.y=u.heading; u.bank += (Math.max(-0.16,Math.min(0.16,-d*1.6))-u.bank)*0.18;  // gentle lean into the cut
         } else { g.rotation.y=o.def?-Math.PI/2:Math.PI/2; u.bank*=0.85; }
-        if(u.model) u.model.rotation.z=u.bank;
+        // hard body lean through a juke, on top of the normal cut bank
+        let jl=0; if(G.jukeT>0 && (e===G.carrier||e===G.ctrlBlocker)) jl=(G.jukeDir||0)*Math.sin(Math.min(1,G.jukeT/0.34)*Math.PI)*0.5;
+        if(u.model) u.model.rotation.z=u.bank+jl;
         // spin move: when the ball carrier spins, whip in an extra 360 + dip
         if(e===G.carrier){ if(G.spinCd>(u.lastSpin||0)+1.5) u.spinT=0.5; u.lastSpin=G.spinCd; }
         else u.lastSpin=0;
@@ -1353,7 +1422,7 @@
         if(u.jerseyMat) u.jerseyMat.color.setHex(team==='user'?0xeef2f8:0xcf4636);
         if(u.helmetMat) u.helmetMat.color.setHex(team==='user'?0xffffff:0xb8352c);   // away helmet goes deep red
         // pose state machine
-        const onDead = G.phase==='dead' && !G._td && !G._fg;
+        const onDead = !repFrame && G.phase==='dead' && !G._td && !G._fg;
         let want;
         if(G._fgFlight && e===G.carrier) want='kick';
         else if(e===G.carrier && e.role==='qb' && G.passState==='air') want='throw';
@@ -1367,7 +1436,7 @@
         // tackled carrier pitches forward as he goes down
         if(u.model){ const pt=(want==='tackle' && o.kind==='carry')?0.55:0; u.model.rotation.x += (pt-u.model.rotation.x)*0.12; }
         // contextual overrides: stiff-arm (carrier) and blocking engagement (linemen)
-        if(u.B){
+        if(u.B && !repFrame){
           if(o.kind==='carry' && want==='run'){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
             if(nd<yd(2.5) && !(u.spinT>0)){ setBone(u.B.RightArm,_axX,-1.45); setBone(u.B.RightForeArm,_axX,-0.05); } } // stiff-arm
           else if(o.kind==='block' && !e.noblock && (G.phase==='live')){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
@@ -1397,6 +1466,12 @@
       camPos.lerp(new THREE.Vector3(bx-17,6.5,WZ(fieldMid)+(bz-WZ(fieldMid))*0.4),0.14);
       camLook.lerp(new THREE.Vector3(119.5,4.5,WZ(fieldMid)),0.14);
       camera.position.copy(camPos); camera.lookAt(camLook); }
+    else if(repFrame){ // replay: low, tight sideline angle tracking the ball carrier
+      let rc=null; for(const it of repFrame.e) if(it.k==='carry') rc=it;
+      if(rc){ const cx=WX(rc.x), cz=WZ(rc.y);
+        camPos.lerp(new THREE.Vector3(cx-7.5, 3.0, cz-9.5), 0.12);
+        camLook.lerp(new THREE.Vector3(cx+2.5, 1.3, cz), 0.16);
+        camera.position.copy(camPos); camera.lookAt(camLook); } }
     else if(G._td && G.phase==='dead' && G.carrier){ // touchdown: slow orbit around the celebration
       const cx=WX(G.carrier.x), cz=WZ(G.carrier.y), a=performance.now()*0.0011;
       camPos.lerp(new THREE.Vector3(cx+Math.cos(a)*7, 3.2, cz+Math.sin(a)*7), 0.10);
