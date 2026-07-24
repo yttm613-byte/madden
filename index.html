@@ -917,6 +917,7 @@
     else SFX.whistle();
     if(turnover) spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',16,true);
     const gain=(spot-G.los)/PPY; if(G.offense==='user' && !G._returning) G.longest=Math.max(G.longest,Math.round(gain));
+    if(gain>=25 && reason!=='INCOMPLETE' && startReplay()){ G.deadT=3.4; color(pick(["Let's see that one again.","Roll it back — look at this.","Watch him here, this is beautiful."])); }
     if(reason==='INCOMPLETE') setMsg('INCOMPLETE',1.0);
     else if(G._returning){ const ry=Math.max(0,Math.round((spot-(G._retStart||G.los))/PPY));
       setMsg(G._retKind==='int'?('INTERCEPTION — '+ry+' YD RETURN'):(G._retKind==='punt'?('PUNT RETURN — '+ry+' YDS'):('KICK RETURN — '+ry+' YDS')),1.3); }
@@ -1086,6 +1087,7 @@
   let scene, camera, renderer, ballMesh, pPool=[], camPos, camLook, flashes=[];
   let playerProto=null, playersReady=false, lastDt=0.016, ringPool=[], losLine, firstLine;
   let _frameNo=0, _carrierG=null, downPole=null, firstPole=null; const _tuckV=new THREE.Vector3();
+  const _spinAxis=new THREE.Vector3(1,0,0); let _spiral=0;   // ball spirals about its long axis
   const SKIN_TONES=[0x8d5a3c,0x6b4226,0xb98a5e,0x4a2f1c,0xa06a40,0xd8a878,0xefc7a2,0x5a3a22,0x7a4a2c];
   function WX(px){ return px/PPY; }
   function WZ(py){ return (py-fieldTop)/PPY; }
@@ -1450,7 +1452,9 @@
     if(G.ball&&G.ball.active){ ballMesh.visible=true; ballMesh.scale.set(1.5,0.82,0.82); const t=Math.min(1,G.ball.t/G.ball.dur);
       const h = G.ball.fg ? (G.ball.short ? 1+Math.sin(t*Math.PI)*4 : 1+Math.sin(t*Math.PI*0.82)*7.5) : 1+Math.sin(t*Math.PI)*4.8;
       ballMesh.position.set(WX(G.ball.x),h,WZ(G.ball.y));
-      ballMesh.rotation.y=Math.atan2((G.ball.tx-G.ball.x),(G.ball.ty-G.ball.y)); ballMesh.rotation.x+=0.6; }
+      // point the long axis down the flight path and spiral about it
+      ballMesh.rotation.set(0,Math.atan2((G.ball.tx-G.ball.x),(G.ball.ty-G.ball.y)),0);
+      ballMesh.rotateOnAxis(_spinAxis, (_spiral += lastDt*(G.ball.fg?9:26))); }
     else if(G.handoff && G.runQB && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(0.6,0.34,0.34); const p=Math.min(1,G.handoff.t/0.4);
       const qx=WX(G.runQB.x), qz=WZ(G.runQB.y), cx2=WX(G.carrier.x), cz2=WZ(G.carrier.y);
       ballMesh.position.set(qx+(cx2-qx)*p, 1.0, qz+(cz2-qz)*p); ballMesh.rotation.x+=0.3; }
