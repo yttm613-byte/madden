@@ -1088,6 +1088,7 @@
   let playerProto=null, playersReady=false, lastDt=0.016, ringPool=[], losLine, firstLine;
   let _frameNo=0, _carrierG=null, downPole=null, firstPole=null; const _tuckV=new THREE.Vector3();
   const _spinAxis=new THREE.Vector3(1,0,0); let _spiral=0;   // ball spirals about its long axis
+  let sunLight=null;
   const SKIN_TONES=[0x8d5a3c,0x6b4226,0xb98a5e,0x4a2f1c,0xa06a40,0xd8a878,0xefc7a2,0x5a3a22,0x7a4a2c];
   function WX(px){ return px/PPY; }
   function WZ(py){ return (py-fieldTop)/PPY; }
@@ -1168,6 +1169,25 @@
   const _axX=new THREE.Vector3(1,0,0), _tq=new THREE.Quaternion();
   function findBone(root,sub){ let f=null; root.traverse(o=>{ if(!f && o.isBone && o.name.indexOf(sub)>=0) f=o; }); return f; }
   function setBone(b,ax,ang){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromAxisAngle(ax,ang); b.quaternion.multiply(_tq); }
+  // One-time quality pass on the loaded model: max anisotropic filtering (these
+  // textures are small, so glancing-angle sharpness matters a lot), proper mip
+  // filtering, and stronger normal-map relief.
+  function upgradeTextures(root){
+    const maxAniso = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 8;
+    const seen=new Set();
+    root.traverse(o=>{ if(!o.isMesh||!o.material) return;
+      for(const m of (Array.isArray(o.material)?o.material:[o.material])){
+        if(!m) continue;
+        for(const slot of ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap']){
+          const t=m[slot]; if(!t||seen.has(t)) continue; seen.add(t);
+          t.anisotropy=maxAniso; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter;
+          t.generateMipmaps=true; t.needsUpdate=true;
+        }
+        if(m.normalMap && m.normalScale) m.normalScale.set(1.6,1.6);   // deepen fabric/pad relief
+        m.needsUpdate=true;
+      }});
+    return maxAniso;
+  }
   function makePlayer(){
     const grp=new THREE.Group();
     const model=THREE.SkeletonUtils.clone(playerProto.scene);
@@ -1188,8 +1208,13 @@
     let jerseyMat=null, helmetMat=null; const skinMats=[];
     model.traverse(o=>{ if(o.isMesh && o.material){ const nm=o.material.name||'';
       if(nm==='shirt_0'){ o.material=o.material.clone(); jerseyMat=o.material; }
-      else if(nm==='Mat.3'){ o.material=o.material.clone(); helmetMat=o.material; helmetMat.roughness=0.28; helmetMat.metalness=0.45; helmetMat.envMapIntensity=1.6; } // glossy helmet
-      else if(nm==='Bodymat'){ o.material=o.material.clone(); skinMats.push(o.material); } }});
+      else if(nm==='Mat.3'){ o.material=o.material.clone(); helmetMat=o.material; helmetMat.roughness=0.2; helmetMat.metalness=0.5; helmetMat.envMapIntensity=1.9; } // wet-looking glossy helmet
+      else if(nm==='Bodymat'){ o.material=o.material.clone(); skinMats.push(o.material);
+        o.material.roughness=0.62; o.material.metalness=0.0; o.material.envMapIntensity=0.85; }        // skin: soft sheen, never plasticky
+      else if(nm==='pants'||nm==='Fabric-Linen'||nm==='Fabric-Silk'){ o.material=o.material.clone();
+        o.material.roughness=0.88; o.material.metalness=0.0; o.material.envMapIntensity=0.5; }         // matte cloth
+    }});
+    if(jerseyMat){ jerseyMat.roughness=0.8; jerseyMat.metalness=0.0; jerseyMat.envMapIntensity=0.65; } // jersey reads as fabric
     // per-player skin tone variation (multiplies the body texture)
     { const f=0.74+Math.random()*0.32; for(const m of skinMats) m.color.setRGB(f, f*0.96, f*0.92); }
     // unique jersey number on the back (visible from the chase cam), follows lean/bank via the model
@@ -1253,6 +1278,8 @@
   function loadPlayers(){
     new THREE.GLTFLoader().load('assets/fbplayer_opt.glb', (gltf)=>{
       playerProto=gltf;
+      const aniso=upgradeTextures(playerProto.scene);
+      if(window.__gbDebug) console.log('texture anisotropy:',aniso);
       for(let i=0;i<22;i++) pPool.push(makePlayer());
       for(let i=0;i<6;i++){ const r=new THREE.Mesh(new THREE.RingGeometry(0.95,1.3,28),
         new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.DoubleSide,transparent:true,opacity:0.85,fog:false}));
@@ -1329,8 +1356,11 @@
     scene.add(new THREE.AmbientLight(0x4a5a78,0.5));    // soft cool fill
     const sun=new THREE.DirectionalLight(0xfff4dc,1.45); sun.position.set(70,95,18); sun.castShadow=true;   // brighter key light
     sun.target.position.set(60,0,26.65); scene.add(sun.target);
-    sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.00035; sun.shadow.normalBias=0.02; sun.shadow.radius=2.2;
-    const sc=sun.shadow.camera; sc.left=-70; sc.right=70; sc.top=44; sc.bottom=-44; sc.near=1; sc.far=280; scene.add(sun);
+    sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0002; sun.shadow.normalBias=0.015; sun.shadow.radius=1.6;
+    // Tight frustum that follows the play: the same 2048 map covers ~30yd instead of
+    // the whole 140yd field, which is a big jump in shadow detail on the players.
+    const sc=sun.shadow.camera; sc.left=-26; sc.right=26; sc.top=20; sc.bottom=-20; sc.near=1; sc.far=200; scene.add(sun);
+    sunLight=sun;
     const rim=new THREE.DirectionalLight(0x9ab8ff,0.5); rim.position.set(40,38,-46); scene.add(rim);          // cool back rim for separation
     const warm=new THREE.DirectionalLight(0xffd2a0,0.32); warm.position.set(90,30,70); scene.add(warm);       // warm cross-fill
     const field=new THREE.Mesh(new THREE.PlaneGeometry(120,53.3), new THREE.MeshStandardMaterial({map:fieldTexture(),roughness:0.82,metalness:0.0,envMapIntensity:0.35}));
@@ -1489,6 +1519,10 @@
       camera.position.set(camPos.x+(Math.random()-0.5)*s, camPos.y+(Math.random()-0.5)*s, camPos.z+(Math.random()-0.5)*s);
       camera.lookAt(camLook); }
     for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; } else if(Math.random()<0.025){ f.material.opacity=0.95; f.lookAt(camera.position); } }
+    // slide the tight shadow frustum onto the action, keeping the light direction fixed
+    if(sunLight){ const fx=camLook.x, fz=camLook.z;
+      sunLight.target.position.set(fx,0,fz); sunLight.target.updateMatrixWorld();
+      sunLight.position.set(fx+10,95,fz-8.65); }
     renderer.render(scene,camera);
   }
   function gameOver(){
