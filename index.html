@@ -50,6 +50,7 @@
   .pc.blitz .pt{color:#ff8a7a;} .pc.balanced .pt{color:#cfe3ff;} .pc.cover .pt{color:#9cffe0;}
   #mute{position:absolute; top:8px; right:8px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
   #commtog{position:absolute; top:8px; right:48px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
+  #qtog{position:absolute; top:8px; right:88px; z-index:5; cursor:pointer; font-family:'Oswald',sans-serif; font-weight:600; font-size:11px; letter-spacing:.1em; line-height:1; padding:8px 9px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; color:var(--gold); user-select:none; white-space:nowrap;}
   #commtog.off{opacity:.4;}
   #comm{position:absolute; left:50%; bottom:70px; transform:translateX(-50%); max-width:78%; font-family:'Oswald',sans-serif; font-weight:600; font-size:clamp(12px,2.7vw,16px); letter-spacing:.01em; color:#eaf2ff; background:rgba(8,12,20,.74); border-left:3px solid var(--gold); padding:6px 13px; border-radius:4px; opacity:0; transition:opacity .25s; pointer-events:none; text-align:center; box-shadow:0 6px 20px rgba(0,0,0,.45);}
   #comm.show{opacity:1;}
@@ -107,6 +108,7 @@
     </div>
 
     <div id="replay"><i></i>INSTANT REPLAY</div>
+    <div id="qtog" title="Graphics quality">◆ ULTRA</div>
     <div id="commtog" title="Commentary voice on/off">🎙️</div>
     <div id="mute" title="Sound on/off">🔊</div>
     <div id="comm"></div>
@@ -1088,6 +1090,24 @@
   let _frameNo=0, _carrierG=null, downPole=null, firstPole=null; const _tuckV=new THREE.Vector3();
   const _spinAxis=new THREE.Vector3(1,0,0); let _spiral=0;   // ball spirals about its long axis
   let sunLight=null;
+  // ---- graphics quality tiers (default Ultra; drop a tier if the GPU struggles) ----
+  const QUALITY={
+    ultra:{ label:'ULTRA', pr:2.0, shadow:4096, shadowDist:34, poseDist:52 },
+    high: { label:'HIGH',  pr:1.5, shadow:2048, shadowDist:22, poseDist:42 },
+    fast: { label:'FAST',  pr:1.0, shadow:1024, shadowDist:12, poseDist:30 },
+  };
+  const QORDER=['ultra','high','fast'];
+  let qKey='ultra'; try{ const s=localStorage.getItem('gb_quality'); if(s&&QUALITY[s]) qKey=s; }catch(e){}
+  const Q=()=>QUALITY[qKey];
+  function applyQuality(){
+    const q=Q();
+    if(renderer){ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, q.pr)); resize3D(); }
+    if(sunLight){ if(sunLight.shadow.map){ sunLight.shadow.map.dispose(); sunLight.shadow.map=null; }
+      sunLight.shadow.mapSize.set(q.shadow,q.shadow); }
+    const b=document.getElementById('qtog'); if(b) b.textContent='◆ '+q.label;
+    try{ localStorage.setItem('gb_quality',qKey); }catch(e){}
+  }
+  function cycleQuality(){ qKey=QORDER[(QORDER.indexOf(qKey)+1)%QORDER.length]; applyQuality(); }
   const SKIN_TONES=[0x8d5a3c,0x6b4226,0xb98a5e,0x4a2f1c,0xa06a40,0xd8a878,0xefc7a2,0x5a3a22,0x7a4a2c];
   function WX(px){ return px/PPY; }
   function WZ(py){ return (py-fieldTop)/PPY; }
@@ -1355,7 +1375,7 @@
     scene.add(new THREE.AmbientLight(0x4a5a78,0.5));    // soft cool fill
     const sun=new THREE.DirectionalLight(0xfff4dc,1.45); sun.position.set(70,95,18); sun.castShadow=true;   // brighter key light
     sun.target.position.set(60,0,26.65); scene.add(sun.target);
-    sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0002; sun.shadow.normalBias=0.015; sun.shadow.radius=1.6;
+    sun.shadow.mapSize.set(Q().shadow,Q().shadow); sun.shadow.bias=-0.00018; sun.shadow.normalBias=0.012; sun.shadow.radius=1.4;
     // Tight frustum that follows the play: the same 2048 map covers ~30yd instead of
     // the whole 140yd field, which is a big jump in shadow detail on the players.
     const sc=sun.shadow.camera; sc.left=-26; sc.right=26; sc.top=20; sc.bottom=-20; sc.near=1; sc.far=200; scene.add(sun);
@@ -1388,7 +1408,7 @@
     ballMesh.castShadow=true; ballMesh.visible=false; scene.add(ballMesh);
     loadPlayers();
     camPos=new THREE.Vector3(40,8.5,26.65); camLook=new THREE.Vector3(60,1,26.65);
-    resize3D(); window.addEventListener('resize',resize3D);
+    resize3D(); window.addEventListener('resize',resize3D); applyQuality();
   }
   function resize3D(){ if(!renderer) return; const st=document.getElementById('stage'); const w=st.clientWidth||760,h=st.clientHeight||560; renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
   function render3D(){
@@ -1431,8 +1451,13 @@
       if(i<ents.length){ const o=ents[i], e=o.e; g.visible=true;
         if(o.kind==='carry') _carrierG=g;
         const sp=Math.hypot(e.vx||0,e.vy||0), spy=sp/PPY;
-        // LOD: distant players update their pose every other frame (positions still every frame)
-        const far = Math.abs(WX(e.x)-camera.position.x)>42;
+        // LOD by distance: far players update their pose every other frame and stop
+        // casting shadows — that reclaims most of their cost so the near players can
+        // afford full detail.
+        const qd=Q(), dxc=Math.abs(WX(e.x)-camera.position.x);
+        const far = dxc>qd.poseDist;
+        if(u.shadowOn!==(dxc<qd.shadowDist)){ u.shadowOn=dxc<qd.shadowDist;
+          u.model.traverse(o=>{ if(o.isMesh) o.castShadow=u.shadowOn; }); }
         if(sp>6){ const h=Math.atan2(e.vx,e.vy);
           let d=h-(u.heading==null?h:u.heading); while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
           u.heading=(u.heading==null?h:u.heading)+d*Math.min(1,lastDt*12);   // smoothed facing
@@ -1544,6 +1569,7 @@
   document.getElementById('again').addEventListener('click',()=>{ document.getElementById('over').classList.add('hidden'); document.getElementById('start').classList.remove('hidden'); });
   const muteBtn=document.getElementById('mute');
   muteBtn.addEventListener('click',()=>{ muted=!muted; muteBtn.textContent=muted?'🔇':'🔊'; if(!muted){ audioInit(); startCrowd(); } crowdSetMute(); });
+  const qBtn=document.getElementById('qtog'); if(qBtn) qBtn.addEventListener('click',cycleQuality);
   const commBtn=document.getElementById('commtog');
   commBtn.addEventListener('click',()=>{ commOn=!commOn; commBtn.classList.toggle('off',!commOn); if(!commOn && typeof window!=='undefined' && window.speechSynthesis){ try{window.speechSynthesis.cancel();}catch(e){} } });
   cv.addEventListener('pointerdown',()=>{ audioInit(); document.getElementById('stage').focus(); });
