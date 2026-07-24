@@ -7,3 +7,4 @@ tools/*.mjs
 *.log
 assets/fbplayer2.glb
 assets/fbplayer.glb
+assets/fbplayer_src.glb

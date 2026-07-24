@@ -1,0 +1,46 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#1a2432;overflow:hidden}</style>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/GLTFLoader.js"></script>
+<script src="../vendor/RGBELoader.js"></script>
+</head><body><script>
+const q=new URLSearchParams(location.search), FILE=q.get('f')||'_candD.glb', VIEW=q.get('v')||'head';
+const W=560,H=680;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x1a2432);
+const cam=new THREE.PerspectiveCamera(32,W/H,0.01,900);
+const rend=new THREE.WebGLRenderer({antialias:true}); rend.setSize(W,H); rend.setPixelRatio(2);
+rend.outputEncoding=THREE.sRGBEncoding; rend.toneMapping=THREE.ACESFilmicToneMapping; rend.toneMappingExposure=1.05;
+rend.shadowMap.enabled=true; rend.shadowMap.type=THREE.PCFSoftShadowMap; document.body.appendChild(rend.domElement);
+scene.add(new THREE.AmbientLight(0x4a5a78,0.5));
+const sun=new THREE.DirectionalLight(0xfff4dc,1.45); sun.position.set(3,6,4); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0002; sun.shadow.normalBias=0.015;
+Object.assign(sun.shadow.camera,{left:-3,right:3,top:3,bottom:-3}); scene.add(sun);
+const rim=new THREE.DirectionalLight(0x9ab8ff,0.5); rim.position.set(-4,3,-4); scene.add(rim);
+const grd=new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({color:0x2f7a3e,roughness:0.85}));
+grd.rotation.x=-Math.PI/2; grd.receiveShadow=true; scene.add(grd);
+try{ const pm=new THREE.PMREMGenerator(rend); pm.compileEquirectangularShader();
+  new THREE.RGBELoader().load('../assets/env.hdr',h=>{h.mapping=THREE.EquirectangularReflectionMapping;scene.environment=pm.fromEquirectangular(h).texture;h.dispose();}); }catch(e){}
+new THREE.GLTFLoader().load('../assets/'+FILE,(g)=>{
+  const model=g.scene; scene.add(model);
+  const box=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); box.getSize(sz);
+  model.scale.setScalar(2/sz.y);
+  const b2=new THREE.Box3().setFromObject(model); model.position.y=-b2.min.y;
+  const maxA=rend.capabilities.getMaxAnisotropy?rend.capabilities.getMaxAnisotropy():8; const seen=new Set();
+  model.traverse(o=>{ if(!o.isMesh)return; o.castShadow=true; o.frustumCulled=false;
+    for(const m of (Array.isArray(o.material)?o.material:[o.material])){ if(!m)continue;
+      for(const s of ['map','normalMap','roughnessMap','metalnessMap']){ const t=m[s]; if(!t||seen.has(t))continue; seen.add(t);
+        t.anisotropy=maxA; t.minFilter=THREE.LinearMipmapLinearFilter; t.generateMipmaps=true; t.needsUpdate=true; }
+      if(m.normalMap&&m.normalScale) m.normalScale.set(1.6,1.6);
+      const nm=m.name||'';
+      if(nm==='Mat.3'){m.roughness=0.2;m.metalness=0.5;m.envMapIntensity=1.9;}
+      else if(nm==='Bodymat'){m.roughness=0.62;m.metalness=0;m.envMapIntensity=0.85;}
+      else if(nm==='shirt_0'){m.roughness=0.8;m.metalness=0;m.envMapIntensity=0.65;}
+      else if(nm==='pants'){m.roughness=0.88;m.metalness=0;m.envMapIntensity=0.5;}
+      else m.envMapIntensity=1.25;
+      m.needsUpdate=true; } });
+  if(VIEW==='head'){ cam.position.set(0.75,1.55,1.5); cam.lookAt(0,1.35,0); }
+  else if(VIEW==='full'){ cam.position.set(1.6,1.4,2.9); cam.lookAt(0,1.0,0); }
+  else { cam.position.set(0.0,1.62,0.95); cam.lookAt(0,1.5,0); }   // face
+  window.__ready=true;
+},undefined,e=>{window.__err=String(e&&e.message||e);});
+function loop(){ rend.render(scene,cam); requestAnimationFrame(loop);} loop();
+</script></body></html>
