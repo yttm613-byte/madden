@@ -50,6 +50,11 @@
   .pc.blitz .pt{color:#ff8a7a;} .pc.balanced .pt{color:#cfe3ff;} .pc.cover .pt{color:#9cffe0;}
   #mute{position:absolute; top:8px; right:8px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
   #commtog{position:absolute; top:8px; right:48px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
+  #fstog{position:absolute; top:8px; right:152px; z-index:5; cursor:pointer; font-size:17px; line-height:1; padding:6px 8px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
+  /* in fullscreen let the stage fill the screen instead of the letterboxed card */
+  #app:fullscreen{padding:0; gap:0; justify-content:center;}
+  #app:fullscreen #scoreboard{max-width:min(1400px,96vw);}
+  #app:fullscreen #stage{max-width:none; width:min(100vw, calc((100vh - 78px) * 760/560)); height:calc(100vh - 78px); aspect-ratio:auto; border-radius:0;}
   #qtog{position:absolute; top:8px; right:88px; z-index:5; cursor:pointer; font-family:'Oswald',sans-serif; font-weight:600; font-size:11px; letter-spacing:.1em; line-height:1; padding:8px 9px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; color:var(--gold); user-select:none; white-space:nowrap;}
   #commtog.off{opacity:.4;}
   #comm{position:absolute; left:50%; bottom:70px; transform:translateX(-50%); max-width:78%; font-family:'Oswald',sans-serif; font-weight:600; font-size:clamp(12px,2.7vw,16px); letter-spacing:.01em; color:#eaf2ff; background:rgba(8,12,20,.74); border-left:3px solid var(--gold); padding:6px 13px; border-radius:4px; opacity:0; transition:opacity .25s; pointer-events:none; text-align:center; box-shadow:0 6px 20px rgba(0,0,0,.45);}
@@ -116,6 +121,7 @@
     </div>
 
     <div id="replay"><i></i>INSTANT REPLAY</div>
+    <div id="fstog" title="Fullscreen (F)">⛶</div>
     <div id="qtog" title="Graphics quality">◆ ULTRA</div>
     <div id="commtog" title="Commentary voice on/off">🎙️</div>
     <div id="mute" title="Sound on/off">🔊</div>
@@ -153,7 +159,7 @@
     <div class="overlay" id="start">
       <h1 class="title">GRIDIRON<br>BLITZ<small>HEAD TO HEAD</small></h1>
       <div class="keys">
-        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · <b>Q·E juke</b> · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker.<br>
+        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · <b>Q·E juke</b> · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen.<br>
         <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down.<br>
         Call your plays, stop the CPU's drives, win on the scoreboard before time runs out.
       </div>
@@ -444,6 +450,7 @@
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
     if(k===' ') action(); if(k==='shift') sprintHeld=true;
     if(k==='q') juke(-1); if(k==='e') juke(1);   // hard lateral cut
+    if(k==='f') toggleFullscreen();
     if(k==='b') toggleBlockerControl();   // run plays: take control of a lineman and block
     if((k==='1'||k==='2'||k==='3') && G.offense==='user'){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
     keys[k]=true;
@@ -701,7 +708,7 @@
     if(G.clock<=0 && (G.phase==='presnap')) return gameOver();
 
     if(G.spinCd>0){ G.spinCd-=dt; if(G.spinCd<=0){ G.spinCd=0; if(G.offense==='user') document.getElementById('spinpip').textContent='SPIN READY'; } }
-    if(G.jukeCd>0) G.jukeCd-=dt; if(G.jukeT>0) G.jukeT-=dt;
+    if(G.jukeCd>0) G.jukeCd-=dt; if(G.jukeT>0) G.jukeT-=dt; if(G.throwT>0) G.throwT-=dt;
     if(G.msgT>0){ G.msgT-=dt; if(G.msgT<=0) setMsg('',0); }
     if(G.selLock>0) G.selLock-=dt;
 
@@ -762,7 +769,9 @@
           else { const depth=d.deep?yd(15):yd(10); aiPursue(d, Math.max(c.x+depth,G.los+depth), fieldMid+(c.y-fieldMid)*0.5, dt, S.cover*0.95*ds); }
         }
       }
-      if(d.whiff<=0 && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
+      // Once the ball is in the air the QB is no longer the play — he cannot be
+      // tackled to end it. This was ending live passes as sacks.
+      if(mode!=='air' && d.whiff<=0 && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
         if(mode==='drop') return sackOrTackle();
         return endPlay(G.offense==='user'?'TACKLED':'TACKLE!', c.x);
       }
@@ -822,8 +831,18 @@
     if(G.passState!=='drop') return;
     const r=G.receivers[G.sel]; if(!r) return; const qb=G.carrier;
     const dur=Math.max(0.3,Math.min(1.5,dist(qb,r)/S.throwSpd));
-    const tx=r.x+r.vx*dur, ty=Math.max(fieldTop,Math.min(fieldBot,r.y+r.vy*dur));
-    G.ball={active:true,x:qb.x,y:qb.y,fromX:qb.x,fromY:qb.y,tx,ty,t:0,dur,rec:r}; G.passState='air'; SFX.throw();
+    // lead the receiver to where he will actually be
+    let tx=r.x+r.vx*dur, ty=r.y+r.vy*dur;
+    // Madden-ish ball placement: throwing under pressure, or deep, costs accuracy
+    let pr=1e9; for(const d of G.defenders) if(d.job==='rush'||d===G.userDef) pr=Math.min(pr,dist(d,qb));
+    const pressure=Math.max(0, 1-(pr/yd(4)));                 // 0 clean pocket .. 1 in his face
+    const deep=Math.min(1, dist(qb,r)/yd(35));
+    const err=yd(0.35)*pressure*2.2 + yd(0.30)*deep;
+    tx += (Math.random()*2-1)*err; ty += (Math.random()*2-1)*err;
+    ty=Math.max(fieldTop,Math.min(fieldBot,ty));
+    G.ball={active:true,x:qb.x,y:qb.y,fromX:qb.x,fromY:qb.y,tx,ty,t:0,dur,rec:r};
+    G.passState='air'; G.throwT=0.42; SFX.throw();
+    if(pressure>0.55) say(pick(["He gets it off under heavy pressure!","Throwing off his back foot!","Hurried throw — he had a man in his face!"]));
   }
   function updateBall(dt){
     const b=G.ball; b.t+=dt; const p=Math.min(1,b.t/b.dur); b.x=b.fromX+(b.tx-b.fromX)*p; b.y=b.fromY+(b.ty-b.fromY)*p;
@@ -1599,7 +1618,7 @@
         const onDead = !repFrame && G.phase==='dead' && !G._td && !G._fg;
         let want;
         if(G._fgFlight && e===G.carrier) want='kick';
-        else if(e===G.carrier && e.role==='qb' && G.passState==='air') want='throw';
+        else if(e===G.carrier && e.role==='qb' && (G.passState==='air'||(G.throwT||0)>0)) want='throw';
         else if(G._td && G.phase==='dead' && e===G.carrier) want='celebrate';
         else if(onDead && e===G.carrier && spy<3.5) want='tackle';
         else if(onDead && o.kind==='def' && G.carrier && dist(e,G.carrier)<yd(3.0)) want='tackle';
@@ -1707,6 +1726,23 @@
   const muteBtn=document.getElementById('mute');
   muteBtn.addEventListener('click',()=>{ muted=!muted; muteBtn.textContent=muted?'🔇':'🔊'; if(!muted){ audioInit(); startCrowd(); } crowdSetMute(); });
   const qBtn=document.getElementById('qtog'); if(qBtn) qBtn.addEventListener('click',cycleQuality);
+  function toggleFullscreen(){
+    const el=document.getElementById('app');
+    try{
+      if(!document.fullscreenElement && !document.webkitFullscreenElement){
+        (el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el);
+      } else {
+        (document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document);
+      }
+    }catch(e){}
+  }
+  const fsBtn=document.getElementById('fstog'); if(fsBtn) fsBtn.addEventListener('click',toggleFullscreen);
+  // the renderer must follow the new stage size when entering/leaving fullscreen
+  ['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,()=>{
+    const on=!!(document.fullscreenElement||document.webkitFullscreenElement);
+    if(fsBtn) fsBtn.textContent = on?'⤡':'⛶';
+    setTimeout(()=>{ resize3D(); document.getElementById('stage').focus(); },60);
+  }));
   const commBtn=document.getElementById('commtog');
   commBtn.addEventListener('click',()=>{ commOn=!commOn; commBtn.classList.toggle('off',!commOn); if(!commOn && typeof window!=='undefined' && window.speechSynthesis){ try{window.speechSynthesis.cancel();}catch(e){} } });
   cv.addEventListener('pointerdown',()=>{ audioInit(); document.getElementById('stage').focus(); });
