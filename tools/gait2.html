@@ -44,6 +44,12 @@ new THREE.GLTFLoader().load('../assets/fbplayer_opt.glb',(g)=>{
   ['Hips','Spine2','Head','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm']
     .forEach(k=>{const b=findBone(model,k); if(b){b.userData.bind=b.quaternion.clone(); B[k]=b;}});
   model.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
+  window.__setCurl=(on)=>{ const curl=[]; model.traverse(o=>{ if(o.isBone&&/Hand(Index|Thumb)\d/.test(o.name)) curl.push(o); });
+    for(const f of curl){ if(!f.userData.b0) f.userData.b0=f.quaternion.clone();
+      f.quaternion.copy(f.userData.b0);
+      if(on){ const isThumb=/Thumb/.test(f.name), amt=isThumb?0.35:0.62, sgn=(f.name.indexOf('Left')>=0)?1:-1;
+        f.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,sgn*amt))); } }
+    rend.render(scene,cam); return curl.length; };
   cam.position.set(2.4,1.3,2.6); cam.lookAt(0,1.05,0);
   window.__step=(spy,dt,n)=>{ for(let i=0;i<(n||1);i++) run(spy,dt); };
   window.__spin=(deg)=>{ model.rotation.y=deg*Math.PI/180; rend.render(scene,cam); };

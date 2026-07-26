@@ -517,11 +517,28 @@
   function setMsg(t,d){ G.msgT=d; const el=document.getElementById('msg'); el.textContent=t; el.classList.toggle('show', d>0&&!!t); commentate(t); }
   // ---- play-by-play commentary (two-man booth) ----
   let commOn=true, lastComm=0, hypeStreak=0, pbVoice=null, colVoice=null;
+  // Both booth voices should be MALE — the play-by-play used to pick female voices
+  // (samantha/zira/jenny), which is not the broadcast sound we want. Voices differ per
+  // device, so score them by name instead of assuming any one exists.
+  const MALE_NAMES=['david','mark','guy','christopher','eric','brandon','roger','steffan','alex',
+                    'daniel','fred','tom','arthur','oliver','ryan','george','james','aaron','reed','rishi'];
+  const FEMALE_NAMES=['zira','jenny','samantha','aria','michelle','ana','hazel','susan','linda',
+                      'heera','catherine','karen','moira','tessa','victoria','fiona','female','nicky','sonia','libby','clara'];
+  function voiceScore(v){
+    const n=(v.name||'').toLowerCase(), lang=(v.lang||'').toLowerCase();
+    let sc=0;
+    if(FEMALE_NAMES.some(f=>n.includes(f))) sc-=100;
+    if(MALE_NAMES.some(m=>n.includes(m)))   sc+=60;
+    if(/\bmale\b/.test(n)) sc+=40;
+    if(lang.startsWith('en-us')) sc+=12; else if(lang.startsWith('en')) sc+=6;
+    if(n.includes('google')) sc+=8;              // generally the most natural sounding
+    if(n.includes('natural')||n.includes('neural')) sc+=15;
+    return sc;
+  }
   function pickVoices(){ try{ const vs=window.speechSynthesis.getVoices()||[]; if(!vs.length) return;
-    const en=vs.filter(v=>/^en/i.test(v.lang||'')); const pool=en.length?en:vs;
-    const f=(names)=>{ for(const n of names){ const v=pool.find(v=>(v.name||'').toLowerCase().includes(n)); if(v) return v; } return null; };
-    pbVoice = f(['google us english','samantha','aaron','nicky','google uk english female','zira','jenny']) || pool[0];
-    colVoice = f(['google uk english male','daniel','arthur','fred','david','rishi','google español']) || pool.find(v=>v!==pbVoice) || pbVoice;
+    const en=vs.filter(v=>/^en/i.test(v.lang||'')); const pool=(en.length?en:vs).slice().sort((a,b)=>voiceScore(b)-voiceScore(a));
+    pbVoice  = pool[0] || null;
+    colVoice = pool.find(v=>v!==pbVoice) || pbVoice;   // second-best male = colour analyst
   }catch(e){} }
   if(typeof window!=='undefined' && window.speechSynthesis){ pickVoices(); try{ window.speechSynthesis.addEventListener('voiceschanged',pickVoices); }catch(e){} }
   function pick(a){ return a[(Math.random()*a.length)|0]; }
@@ -556,13 +573,13 @@
     if(!important && now-lastComm<240) return; lastComm=now;
     const hype=Math.min(1,(important?0.62:0)+hypeStreak*0.18+Math.random()*0.2);
     speakExpressive(text,{ cancel:true,
-      pitch:(important?1.22:0.95)+hype*0.5,    // up toward ~1.7 — screaming on big plays
-      rate:(important?1.30:1.05)+hype*0.42,    // fast and frantic when hyped
+      pitch:(important?1.02:0.86)+hype*0.30,   // male register; energy comes from pace, not squeal
+      rate:(important?1.34:1.06)+hype*0.46,    // fast and frantic when hyped
       vol:1,
       rampPitch:important?0.22:0.07, rampRate:important?0.12:0.04 });
   }
   function color(text){ if(text) speakExpressive(text,{ cancel:false, analyst:true, // deeper, drawling analyst with its own swing
-    pitch:0.74+Math.random()*0.14, rate:0.95+Math.random()*0.16, vol:0.94, rampPitch:0.06, rampRate:0.05 }); }
+    pitch:0.68+Math.random()*0.12, rate:0.96+Math.random()*0.16, vol:0.96, rampPitch:0.06, rampRate:0.05 }); }
   const COLOR_HYPE=["You love to see that, baby!","Are you KIDDING me right now?","That's a poster — frame it!","Put that one in the Hall of Fame!","He is absolutely COOKING out there!","The crowd has completely lost it!","That's grown-man football right there!","Somebody check on that defender — he got embarrassed!","I have not seen feet like that in years!","Get this man a cape!","Call the police, because that was a ROBBERY!","Did you see the JUKE?! My goodness!","He turned that man's ankles into spaghetti!","That's a SportsCenter top-ten, no doubt!"];
   const COLOR_DEF=["That's a coaching clinic on defense!","They wanted that one BAD.","You simply cannot block that.","Sniffed it out the whole way — beautiful.","Defense wins championships, baby!","That's how you set the tone!","He read the quarterback's mail on that one!","Textbook tackling — wrap and drive!"];
   const COLOR_OOPS=["He's gonna want that one back.","That's a teaching-tape moment — the bad kind.","Somebody blew the assignment, no question.","You cannot do that at this level.","The coordinator is FUMING up in the box.","That's a throw he makes in his sleep — and he missed it.","Put that one on the bloopers reel."];
@@ -1262,6 +1279,16 @@
     const B={};
     ['Hips','Spine2','Spine','Head','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm'].forEach(k=>{
       const b=findBone(model,k); if(b){ b.userData.bind=b.quaternion.clone(); B[k]=b; } });
+    // hand bones (used to carry the ball in the actual hand rather than at a fixed offset)
+    B.RightHand=findBone(model,'RightHand'); B.LeftHand=findBone(model,'LeftHand');
+    // Close the fingers into a relaxed grip once, at load. The model ships with the
+    // fingers splayed wide open, which reads as claws at gameplay distance.
+    { const curl=[];
+      model.traverse(o=>{ if(o.isBone && /Hand(Index|Thumb)\d/.test(o.name)) curl.push(o); });
+      for(const f of curl){ const isThumb=/Thumb/.test(f.name);
+        const amt=isThumb?0.35:0.62, sgn=(f.name.indexOf('Left')>=0)?1:-1;
+        f.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,sgn*amt))); }
+      grp.userData_fingers=curl.length; }
     // per-instance jersey/helmet/skin materials so each player can be tinted independently
     let jerseyMat=null, helmetMat=null; const skinMats=[];
     model.traverse(o=>{ if(o.isMesh && o.material){ const nm=o.material.name||'';
@@ -1606,10 +1633,15 @@
       const qx=WX(G.runQB.x), qz=WZ(G.runQB.y), cx2=WX(G.carrier.x), cz2=WZ(G.carrier.y);
       ballMesh.position.set(qx+(cx2-qx)*p, 1.0, qz+(cz2-qz)*p); ballMesh.rotation.x+=0.3; }
     else if(_carrierG && (G.phase==='live'||G.phase==='dead') && !G._fgFlight && G.passState!=='air'){
-      // ball tucked in the carrier's arm while running / QB holding in the pocket
-      _carrierG.updateMatrixWorld(); ballMesh.scale.set(...BALL_LIVE);
-      ballMesh.visible=true; ballMesh.position.copy(_tuckV.set(0.24,0.95,0.16).applyMatrix4(_carrierG.matrixWorld));
-      ballMesh.rotation.set(0.5,_carrierG.rotation.y,0); }
+      // Carry the ball in the actual hand/forearm rather than at a fixed body offset,
+      // so it stays tucked correctly as the arms pump.
+      _carrierG.updateMatrixWorld(true); ballMesh.scale.set(...BALL_LIVE);
+      const hb=_carrierG.userData.B && (_carrierG.userData.B.RightHand||_carrierG.userData.B.RightForeArm);
+      ballMesh.visible=true;
+      if(hb){ hb.getWorldPosition(_tuckV); _tuckV.y+=0.12;                     // cradled just above the hand
+        ballMesh.position.copy(_tuckV); }
+      else ballMesh.position.copy(_tuckV.set(0.24,0.95,0.16).applyMatrix4(_carrierG.matrixWorld));
+      ballMesh.rotation.set(0.35,_carrierG.rotation.y+0.5,0.2); }
     else if(G.phase==='presnap' && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE); ballMesh.position.set(WX(G.los),0.18,WZ(fieldMid)); ballMesh.rotation.set(0,0,1.4); } // ball spotted on the line
     else ballMesh.visible=false;
     if(G._fgFlight && G.ball && G.ball.active){ const bx=WX(G.ball.x), bz=WZ(G.ball.y);
