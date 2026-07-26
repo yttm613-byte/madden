@@ -1306,8 +1306,9 @@
     const model=THREE.SkeletonUtils.clone(playerProto.scene);
     const box=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); box.getSize(sz);
     // scale to ~2 yards tall, with per-player size variants
-    const vh=0.94+Math.random()*0.16, vg=1.05-(vh-0.94)*0.9;   // taller players a touch leaner
+    const vh=0.96+Math.random()*0.12, vg=1.04-(vh-0.96)*0.8;   // taller players a touch leaner
     const s=2.0/(sz.y||1); model.scale.set(s*vg, s*vh, s*vg);
+    const baseS=s, buildVh=vh, buildVg=vg;
     const box2=new THREE.Box3().setFromObject(model); model.position.y=-box2.min.y;
     model.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.castShadow=true;
       const ms=Array.isArray(o.material)?o.material:[o.material];
@@ -1363,7 +1364,7 @@
       idleAct=mixer.clipAction(playerProto.animations[0]);
       idleAct.play(); mixer.setTime(Math.random()*playerProto.animations[0].duration);
     }
-    grp.userData={B,ring,jerseyMat,helmetMat,model,mixer,idleAct,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
+    grp.userData={B,ring,jerseyMat,helmetMat,model,mixer,idleAct,baseS,buildVh,buildVg,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
     grp.visible=false; scene.add(grp); return grp;
   }
   // Pose the Mixamo rig per state.
@@ -1392,18 +1393,18 @@
       // airborne for part of every step, so real stride is longer than the leg's reach.
       // Using leg sweep alone forced ~6.6 steps/sec at speed (a frantic flutter);
       // with the aerial term the cadence lands at a realistic ~4.3.
-      const stride=Math.max(0.85, 2*0.92*Math.sin(A)*1.55);
+      const stride=Math.max(1.05, 2*0.92*Math.sin(A)*1.95);
       u.phase += (Math.max(0.6,spy)*lastDt/stride)*Math.PI;
       const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI), cs=Math.cos(p);
       L('LeftUpLeg', sn*A);  L('RightUpLeg', sn2*A);
-      KNEE('LeftLeg',  0.16+Math.max(0,-sn )*A*1.35);    // heel kicks up behind, correctly
-      KNEE('RightLeg', 0.16+Math.max(0,-sn2)*A*1.35);
-      L('LeftFoot',  0.08+sn *0.26);                     // ankle rolls smoothly (was a snap)
-      L('RightFoot', 0.08+sn2*0.26);
-      const armFwd=-sn*A*0.62;
-      ARM('LeftArm',  armFwd, 0.10); ARM('RightArm', -armFwd, 0.10);
-      ELB('LeftForeArm',  0.95+Math.max(0,sn )*0.35);
-      ELB('RightForeArm', 0.95+Math.max(0,sn2)*0.35);
+      KNEE('LeftLeg',  0.16+Math.max(0,-sn )*A*1.05);    // heel kicks up behind, correctly
+      KNEE('RightLeg', 0.16+Math.max(0,-sn2)*A*1.05);
+      L('LeftFoot',  0.06+sn *0.16);                     // ankle rolls smoothly (was a snap)
+      L('RightFoot', 0.06+sn2*0.16);
+      const armFwd=-sn*A*0.98;
+      ARM('LeftArm',  armFwd, -0.14); ARM('RightArm', -armFwd, -0.14);
+      ELB('LeftForeArm',  1.05+Math.max(0,sn )*0.30);
+      ELB('RightForeArm', 1.05+Math.max(0,sn2)*0.30);
       // Torso motion is spread down the whole spine chain instead of being applied to
       // one bone, and the shoulders roll with the arms — a single rigid segment is what
       // made the upper body look stiff.
@@ -1426,9 +1427,21 @@
       L('LeftUpLeg',0.42); L('RightUpLeg',0.42); KNEE('LeftLeg',0.62); KNEE('RightLeg',0.62);
       L('Spine2',0.5); ARM('LeftArm',0.30,0.16); ARM('RightArm',0.30,0.16);
       ELB('LeftForeArm',1.15); ELB('RightForeArm',1.15);
-    } else if(st==='throw'){          // QB overhand follow-through
-      L('RightArm',-1.7); ELB('RightForeArm',0.45); L('LeftArm',-0.5); ELB('LeftForeArm',0.6);
-      L('Spine2',0.2); L('LeftUpLeg',-0.15); L('RightUpLeg',0.2); KNEE('LeftLeg',0.12); KNEE('RightLeg',0.12);
+    } else if(st==='throw'){
+      // A real throw is a sequence, not a frozen pose: cock the ball back, rotate the
+      // shoulders through, release, then follow through across the body. G.throwT runs
+      // 0.42 -> 0 after release, so k goes 0 (cocked) -> 1 (full follow-through).
+      const k=1-Math.max(0,Math.min(1,(G.throwT||0)/0.42));
+      const ease=k*k*(3-2*k);
+      L('RightArm', -2.05+ease*0.95);                  // up and back, then whipping down
+      ELB('RightForeArm', 1.25-ease*1.05);             // elbow uncoils through the release
+      L('LeftArm', -0.85+ease*0.45);                   // off arm points at the target, then drops
+      ELB('LeftForeArm', 0.55+ease*0.35);
+      E('Spine2', 0.12+ease*0.16, -0.42+ease*0.80, 0); // shoulders rotate through the throw
+      E('Hips',   0, -0.18+ease*0.34, 0);              // hips open toward the target
+      L('LeftUpLeg', -0.10-ease*0.20); L('RightUpLeg', 0.16+ease*0.22);
+      KNEE('LeftLeg',0.18); KNEE('RightLeg',0.14);
+      E('Head', -0.06, -0.10+ease*0.16, 0);
     } else if(st==='kick'){           // place-kicker leg swing
       L('RightUpLeg',1.4); KNEE('RightLeg',0.10); L('LeftUpLeg',-0.15); KNEE('LeftLeg',0.16);
       L('Spine2',-0.1); L('LeftArm',-0.3); L('RightArm',0.3);
@@ -1632,6 +1645,13 @@
         let bob=0;
         if(u.spinT>0){ u.spinT-=lastDt; const k=Math.max(0,u.spinT/0.5); g.rotation.y+=k*Math.PI*2; bob=-Math.sin(k*Math.PI)*0.12; }
         g.position.set(WX(e.x), 0, WZ(e.y));
+        // Body types by position — everyone used to be the same lean build. Linemen are
+        // heavy and wide, skill players are lean, defenders in between.
+        if(u.baseS){
+          const wide = o.kind==='block' ? 1.20 : (o.kind==='def' ? 1.02 : 0.95);
+          const tall = o.kind==='block' ? 1.01 : (o.kind==='def' ? 1.00 : 1.01);
+          u.model.scale.set(u.baseS*u.buildVg*wide, u.baseS*u.buildVh*tall, u.baseS*u.buildVg*wide);
+        }
         // team identity: ground ring + jersey tint (white-ish home vs red away)
         const team = o.def ? other(G.offense) : G.offense;
         u.ring.visible=true; u.ring.material.color.setHex(team==='user'?0x3a86ff:0xff5340);
@@ -1660,7 +1680,7 @@
             if(nd<yd(1.7)){ setBone(u.B.Spine2,_axX,0.5); setBone(u.B.LeftArm,_axX,-1.15); setBone(u.B.RightArm,_axX,-1.15); setBone(u.B.LeftForeArm,_axX,-0.5); setBone(u.B.RightForeArm,_axX,-0.5); } } // engaged block
         }
         // vertical stride bounce while running, dip into hard cuts, plus any spin dip
-        g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.115, 0.02+spy*0.014) : 0) + bob - Math.abs(u.bank)*0.22;
+        g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.05, 0.01+spy*0.005) : 0) + bob - Math.abs(u.bank)*0.22;
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
