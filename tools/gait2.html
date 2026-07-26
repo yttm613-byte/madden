@@ -20,7 +20,7 @@ function run(spy,dt){
   const ARM=(k,fwd,out)=>setBoneE(B[k], out||0,0,(k.charAt(0)==='L'?fwd:-fwd));
   const ELB=(k,a)=>setBoneE(B[k],0,0,(k.charAt(0)==='L'?a:-a));
   const A=Math.min(0.78,0.22+spy*0.062);
-  const stride=Math.max(0.55,2*0.92*Math.sin(A));
+  const stride=Math.max(0.85,2*0.92*Math.sin(A)*1.55);
   u.phase += (Math.max(0.6,spy)*dt/stride)*Math.PI;
   const p=u.phase,sn=Math.sin(p),sn2=Math.sin(p+Math.PI),cs=Math.cos(p);
   L('LeftUpLeg',sn*A); L('RightUpLeg',sn2*A);
@@ -36,7 +36,7 @@ function run(spy,dt){
   ARM('LeftShoulder',armFwd*0.30,0); ARM('RightShoulder',-armFwd*0.30,0);
   E('Neck',-Math.min(0.06,spy*0.006),-cs*0.05*A,0);
   E('Head',-Math.min(0.12,spy*0.010),-cs*0.08*A,0);
-  if(model) model.position.y = base + Math.abs(Math.sin(p))*Math.min(0.08,spy*0.012);
+  if(model) model.position.y = base + Math.abs(Math.sin(p))*Math.min(0.115,0.02+spy*0.014);
   rend.render(scene,cam);
 }
 let base=0;

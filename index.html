@@ -1388,7 +1388,11 @@
       // rather than picked by hand. A hand-picked constant was 71-106% longer than the
       // legs can sweep, which forced the feet to slide no matter how the phase advanced.
       const A=Math.min(0.78, 0.22+spy*0.062);
-      const stride=Math.max(0.55, 2*0.92*Math.sin(A));
+      // Stride = leg sweep (2*legLen*sin(hipSwing)) TIMES an aerial factor: a runner is
+      // airborne for part of every step, so real stride is longer than the leg's reach.
+      // Using leg sweep alone forced ~6.6 steps/sec at speed (a frantic flutter);
+      // with the aerial term the cadence lands at a realistic ~4.3.
+      const stride=Math.max(0.85, 2*0.92*Math.sin(A)*1.55);
       u.phase += (Math.max(0.6,spy)*lastDt/stride)*Math.PI;
       const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI), cs=Math.cos(p);
       L('LeftUpLeg', sn*A);  L('RightUpLeg', sn2*A);
@@ -1616,7 +1620,7 @@
         if(qbDrop){ g.rotation.y=Math.PI/2; u.heading=Math.PI/2; u.bank*=0.85; }   // eyes downfield
         else if(sp>6){ const h=Math.atan2(e.vx,e.vy);
           let d=h-(u.heading==null?h:u.heading); while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
-          u.heading=(u.heading==null?h:u.heading)+d*Math.min(1,lastDt*12);   // smoothed facing
+          u.heading=(u.heading==null?h:u.heading)+d*Math.min(1,lastDt*22);   // smoothed facing, snappy enough to track cuts
           g.rotation.y=u.heading; u.bank += (Math.max(-0.16,Math.min(0.16,-d*1.6))-u.bank)*0.18;  // gentle lean into the cut
         } else { g.rotation.y=o.def?-Math.PI/2:Math.PI/2; u.bank*=0.85; }
         // hard body lean through a juke, on top of the normal cut bank
@@ -1656,7 +1660,7 @@
             if(nd<yd(1.7)){ setBone(u.B.Spine2,_axX,0.5); setBone(u.B.LeftArm,_axX,-1.15); setBone(u.B.RightArm,_axX,-1.15); setBone(u.B.LeftForeArm,_axX,-0.5); setBone(u.B.RightForeArm,_axX,-0.5); } } // engaged block
         }
         // vertical stride bounce while running, dip into hard cuts, plus any spin dip
-        g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.08, spy*0.012) : 0) + bob - Math.abs(u.bank)*0.22;
+        g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.115, 0.02+spy*0.014) : 0) + bob - Math.abs(u.bank)*0.22;
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
