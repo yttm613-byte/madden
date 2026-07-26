@@ -1,0 +1,62 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#22303f;overflow:hidden}</style>
+<script src="../vendor/three.min.js"></script><script src="../vendor/GLTFLoader.js"></script>
+</head><body><script>
+const W=520,H=640;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x22303f);
+const cam=new THREE.PerspectiveCamera(36,W/H,0.01,900);
+const rend=new THREE.WebGLRenderer({antialias:true}); rend.setSize(W,H); rend.setPixelRatio(1.5);
+rend.outputEncoding=THREE.sRGBEncoding; document.body.appendChild(rend.domElement);
+scene.add(new THREE.AmbientLight(0xffffff,0.85));
+const d=new THREE.DirectionalLight(0xffffff,1.2); d.position.set(3,6,4); scene.add(d);
+scene.add(new THREE.GridHelper(10,20,0x556,0x445));
+const _axX=new THREE.Vector3(1,0,0), _tq=new THREE.Quaternion(), _te=new THREE.Euler();
+let B={}, u={phase:0,gait:1}, model=null;
+function findBone(r,s){let f=null;r.traverse(o=>{if(!f&&o.isBone&&o.name.indexOf(s)>=0)f=o;});return f;}
+function setBone(b,ax,a){if(!b||!b.userData.bind)return;b.quaternion.copy(b.userData.bind);_tq.setFromAxisAngle(ax,a);b.quaternion.multiply(_tq);}
+function setBoneE(b,x,y,z){if(!b||!b.userData.bind)return;b.quaternion.copy(b.userData.bind);_tq.setFromEuler(_te.set(x||0,y||0,z||0));b.quaternion.multiply(_tq);}
+function run(spy,dt){
+  const L=(k,a)=>setBone(B[k],_axX,a), E=(k,x,y,z)=>setBoneE(B[k],x,y,z);
+  const stride = 1.15 + Math.min(1.15, spy*0.115);
+  u.phase += (Math.max(0.6,spy)*dt/stride)*Math.PI;
+  const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI), cs=Math.cos(p);
+  const A=Math.min(0.78, 0.22+spy*0.062);
+  
+  L('LeftUpLeg', sn*A);  L('RightUpLeg', sn2*A);
+  L('LeftLeg',  0.16+Math.max(0,-sn )*A*1.35);
+  L('RightLeg', 0.16+Math.max(0,-sn2)*A*1.35);
+  L('LeftFoot',  sn >0? 0.34 : -0.18);
+  L('RightFoot', sn2>0? 0.34 : -0.18);
+  // arms pump with elbows held near 90 degrees, slight cross-body component
+  // NOTE: on this rig the arm's fore/aft swing axis is Z, not X (X splays the arm
+  // out sideways). Measured on the actual skeleton. Both arms take the same Z value
+  // because the rig is mirrored, which yields opposite physical swing.
+  const armSw=-sn*A*0.62;
+  E('LeftArm',  0.10, 0, armSw);
+  E('RightArm', 0.10, 0, armSw);
+  L('LeftForeArm',  -(1.15+Math.max(0,sn )*0.30));
+  L('RightForeArm', -(1.15+Math.max(0,sn2)*0.30));
+  // pelvis and chest counter-rotate against each other — this is the thing that
+  // reads as "running" instead of "shuffling", and it was missing entirely.
+  E('Hips',   0, -cs*0.10*A, 0);
+  E('Spine2', Math.min(0.30, 0.10+spy*0.024), cs*0.14*A, 0);
+  E('Head',   -Math.min(0.16, spy*0.013), -cs*0.11*A, 0);   // head stays level and steady
+  if(model) model.position.y = base + Math.abs(Math.sin(p))*Math.min(0.08,spy*0.012);
+  rend.render(scene,cam);
+}
+let base=0;
+new THREE.GLTFLoader().load('../assets/fbplayer_opt.glb',(g)=>{
+  model=g.scene; scene.add(model);
+  const bx=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); bx.getSize(sz);
+  model.scale.setScalar(2/sz.y);
+  const b2=new THREE.Box3().setFromObject(model); base=-b2.min.y; model.position.y=base;
+  ['Hips','Spine2','Head','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm']
+    .forEach(k=>{const b=findBone(model,k); if(b){b.userData.bind=b.quaternion.clone(); B[k]=b;}});
+  model.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
+  cam.position.set(2.4,1.3,2.6); cam.lookAt(0,1.05,0);
+  window.__step=(spy,dt,n)=>{ for(let i=0;i<(n||1);i++) run(spy,dt); };
+  window.__spin=(deg)=>{ model.rotation.y=deg*Math.PI/180; rend.render(scene,cam); };
+  window.__B=B; window.__model=model; window.__THREE=THREE;
+  window.__ready=true; run(8,0);
+},undefined,e=>{window.__err=String(e&&e.message||e);});
+function loop(){ rend.render(scene,cam); requestAnimationFrame(loop);} loop();
+</script></body></html>
