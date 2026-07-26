@@ -1097,6 +1097,7 @@
   let playerProto=null, playersReady=false, lastDt=0.016, ringPool=[], losLine, firstLine;
   let _frameNo=0, _carrierG=null, downPole=null, firstPole=null; const _tuckV=new THREE.Vector3();
   const _spinAxis=new THREE.Vector3(1,0,0); let _spiral=0;   // ball spirals about its long axis
+  const _fdir=new THREE.Vector3(), _qs=new THREE.Quaternion();
   // A real football is 11" x 6.7" = 0.306 x 0.186 yards. ballMesh is a r=0.4 sphere,
   // so life-size is scale (0.382, 0.232). In flight it sits far from the camera, so it
   // gets a small readability bump; everything else is true to life.
@@ -1553,16 +1554,24 @@
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
     if(G.ball&&G.ball.active){ ballMesh.visible=true; ballMesh.scale.set(...BALL_FLY); const t=Math.min(1,G.ball.t/G.ball.dur);
-      let h;
-      if(G.ball.fg){ h = G.ball.short ? 1+Math.sin(t*Math.PI)*4 : 1+Math.sin(t*Math.PI*0.82)*7.5; }
+      // height, and dh/dt so the ball can be pitched along its own trajectory
+      let h, dh;
+      if(G.ball.fg){ const a=G.ball.short?4:7.5, k=G.ball.short?1:0.82;
+        h = 1+Math.sin(t*Math.PI*k)*a; dh = Math.PI*k*Math.cos(t*Math.PI*k)*a; }
       else { // pass: leaves the QB's hand, arrives at chest height, arc scaled to the throw
         const dyd=Math.hypot(G.ball.tx-G.ball.fromX, G.ball.ty-G.ball.fromY)/PPY;
         const arc=Math.min(6.0, 0.7+dyd*0.155);
-        h = 1.75 + (1.30-1.75)*t + Math.sin(t*Math.PI)*arc; }
+        h  = 1.75 + (1.30-1.75)*t + Math.sin(t*Math.PI)*arc;
+        dh = (1.30-1.75) + Math.PI*Math.cos(t*Math.PI)*arc; }
       ballMesh.position.set(WX(G.ball.x),h,WZ(G.ball.y));
-      // point the long axis down the flight path and spiral about it
-      ballMesh.rotation.set(0,Math.atan2((G.ball.tx-G.ball.x),(G.ball.ty-G.ball.y)),0);
-      ballMesh.rotateOnAxis(_spinAxis, (_spiral += lastDt*(G.ball.fg?9:26))); }
+      // Orient the ball's long axis along the actual 3D flight tangent — nose up on
+      // the way out, nose down on the descent — then spiral about that same axis.
+      _fdir.set((G.ball.tx-G.ball.fromX)/PPY, dh, (G.ball.ty-G.ball.fromY)/PPY);
+      if(_fdir.lengthSq()>1e-6){
+        _fdir.normalize();
+        _spiral += lastDt*(G.ball.fg?14:52);            // a real pass spirals fast
+        ballMesh.quaternion.setFromUnitVectors(_spinAxis,_fdir).multiply(_qs.setFromAxisAngle(_spinAxis,_spiral));
+      } }
     else if(G.handoff && G.runQB && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE); const p=Math.min(1,G.handoff.t/0.4);
       const qx=WX(G.runQB.x), qz=WZ(G.runQB.y), cx2=WX(G.carrier.x), cz2=WZ(G.carrier.y);
       ballMesh.position.set(qx+(cx2-qx)*p, 1.0, qz+(cz2-qz)*p); ballMesh.rotation.x+=0.3; }
