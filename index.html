@@ -685,7 +685,8 @@
       b.target=best;
       if(best){ best._takenBy=b;
         const gx=best.x*0.62+G.carrier.x*0.38, gy=best.y*0.62+G.carrier.y*0.38, a=Math.atan2(gy-b.y,gx-b.x);
-        b.x+=Math.cos(a)*S.blocker*dt; b.y+=Math.sin(a)*S.blocker*dt;
+        b.vx=Math.cos(a)*S.blocker; b.vy=Math.sin(a)*S.blocker;      // needed so blockers animate/face correctly
+        b.x+=b.vx*dt; b.y+=b.vy*dt;
         if(dist(b,best)<S.blockR){ best.blocked=0.12; const pa=Math.atan2(best.y-G.carrier.y,best.x-G.carrier.x); best.x+=Math.cos(pa)*S.def*0.5*dt; best.y+=Math.sin(pa)*S.def*0.5*dt; }
       }
       b.y=Math.max(fieldTop,Math.min(fieldBot,b.y));
@@ -693,9 +694,15 @@
     for(const d of pool){ if(d._takenBy&&(!d._takenBy.target||d._takenBy.target!==d||dist(d,d._takenBy)>S.shedR)) d._takenBy=null; }
   }
   function aiPursue(d,tx,ty,dt,base){
-    if(d.react>0){ d.react-=dt; d.y+=(d.homeY-d.y)*Math.min(1,dt*2); return; }
+    // NOTE: this must record vx/vy. It used to move x/y directly and leave velocity at
+    // zero, so every pursuing defender rendered as a motionless idle pose facing a fixed
+    // direction — they appeared to slide around the field instead of running.
+    if(d.react>0){ d.react-=dt; const dy=(d.homeY-d.y)*Math.min(1,dt*2); d.y+=dy;
+      d.vx=0; d.vy=dt>0?dy/dt:0; return; }
     let speed=base; if(d.whiff>0){ d.whiff-=dt; speed*=0.35; } if(d.blocked>0){ d.blocked-=dt; speed=Math.min(speed,S.defBlocked); }
-    const a=Math.atan2(ty-d.y,tx-d.x); d.x+=Math.cos(a)*speed*dt; d.y+=Math.sin(a)*speed*dt;
+    const a=Math.atan2(ty-d.y,tx-d.x);
+    d.vx=Math.cos(a)*speed; d.vy=Math.sin(a)*speed;
+    d.x+=d.vx*dt; d.y+=d.vy*dt;
   }
 
   // ---- loop ----
@@ -1393,7 +1400,7 @@
       // airborne for part of every step, so real stride is longer than the leg's reach.
       // Using leg sweep alone forced ~6.6 steps/sec at speed (a frantic flutter);
       // with the aerial term the cadence lands at a realistic ~4.3.
-      const stride=Math.max(1.05, 2*0.92*Math.sin(A)*1.95);
+      const stride=Math.max(0.92, 2*0.92*Math.sin(A)*1.62);
       u.phase += (Math.max(0.6,spy)*lastDt/stride)*Math.PI;
       const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI), cs=Math.cos(p);
       L('LeftUpLeg', sn*A);  L('RightUpLeg', sn2*A);
@@ -1445,10 +1452,13 @@
     } else if(st==='kick'){           // place-kicker leg swing
       L('RightUpLeg',1.4); KNEE('RightLeg',0.10); L('LeftUpLeg',-0.15); KNEE('LeftLeg',0.16);
       L('Spine2',-0.1); L('LeftArm',-0.3); L('RightArm',0.3);
-    } else if(st==='tackle'){         // lunge / wrap up
-      L('Spine2',0.6); ARM('LeftArm',1.15,0.1); ARM('RightArm',1.15,0.1);
-      ELB('LeftForeArm',0.9); ELB('RightForeArm',0.9);
-      L('LeftUpLeg',0.45); L('RightUpLeg',-0.3); KNEE('RightLeg',0.5); KNEE('LeftLeg',0.2);
+    } else if(st==='tackle'){         // wrapped up and going to ground
+      L('Spine2',0.72); L('Spine',0.30);
+      ARM('LeftArm',1.35,0.08); ARM('RightArm',1.35,0.08);      // arms thrown out
+      ELB('LeftForeArm',1.05); ELB('RightForeArm',1.05);
+      L('LeftUpLeg',0.85); L('RightUpLeg',0.20);                 // legs buckle under him
+      KNEE('LeftLeg',1.30); KNEE('RightLeg',0.95);
+      E('Head',0.25,0,0);
     } else if(st==='celebrate'){      // arms up, little bob
       u.phase += 0.09;
       const up=-2.5+Math.sin(u.phase)*0.15;
@@ -1670,8 +1680,15 @@
         else want = spy>1.4 ? 'run' : 'idle';
         if(want==='idle' && u.mixer){ u.mixer.update(lastDt*(far?2:1)); }   // real mocap idle
         else if(!far || (_frameNo&1)===0) applyPose(u, want, spy);
-        // tackled carrier pitches forward as he goes down
-        if(u.model){ const pt=(want==='tackle' && o.kind==='carry')?0.55:0; u.model.rotation.x += (pt-u.model.rotation.x)*0.12; }
+        // Going to ground: a tackled player pitches over AND drops toward the turf.
+        // Previously he only leaned ~30deg and stayed upright, so nobody ever fell.
+        if(u.model){
+          const goingDown = (want==='tackle');
+          const pt = goingDown ? (o.kind==='carry'?1.25:0.85) : 0;
+          u.model.rotation.x += (pt-u.model.rotation.x)*0.16;
+          const drop = goingDown ? (o.kind==='carry'?0.62:0.34) : 0;
+          u.fall = (u.fall||0) + (drop-(u.fall||0))*0.16;
+        } else u.fall=0;
         // contextual overrides: stiff-arm (carrier) and blocking engagement (linemen)
         if(u.B && !repFrame){
           if(o.kind==='carry' && want==='run'){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
@@ -1680,7 +1697,7 @@
             if(nd<yd(1.7)){ setBone(u.B.Spine2,_axX,0.5); setBone(u.B.LeftArm,_axX,-1.15); setBone(u.B.RightArm,_axX,-1.15); setBone(u.B.LeftForeArm,_axX,-0.5); setBone(u.B.RightForeArm,_axX,-0.5); } } // engaged block
         }
         // vertical stride bounce while running, dip into hard cuts, plus any spin dip
-        g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.05, 0.01+spy*0.005) : 0) + bob - Math.abs(u.bank)*0.22;
+        g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.05, 0.01+spy*0.005) : 0) + bob - Math.abs(u.bank)*0.22 - (u.fall||0);
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
