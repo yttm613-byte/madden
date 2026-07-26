@@ -16,30 +16,22 @@ function setBone(b,ax,a){if(!b||!b.userData.bind)return;b.quaternion.copy(b.user
 function setBoneE(b,x,y,z){if(!b||!b.userData.bind)return;b.quaternion.copy(b.userData.bind);_tq.setFromEuler(_te.set(x||0,y||0,z||0));b.quaternion.multiply(_tq);}
 function run(spy,dt){
   const L=(k,a)=>setBone(B[k],_axX,a), E=(k,x,y,z)=>setBoneE(B[k],x,y,z);
-  const stride = 1.15 + Math.min(1.15, spy*0.115);
+  const KNEE=(k,a)=>setBone(B[k],_axX,-a);
+  const ARM=(k,fwd,out)=>setBoneE(B[k], out||0,0,(k.charAt(0)==='L'?fwd:-fwd));
+  const ELB=(k,a)=>setBoneE(B[k],0,0,(k.charAt(0)==='L'?a:-a));
+  const stride=1.15+Math.min(1.15,spy*0.115);
   u.phase += (Math.max(0.6,spy)*dt/stride)*Math.PI;
-  const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI), cs=Math.cos(p);
-  const A=Math.min(0.78, 0.22+spy*0.062);
-  
-  L('LeftUpLeg', sn*A);  L('RightUpLeg', sn2*A);
-  L('LeftLeg',  0.16+Math.max(0,-sn )*A*1.35);
-  L('RightLeg', 0.16+Math.max(0,-sn2)*A*1.35);
-  L('LeftFoot',  sn >0? 0.34 : -0.18);
-  L('RightFoot', sn2>0? 0.34 : -0.18);
-  // arms pump with elbows held near 90 degrees, slight cross-body component
-  // NOTE: on this rig the arm's fore/aft swing axis is Z, not X (X splays the arm
-  // out sideways). Measured on the actual skeleton. Both arms take the same Z value
-  // because the rig is mirrored, which yields opposite physical swing.
-  const armSw=-sn*A*0.62;
-  E('LeftArm',  0.10, 0, armSw);
-  E('RightArm', 0.10, 0, armSw);
-  L('LeftForeArm',  -(1.15+Math.max(0,sn )*0.30));
-  L('RightForeArm', -(1.15+Math.max(0,sn2)*0.30));
-  // pelvis and chest counter-rotate against each other — this is the thing that
-  // reads as "running" instead of "shuffling", and it was missing entirely.
-  E('Hips',   0, -cs*0.10*A, 0);
-  E('Spine2', Math.min(0.30, 0.10+spy*0.024), cs*0.14*A, 0);
-  E('Head',   -Math.min(0.16, spy*0.013), -cs*0.11*A, 0);   // head stays level and steady
+  const p=u.phase,sn=Math.sin(p),sn2=Math.sin(p+Math.PI),cs=Math.cos(p);
+  const A=Math.min(0.78,0.22+spy*0.062);
+  L('LeftUpLeg',sn*A); L('RightUpLeg',sn2*A);
+  KNEE('LeftLeg',0.16+Math.max(0,-sn)*A*1.35); KNEE('RightLeg',0.16+Math.max(0,-sn2)*A*1.35);
+  L('LeftFoot',0.08+sn*0.26); L('RightFoot',0.08+sn2*0.26);
+  const armFwd=-sn*A*0.62;
+  ARM('LeftArm',armFwd,0.10); ARM('RightArm',-armFwd,0.10);
+  ELB('LeftForeArm',0.95+Math.max(0,sn)*0.35); ELB('RightForeArm',0.95+Math.max(0,sn2)*0.35);
+  E('Hips',0,-cs*0.10*A,0);
+  E('Spine2',Math.min(0.30,0.10+spy*0.024),cs*0.14*A,0);
+  E('Head',-Math.min(0.16,spy*0.013),-cs*0.11*A,0);
   if(model) model.position.y = base + Math.abs(Math.sin(p))*Math.min(0.08,spy*0.012);
   rend.render(scene,cam);
 }
