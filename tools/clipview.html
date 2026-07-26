@@ -1,0 +1,27 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#22303f;overflow:hidden}</style>
+<script src="../vendor/three.min.js"></script><script src="../vendor/GLTFLoader.js"></script>
+</head><body><script>
+const W=460,H=560;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x22303f);
+const cam=new THREE.PerspectiveCamera(36,W/H,0.01,900);
+const rend=new THREE.WebGLRenderer({antialias:true}); rend.setSize(W,H); rend.setPixelRatio(1.4);
+rend.outputEncoding=THREE.sRGBEncoding; document.body.appendChild(rend.domElement);
+scene.add(new THREE.AmbientLight(0xffffff,0.9));
+const d=new THREE.DirectionalLight(0xffffff,1.2); d.position.set(3,6,4); scene.add(d);
+scene.add(new THREE.GridHelper(10,20,0x556,0x445));
+let mixer=null,clip=null,model=null;
+new THREE.GLTFLoader().load('../assets/fbplayer_opt.glb',(g)=>{
+  model=g.scene; scene.add(model);
+  const bx=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); bx.getSize(sz);
+  model.scale.setScalar(2/sz.y);
+  const b2=new THREE.Box3().setFromObject(model); model.position.y=-b2.min.y;
+  model.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
+  clip=g.animations[0]; mixer=new THREE.AnimationMixer(model);
+  mixer.clipAction(clip).play();
+  cam.position.set(2.3,1.3,2.7); cam.lookAt(0,1.0,0);
+  window.__dur=clip.duration;
+  window.__at=(t)=>{ mixer.setTime(t); rend.render(scene,cam); };
+  window.__ready=true; window.__at(0);
+},undefined,e=>{window.__err=String(e&&e.message||e);});
+function loop(){ rend.render(scene,cam); requestAnimationFrame(loop);} loop();
+</script></body></html>

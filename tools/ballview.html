@@ -1,0 +1,23 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#26333f;overflow:hidden}</style>
+<script src="../vendor/three.min.js"></script></head><body><script>
+const W=520,H=360;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x26333f);
+const cam=new THREE.PerspectiveCamera(30,W/H,0.01,90);
+const rend=new THREE.WebGLRenderer({antialias:true}); rend.setSize(W,H); rend.setPixelRatio(2);
+rend.outputEncoding=THREE.sRGBEncoding; rend.toneMapping=THREE.ACESFilmicToneMapping; document.body.appendChild(rend.domElement);
+scene.add(new THREE.AmbientLight(0xffffff,0.75));
+const d=new THREE.DirectionalLight(0xffffff,1.5); d.position.set(2,4,3); scene.add(d);
+const BALL_LIVE=[0.382,0.232,0.232];
+const ballMesh=new THREE.Mesh(new THREE.SphereGeometry(0.4,20,16), new THREE.MeshStandardMaterial({color:0x3d1f0c,roughness:0.66,metalness:0.02}));
+ballMesh.scale.set(...BALL_LIVE);
+{ const white=new THREE.MeshStandardMaterial({color:0xe8e4d8,roughness:0.58});
+  const laces=new THREE.Mesh(new THREE.BoxGeometry(0.30,0.055,0.05), white); laces.position.set(0,0.38,0); ballMesh.add(laces);
+  for(let i=-2;i<=2;i++){ const st=new THREE.Mesh(new THREE.BoxGeometry(0.028,0.05,0.13), white); st.position.set(i*0.062,0.40,0); ballMesh.add(st); }
+  for(const sx of [-0.2,0.2]){ const r=new THREE.Mesh(new THREE.TorusGeometry(0.345,0.028,8,24), white);
+    r.rotation.y=Math.PI/2; r.position.set(sx,0,0); ballMesh.add(r); } }
+scene.add(ballMesh);
+ballMesh.rotation.set(0.25,0.5,0.15);
+cam.position.set(0,0.18,1.15); cam.lookAt(0,0,0);
+rend.render(scene,cam); window.__ready=true;
+function loop(){ rend.render(scene,cam); requestAnimationFrame(loop);} loop();
+</script></body></html>
