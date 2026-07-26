@@ -19,10 +19,10 @@ function run(spy,dt){
   const KNEE=(k,a)=>setBone(B[k],_axX,-a);
   const ARM=(k,fwd,out)=>setBoneE(B[k], out||0,0,(k.charAt(0)==='L'?fwd:-fwd));
   const ELB=(k,a)=>setBoneE(B[k],0,0,(k.charAt(0)==='L'?a:-a));
-  const stride=1.15+Math.min(1.15,spy*0.115);
+  const A=Math.min(0.78,0.22+spy*0.062);
+  const stride=Math.max(0.55,2*0.92*Math.sin(A));
   u.phase += (Math.max(0.6,spy)*dt/stride)*Math.PI;
   const p=u.phase,sn=Math.sin(p),sn2=Math.sin(p+Math.PI),cs=Math.cos(p);
-  const A=Math.min(0.78,0.22+spy*0.062);
   L('LeftUpLeg',sn*A); L('RightUpLeg',sn2*A);
   KNEE('LeftLeg',0.16+Math.max(0,-sn)*A*1.35); KNEE('RightLeg',0.16+Math.max(0,-sn2)*A*1.35);
   L('LeftFoot',0.08+sn*0.26); L('RightFoot',0.08+sn2*0.26);
@@ -30,8 +30,12 @@ function run(spy,dt){
   ARM('LeftArm',armFwd,0.10); ARM('RightArm',-armFwd,0.10);
   ELB('LeftForeArm',0.95+Math.max(0,sn)*0.35); ELB('RightForeArm',0.95+Math.max(0,sn2)*0.35);
   E('Hips',0,-cs*0.10*A,0);
-  E('Spine2',Math.min(0.30,0.10+spy*0.024),cs*0.14*A,0);
-  E('Head',-Math.min(0.16,spy*0.013),-cs*0.11*A,0);
+  E('Spine',Math.min(0.08,0.03+spy*0.007),-cs*0.05*A,0);
+  E('Spine1',Math.min(0.10,0.03+spy*0.009),cs*0.06*A,0);
+  E('Spine2',Math.min(0.14,0.05+spy*0.012),cs*0.09*A,0);
+  ARM('LeftShoulder',armFwd*0.30,0); ARM('RightShoulder',-armFwd*0.30,0);
+  E('Neck',-Math.min(0.06,spy*0.006),-cs*0.05*A,0);
+  E('Head',-Math.min(0.12,spy*0.010),-cs*0.08*A,0);
   if(model) model.position.y = base + Math.abs(Math.sin(p))*Math.min(0.08,spy*0.012);
   rend.render(scene,cam);
 }
@@ -41,7 +45,7 @@ new THREE.GLTFLoader().load('../assets/fbplayer_opt.glb',(g)=>{
   const bx=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); bx.getSize(sz);
   model.scale.setScalar(2/sz.y);
   const b2=new THREE.Box3().setFromObject(model); base=-b2.min.y; model.position.y=base;
-  ['Hips','Spine2','Head','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm']
+  ['Hips','Spine','Spine1','Spine2','Neck','Head','LeftShoulder','RightShoulder','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm']
     .forEach(k=>{const b=findBone(model,k); if(b){b.userData.bind=b.quaternion.clone(); B[k]=b;}});
   model.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
   window.__setCurl=(on)=>{ const curl=[]; model.traverse(o=>{ if(o.isBone&&/Hand(Index|Thumb)\d/.test(o.name)) curl.push(o); });

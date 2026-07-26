@@ -1279,6 +1279,8 @@
     const B={};
     ['Hips','Spine2','Spine','Head','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm'].forEach(k=>{
       const b=findBone(model,k); if(b){ b.userData.bind=b.quaternion.clone(); B[k]=b; } });
+    ['Spine1','Neck','LeftShoulder','RightShoulder'].forEach(k=>{
+      const b=findBone(model,k); if(b){ b.userData.bind=b.quaternion.clone(); B[k]=b; } });
     // hand bones (used to carry the ball in the actual hand rather than at a fixed offset)
     B.RightHand=findBone(model,'RightHand'); B.LeftHand=findBone(model,'LeftHand');
     // Close the fingers into a relaxed grip once, at load. The model ships with the
@@ -1344,10 +1346,13 @@
       // Stride is locked to ground distance (distance / stride length) so the feet turn
       // over at exactly the rate the body moves — no sliding. Stride LENGTHENS with
       // speed, the way real runners cover more ground per step as they open up.
-      const stride = 1.15 + Math.min(1.15, spy*0.115);
+      // Stride length is DERIVED from the leg's actual reach (2*legLength*sin(hipSwing))
+      // rather than picked by hand. A hand-picked constant was 71-106% longer than the
+      // legs can sweep, which forced the feet to slide no matter how the phase advanced.
+      const A=Math.min(0.78, 0.22+spy*0.062);
+      const stride=Math.max(0.55, 2*0.92*Math.sin(A));
       u.phase += (Math.max(0.6,spy)*lastDt/stride)*Math.PI;
       const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI), cs=Math.cos(p);
-      const A=Math.min(0.78, 0.22+spy*0.062);
       L('LeftUpLeg', sn*A);  L('RightUpLeg', sn2*A);
       KNEE('LeftLeg',  0.16+Math.max(0,-sn )*A*1.35);    // heel kicks up behind, correctly
       KNEE('RightLeg', 0.16+Math.max(0,-sn2)*A*1.35);
@@ -1357,10 +1362,17 @@
       ARM('LeftArm',  armFwd, 0.10); ARM('RightArm', -armFwd, 0.10);
       ELB('LeftForeArm',  0.95+Math.max(0,sn )*0.35);
       ELB('RightForeArm', 0.95+Math.max(0,sn2)*0.35);
-      // pelvis and chest counter-rotate — the motion that reads as running
+      // Torso motion is spread down the whole spine chain instead of being applied to
+      // one bone, and the shoulders roll with the arms — a single rigid segment is what
+      // made the upper body look stiff.
       E('Hips',   0, -cs*0.10*A, 0);
-      E('Spine2', Math.min(0.30, 0.10+spy*0.024), cs*0.14*A, 0);
-      E('Head',   -Math.min(0.16, spy*0.013), -cs*0.11*A, 0);
+      E('Spine',  Math.min(0.08, 0.03+spy*0.007), -cs*0.05*A, 0);
+      E('Spine1', Math.min(0.10, 0.03+spy*0.009),  cs*0.06*A, 0);
+      E('Spine2', Math.min(0.14, 0.05+spy*0.012),  cs*0.09*A, 0);
+      ARM('LeftShoulder',   armFwd*0.30, 0);
+      ARM('RightShoulder', -armFwd*0.30, 0);
+      E('Neck',   -Math.min(0.06, spy*0.006), -cs*0.05*A, 0);
+      E('Head',   -Math.min(0.12, spy*0.010), -cs*0.08*A, 0);
     } else if(st==='reach'){          // receiver tracking the ball: arms up, legs striding
       u.phase += (Math.max(0.6,spy)*lastDt/1.85)*Math.PI;
       const A=Math.min(0.7,0.25+spy*0.06), sn=Math.sin(u.phase), sn2=Math.sin(u.phase+Math.PI);
