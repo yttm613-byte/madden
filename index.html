@@ -159,7 +159,7 @@
     <div class="overlay" id="start">
       <h1 class="title">GRIDIRON<br>BLITZ<small>HEAD TO HEAD</small></h1>
       <div class="keys">
-        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · <b>Q·E juke</b> · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen.<br>
+        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · <b>Q·E juke</b> · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> change announcer voice.<br>
         <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down.<br>
         Call your plays, stop the CPU's drives, win on the scoreboard before time runs out.
       </div>
@@ -545,6 +545,8 @@
   function pickVoices(){ try{ const vs=window.speechSynthesis.getVoices()||[]; if(!vs.length) return;
     const en=vs.filter(v=>/^en/i.test(v.lang||'')); const pool=(en.length?en:vs).slice().sort((a,b)=>voiceScore(b)-voiceScore(a));
     pbVoice  = pool[0] || null;
+    try{ const saved=localStorage.getItem('gb_voice');
+      if(saved){ const v=pool.find(x=>x.name===saved); if(v) pbVoice=v; } }catch(e){}
     colVoice = pool.find(v=>v!==pbVoice) || pbVoice;   // second-best male = colour analyst
   }catch(e){} }
   if(typeof window!=='undefined' && window.speechSynthesis){ pickVoices(); try{ window.speechSynthesis.addEventListener('voiceschanged',pickVoices); }catch(e){} }
@@ -553,22 +555,39 @@
   // Expressive delivery: break the line into clauses and speak each with a
   // rising pitch/rate contour + per-clause jitter, so it carries real intonation
   // instead of one flat monotone read.
+  // Personality comes from CONTRAST, not from one steady voice: the line is broken
+  // into clauses, a key word in each is hit harder and higher with a beat of silence
+  // before it, and the whole line rises toward the payoff. Web Speech has no SSML, so
+  // this is done by queueing separate utterances with different pitch/rate/volume.
+  const HIT_WORDS=/^(TOUCHDOWN|SIX|INTERCEPTED|PICKED|SACKED|SAFETY|GONE|HOUSE|MONSTER|HUGE|BIG|WOW|OH|NO|YES|GOOD|WIDE|BOOM|MAN|MY|KIDDING|UNBELIEVABLE|ELECTRIC|BANANAS|ROBBERY|JUKE|FIRST|DOWN|BLITZ|FUMBLE|COMPLETE|CAUGHT|DROPPED|STUFFED|BURIED)[!?.,]*$/i;
   function speakExpressive(text,o){ o=o||{};
     if(!commOn||typeof window==='undefined'||!window.speechSynthesis) return;
     try{
       if(o.cancel) window.speechSynthesis.cancel();
       const v=o.analyst?colVoice:pbVoice;
-      const segs=(String(text).match(/[^,;:!?.]+[,;:!?.]*/g)||[text]).map(s=>s.trim()).filter(Boolean);
+      const segs=(String(text).match(/[^,;:!?.]+[,;:!?.]*/g)||[text]).map(x=>x.trim()).filter(Boolean);
       const bang=/[!?]/.test(text);
+      const say1=(txt,pitch,rate,vol)=>{ if(!txt) return;
+        const u=new SpeechSynthesisUtterance(txt); if(v) u.voice=v;
+        // hard male ceiling — above ~1.35 these voices turn squeaky/female-sounding
+        u.pitch=Math.max(0.55,Math.min(1.34,pitch)); u.rate=Math.max(0.6,Math.min(1.95,rate));
+        u.volume=Math.max(0,Math.min(1,vol)); window.speechSynthesis.speak(u); };
       segs.forEach((seg,i)=>{
-        const u=new SpeechSynthesisUtterance(seg); if(v) u.voice=v;
         const j=Math.random()-0.5, last=(i===segs.length-1);
-        let pitch=o.pitch + (o.rampPitch||0)*i + j*0.13 + (last&&bang?0.12:0);
-        let rate =o.rate  + (o.rampRate||0)*i  + j*0.09;
-        u.pitch=Math.max(0.4,Math.min(2,pitch));
-        u.rate =Math.max(0.6,Math.min(2,rate));
-        u.volume=o.vol||1;
-        window.speechSynthesis.speak(u);
+        const basePitch=o.pitch + (o.rampPitch||0)*i + j*0.10 + (last&&bang?0.10:0);
+        const baseRate =o.rate  + (o.rampRate ||0)*i + j*0.07;
+        const vol=o.vol||1;
+        // find a word worth hitting inside this clause
+        const words=seg.split(/\s+/);
+        let hit=-1;
+        for(let w=0;w<words.length;w++){ const raw=words[w];
+          if(HIT_WORDS.test(raw) || (raw.length>3 && raw===raw.toUpperCase() && /[A-Z]/.test(raw))) hit=w; }
+        if(hit<0 || words.length<2){ say1(seg, basePitch, baseRate, vol); return; }
+        const pre=words.slice(0,hit).join(' '), key=words[hit], post=words.slice(hit+1).join(' ');
+        say1(pre,  basePitch,      baseRate*1.06, vol*0.94);          // run up to it
+        if(pre) say1(',', basePitch, 0.7, 0);                          // a beat of silence
+        say1(key,  basePitch+0.16, baseRate*0.84, 1);                   // land on the word: lower+louder+slower
+        say1(post, basePitch+0.10, baseRate,      vol);                // ride it out
       });
     }catch(e){}
   }
@@ -580,10 +599,10 @@
     if(!important && now-lastComm<240) return; lastComm=now;
     const hype=Math.min(1,(important?0.62:0)+hypeStreak*0.18+Math.random()*0.2);
     speakExpressive(text,{ cancel:true,
-      pitch:(important?1.02:0.86)+hype*0.30,   // male register; energy comes from pace, not squeal
-      rate:(important?1.34:1.06)+hype*0.46,    // fast and frantic when hyped
+      pitch:(important?0.98:0.88)+hype*0.14,   // stays male; excitement is pace + volume, not pitch
+      rate:(important?1.32:1.06)+hype*0.42,    // fast and frantic when hyped
       vol:1,
-      rampPitch:important?0.22:0.07, rampRate:important?0.12:0.04 });
+      rampPitch:important?0.09:0.04, rampRate:important?0.13:0.05 });
   }
   function color(text){ if(text) speakExpressive(text,{ cancel:false, analyst:true, // deeper, drawling analyst with its own swing
     pitch:0.68+Math.random()*0.12, rate:0.96+Math.random()*0.16, vol:0.96, rampPitch:0.06, rampRate:0.05 }); }
@@ -1726,6 +1745,30 @@
   const muteBtn=document.getElementById('mute');
   muteBtn.addEventListener('click',()=>{ muted=!muted; muteBtn.textContent=muted?'🔇':'🔊'; if(!muted){ audioInit(); startCrowd(); } crowdSetMute(); });
   const qBtn=document.getElementById('qtog'); if(qBtn) qBtn.addEventListener('click',cycleQuality);
+  // Available voices differ wildly per machine, so let the user audition them and keep
+  // their pick. Shift-click (or long-press) the mic to cycle.
+  let voiceIdx=-1;
+  function cycleAnnouncerVoice(){
+    try{
+      const vs=(window.speechSynthesis.getVoices()||[]).filter(v=>/^en/i.test(v.lang||''));
+      if(!vs.length) return;
+      vs.sort((a,b)=>voiceScore(b)-voiceScore(a));
+      voiceIdx=(voiceIdx+1)%vs.length; pbVoice=vs[voiceIdx];
+      colVoice=vs.find(v=>v!==pbVoice)||pbVoice;
+      try{ localStorage.setItem('gb_voice', pbVoice.name); }catch(e){}
+      caption('VOICE: '+pbVoice.name);
+      window.speechSynthesis.cancel();
+      speakExpressive("First and TEN! Here we GO!",{cancel:true,pitch:1.0,rate:1.25,vol:1,rampPitch:0.18,rampRate:0.1});
+    }catch(e){}
+  }
+  const commB=document.getElementById('commtog');
+  if(commB){ commB.title='Commentary on/off — Shift+click to change voice';
+    commB.addEventListener('click',(ev)=>{ if(ev.shiftKey){ ev.stopImmediatePropagation(); cycleAnnouncerVoice(); } },true);
+    let lp=null;
+    commB.addEventListener('pointerdown',()=>{ lp=setTimeout(cycleAnnouncerVoice,600); });
+    ['pointerup','pointerleave','pointercancel'].forEach(e=>commB.addEventListener(e,()=>clearTimeout(lp)));
+  }
+  addEventListener('keydown',e=>{ if(e.key&&e.key.toLowerCase()==='v') cycleAnnouncerVoice(); });
   function toggleFullscreen(){
     const el=document.getElementById('app');
     try{
