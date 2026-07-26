@@ -254,29 +254,62 @@
     G._returning=true; G._retKind='kick'; G._turn=false; G._td=false; G._fg=false; G._safety=false; G.conv=null;
     G.los=yd(25); G.firstX=yd(35); G.down=1;
     const W=fieldBot-fieldTop;
-    G.carrier={x:yd(7), y:fieldMid, vx:0, vy:0, n:Math.floor(Math.random()*30)+20, role:'kr'}; G._retStart=G.carrier.x;
+    const kx=GOAL_X-yd(35);                                    // kicking team's own 35 = the tee
+    G.carrier={x:yd(9), y:fieldMid, vx:0, vy:0, n:Math.floor(Math.random()*30)+20, role:'kr'}; G._retStart=G.carrier.x;
+    // return unit: front wall, then a wedge in front of the returner
     G.blockers=[];
-    for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5); G.blockers.push(mk(yd(34), yy, 60+i)); }      // front return wall
-    for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5+0.05); G.blockers.push(mk(yd(22), yy, 70+i)); }  // second wave
-    G.defenders=[]; for(let i=0;i<11;i++){ const yy=fieldTop+W*((i+0.5)/11); G.defenders.push(def(yd(46+(i%2)*4), yy, 0.12, 30+i, 'pursue', null)); } // coverage team
-    G.defenders[0].contain=true; G.defenders[10].contain=true;
+    for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5);      G.blockers.push(mk(yd(34), yy, 60+i)); }
+    for(let i=0;i<4;i++){ const yy=fieldTop+W*((i+0.5)/4*0.7+0.15); G.blockers.push(mk(yd(21), yy, 70+i)); }
+    G.blockers.push(mk(yd(15), fieldMid-yd(3), 75)); G.blockers.push(mk(yd(15), fieldMid+yd(3), 76));
+    // coverage team lined up ON the kick line, they sprint down under the ball
+    G.defenders=[];
+    for(let i=0;i<10;i++){ const yy=fieldTop+W*((i+0.5)/10);
+      G.defenders.push(def(kx-yd(1)-Math.abs(i-4.5)*yd(0.6), yy, 0, 30+i, 'pursue', null)); }
+    G.koKicker=def(kx+yd(6), fieldMid, 0, 5, 'pursue', null);   // kicker starts behind the tee
+    G.defenders.push(G.koKicker);
+    G.defenders[0].contain=true; G.defenders[9].contain=true;
     G.receivers=[]; G.trail=[];
-    G._koFlight=true; const kx=GOAL_X-yd(35);
-    G.ball={active:true, x:kx, y:fieldMid, fromX:kx, fromY:fieldMid, tx:G.carrier.x, ty:G.carrier.y, t:0, dur:1.1};
+    // approach phase: ball sits on the tee while the kicker runs up
+    G._koFlight=true; G._koPhase='tee'; G._koT=0; G._koTee={x:kx,y:fieldMid};
+    G.ball={active:false};
     G.userDef = (G.offense==='cpu')? nearestDefToBall(): null;
-    setMsg('KICKOFF!',1.2); SFX.kick(); crowdSwell(0.1,2);
+    setMsg('KICKOFF!',1.2); crowdSwell(0.12,2.5);
     G.phase='live'; G.snapTime=performance.now();
   }
   function updateKickoffFlight(dt){
+    const tee=G._koTee||{x:GOAL_X-yd(35),y:fieldMid};
+    // ---- approach: the kicker runs up to the tee before anything is struck ----
+    if(G._koPhase==='tee'){
+      G._koT+=dt;
+      const k=G.koKicker;
+      if(k){ const tx=tee.x+yd(0.9); k.vx=(tx-k.x)*3.2; k.vy=0; k.x+=k.vx*dt; }
+      if(G.offense==='user') moveEntity(G.carrier, dt, S.carrier, S.sprint);   // returner can settle under it
+      G.cam+=(clampCam(tee.x-yd(12))-G.cam)*Math.min(1,dt*4);
+      if(G._koT>=0.85){                                    // strike it
+        G._koPhase='flight'; G._koT=0; SFX.kick(); crowdSwell(0.2,3);
+        const dur=3.2;                                     // real kickoff hang time
+        G.ball={active:true, ko:true, x:tee.x, y:tee.y, fromX:tee.x, fromY:tee.y,
+                tx:G.carrier.x, ty:G.carrier.y, t:0, dur:dur};
+        G.koKickT=0.45;
+      }
+      return;
+    }
+    // ---- flight: high hang time, coverage sprinting down under it ----
     const b=G.ball; b.t+=dt; const p=Math.min(1,b.t/b.dur);
-    // returner can move to field the kick — no longer frozen while the ball is in the air
+    if(G.koKickT>0) G.koKickT-=dt;
     if(G.offense==='user') moveEntity(G.carrier, dt, S.carrier, S.sprint);
     else { G.carrier.x += S.cpuRun*0.25*dt; }
-    b.tx=G.carrier.x; b.ty=G.carrier.y;            // ball tracks to the returner so it lands in his hands
+    b.tx += (G.carrier.x-b.tx)*Math.min(1,dt*1.4);          // drifts onto the returner, not glued to him
+    b.ty += (G.carrier.y-b.ty)*Math.min(1,dt*1.4);
     b.x=b.fromX+(b.tx-b.fromX)*p; b.y=b.fromY+(b.ty-b.fromY)*p;
-    for(const d of G.defenders){ const a=Math.atan2(G.carrier.y-d.y,(G.carrier.x+yd(6))-d.x), sp=S.def*0.8; d.vx=Math.cos(a)*sp; d.vy=Math.sin(a)*sp; d.x+=d.vx*dt; d.y+=d.vy*dt; }
-    G.cam+=(clampCam(b.x)-G.cam)*Math.min(1,dt*5);
-    if(p>=1){ G._koFlight=false; G.ball={active:false}; SFX.catch(); G.snapTime=performance.now(); setMsg('FIELDED — RUN IT BACK!',1.0); }
+    for(const d of G.defenders){
+      if(d===G.koKicker && G.koKickT>0){ d.vx=0; d.vy=0; continue; }   // kicker holds his follow-through
+      const a=Math.atan2(G.carrier.y-d.y,(G.carrier.x+yd(4))-d.x), sp=S.defSprint*0.92;
+      d.vx=Math.cos(a)*sp; d.vy=Math.sin(a)*sp; d.x+=d.vx*dt; d.y+=d.vy*dt;
+    }
+    G.cam+=(clampCam(b.x)-G.cam)*Math.min(1,dt*4);
+    if(p>=1){ G._koFlight=false; G._koPhase=null; G.ball={active:false}; SFX.catch();
+      G.snapTime=performance.now(); setMsg('FIELDED — RUN IT BACK!',1.0); crowdSwell(0.16,2); }
   }
   function routeOffense(){
     if(G.offense==='user') enterPlayCall();
@@ -1671,6 +1704,7 @@
         const onDead = !repFrame && G.phase==='dead' && !G._td && !G._fg;
         let want;
         if(G._fgFlight && e===G.carrier) want='kick';
+        else if(e===G.koKicker && (G.koKickT||0)>0) want='kick';
         else if(e===G.carrier && e.role==='qb' && (G.passState==='air'||(G.throwT||0)>0)) want='throw';
         else if(G._td && G.phase==='dead' && e===G.carrier) want='celebrate';
         else if(onDead && e===G.carrier && spy<3.5) want='tackle';
@@ -1704,7 +1738,9 @@
     if(G.ball&&G.ball.active){ ballMesh.visible=true; ballMesh.scale.set(...BALL_FLY); const t=Math.min(1,G.ball.t/G.ball.dur);
       // height, and dh/dt so the ball can be pitched along its own trajectory
       let h, dh;
-      if(G.ball.fg){ const a=G.ball.short?4:7.5, k=G.ball.short?1:0.82;
+      if(G.ball.ko){ const a=21;                       // a real kickoff towers ~60ft
+        h = 0.25+Math.sin(t*Math.PI)*a; dh = Math.PI*Math.cos(t*Math.PI)*a; }
+      else if(G.ball.fg){ const a=G.ball.short?4:7.5, k=G.ball.short?1:0.82;
         h = 1+Math.sin(t*Math.PI*k)*a; dh = Math.PI*k*Math.cos(t*Math.PI*k)*a; }
       else { // pass: leaves the QB's hand, arrives at chest height, arc scaled to the throw
         const dyd=Math.hypot(G.ball.tx-G.ball.fromX, G.ball.ty-G.ball.fromY)/PPY;
