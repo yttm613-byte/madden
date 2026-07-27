@@ -203,6 +203,9 @@
   const S={ carrier:8.1*PPY, sprint:11.3*PPY, blocker:7.2*PPY, def:7.55*PPY, defSprint:9.2*PPY, defBlocked:1.5*PPY,
     rec:7.7*PPY, cover:7.45*PPY, rush:7.5*PPY, throwSpd:34*PPY, cpuRun:7.55*PPY, cpuSprint:9.4*PPY,
     tackleR:1.5*PPY, spinR:3.0*PPY, blockR:1.8*PPY, shedR:2.4*PPY, catchR:2.0*PPY, contestR:1.5*PPY, intR:0.9*PPY };
+  // Fraction of defenders who will eventually beat their block. Tuned against the
+  // full-game sim toward an NFL-ish sack rate (~6-7% of dropbacks).
+  const SHED_P = 0.06;
 
   // ---- synthesized sound ----
   let actx=null, muted=false;
@@ -489,7 +492,12 @@
   }
   function norm(x,y){ const m=Math.hypot(x,y)||1; return {x:x/m,y:y/m}; }
   function mk(x,y,n){ return {x,y,vx:0,vy:0,n,target:null}; }
-  function def(x,y,delay,n,job,assign){ return {x,y,vx:0,vy:0,n,react:delay,whiff:0,blocked:0,homeY:y,job,assign,_takenBy:null}; }
+  // engT/winAt: a blocked defender used to be pinned at walking pace for as long as a
+  // blocker stayed on him, with no way to ever beat the block. Once every rusher got
+  // a man assigned, that meant literally zero sacks. Only a minority of rushers win
+  // their matchup, and it takes them a beat — winAt is Infinity for the rest.
+  function def(x,y,delay,n,job,assign){ return {x,y,vx:0,vy:0,n,react:delay,whiff:0,blocked:0,homeY:y,job,assign,_takenBy:null,
+    engT:0, shed:false, winAt: Math.random()<SHED_P ? 0.85+Math.random()*1.35 : Infinity }; }
   // Pad both sides to a full, real-looking 11: a tight offensive line, receivers
   // split out wide, corners pressed over them, linebackers in the box, and deep
   // safeties. Filler defenders play run defense but don't blanket the pass.
@@ -779,14 +787,20 @@
       // on proximity to the carrier assigned blockers to men 30 yards across the field
       // on kick/punt returns, where coverage is spread over the full width — they never
       // arrived, and only 0.2 of 12 coverage defenders ever got blocked.
-      for(const d of pool){ if(d._takenBy&&d._takenBy!==b) continue;
+      for(const d of pool){ if(d.shed || (d._takenBy&&d._takenBy!==b)) continue;
         const dd=dist(d,G.carrier)+dist(d,b)*0.6; if(dd<bd){bd=dd;best=d;} }
       b.target=best;
       if(best){ best._takenBy=b;
+        // Clock the matchup from the moment a blocker picks him up, not from actual
+        // contact. Counting contact frames only, the average shed landed at 4.7s —
+        // long after the ball was gone, which is why sacks sat near zero.
+        best.engT+=dt;
+        if(best.engT>best.winAt){ best.shed=true; best._takenBy=null; b.target=null; }
         const gx=best.x*0.62+G.carrier.x*0.38, gy=best.y*0.62+G.carrier.y*0.38, a=Math.atan2(gy-b.y,gx-b.x);
         b.vx=Math.cos(a)*S.blocker; b.vy=Math.sin(a)*S.blocker;      // needed so blockers animate/face correctly
         b.x+=b.vx*dt; b.y+=b.vy*dt;
-        if(dist(b,best)<S.blockR){ best.blocked=0.12; const pa=Math.atan2(best.y-G.carrier.y,best.x-G.carrier.x); best.x+=Math.cos(pa)*S.def*0.5*dt; best.y+=Math.sin(pa)*S.def*0.5*dt; }
+        if(dist(b,best)<S.blockR && !best.shed){ best.blocked=0.12;
+          const pa=Math.atan2(best.y-G.carrier.y,best.x-G.carrier.x); best.x+=Math.cos(pa)*S.def*0.5*dt; best.y+=Math.sin(pa)*S.def*0.5*dt; }
       }
       b.y=Math.max(fieldTop,Math.min(fieldBot,b.y));
     }
@@ -1543,7 +1557,7 @@
         }
         // Deepen fabric/pad relief — but NOT on skin. At 1.6 the body normal map's
         // muscle striations amplified into hard horizontal banding down the arms.
-        if(m.normalMap && m.normalScale){ const s=(m.name==='Bodymat')?0.55:1.6; m.normalScale.set(s,s); }
+        if(m.normalMap && m.normalScale){ const s=(m.name==='Bodymat')?0.50:1.6; m.normalScale.set(s,s); }
         m.needsUpdate=true;
       }});
     return maxAniso;
@@ -1577,6 +1591,70 @@
       out.generateMipmaps=true; out.needsUpdate=true;
     }catch(e){ /* tainted/undecoded image — fall back to the original */ }
     _desatCache.set(tex,out); return out;
+  }
+  // The body atlas's face region is a blotchy hand-painted scan. Stretched over the
+  // head it breaks into hard angular shards — the players looked shredded in close-up.
+  // Verified by rendering the head with every map removed: the GEOMETRY is clean, so
+  // the damage is entirely in the texture. Soften it and pull it toward its own mean,
+  // which keeps the tonal variation but drops the shards. Cached across all players.
+  const _softCache=new Map();
+  function softenSkin(tex, keep, blurPx){
+    if(!tex || !tex.image) return tex;
+    if(_softCache.has(tex)) return _softCache.get(tex);
+    const img=tex.image, w=img.width||512, h=img.height||512;
+    let out=tex;
+    try{
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      const g=c.getContext('2d');
+      g.filter='blur('+(blurPx||2)+'px)'; g.drawImage(img,0,0,w,h); g.filter='none';
+      const d=g.getImageData(0,0,w,h), a=d.data;
+      let mr=0,mg=0,mb=0,n=0;
+      for(let i=0;i<a.length;i+=4){ if(a[i+3]<8) continue; mr+=a[i]; mg+=a[i+1]; mb+=a[i+2]; n++; }
+      if(n){ mr/=n; mg/=n; mb/=n;
+        const k=keep==null?0.38:keep;
+        for(let i=0;i<a.length;i+=4){
+          a[i]  =Math.max(0,Math.min(255, mr+(a[i]  -mr)*k));
+          a[i+1]=Math.max(0,Math.min(255, mg+(a[i+1]-mg)*k));
+          a[i+2]=Math.max(0,Math.min(255, mb+(a[i+2]-mb)*k));
+        }
+        g.putImageData(d,0,0);
+      }
+      out=new THREE.CanvasTexture(c);
+      out.flipY=tex.flipY; out.encoding=tex.encoding;
+      out.wrapS=tex.wrapS; out.wrapT=tex.wrapT; out.offset.copy(tex.offset); out.repeat.copy(tex.repeat);
+      out.anisotropy=tex.anisotropy; out.minFilter=THREE.LinearMipmapLinearFilter; out.magFilter=THREE.LinearFilter;
+      out.generateMipmaps=true; out.needsUpdate=true;
+    }catch(e){ /* tainted/undecoded image — keep the original */ }
+    _softCache.set(tex,out); return out;
+  }
+  // Same story for the body NORMAL map, which turned out to be the bigger offender:
+  // with it removed the face renders smooth, with it on the cheeks break into shards.
+  // Blur it and blend toward flat (128,128,255) so it still carries large-scale form
+  // (muscle, collarbone) without the torn high-frequency scan noise.
+  const _normCache=new Map();
+  function softenNormalMap(tex, keep, blurPx){
+    if(!tex || !tex.image) return tex;
+    if(_normCache.has(tex)) return _normCache.get(tex);
+    const img=tex.image, w=img.width||512, h=img.height||512;
+    let out=tex;
+    try{
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      const g=c.getContext('2d');
+      g.filter='blur('+(blurPx||3)+'px)'; g.drawImage(img,0,0,w,h); g.filter='none';
+      const d=g.getImageData(0,0,w,h), a=d.data, k=keep==null?0.45:keep;
+      for(let i=0;i<a.length;i+=4){
+        a[i]  =128+(a[i]  -128)*k;
+        a[i+1]=128+(a[i+1]-128)*k;
+        a[i+2]=255+(a[i+2]-255)*k;
+      }
+      g.putImageData(d,0,0);
+      out=new THREE.CanvasTexture(c);
+      out.flipY=tex.flipY; out.encoding=THREE.LinearEncoding;      // normal maps are linear data
+      out.wrapS=tex.wrapS; out.wrapT=tex.wrapT; out.offset.copy(tex.offset); out.repeat.copy(tex.repeat);
+      out.anisotropy=tex.anisotropy; out.minFilter=THREE.LinearMipmapLinearFilter; out.magFilter=THREE.LinearFilter;
+      out.generateMipmaps=true; out.needsUpdate=true;
+    }catch(e){ /* keep the original */ }
+    _normCache.set(tex,out); return out;
   }
   function makePlayer(){
     const grp=new THREE.Group();
@@ -1627,11 +1705,20 @@
       if(nm==='shirt_0'){ o.material=o.material.clone(); jerseyMat=o.material; jerseyMat.map=desatMap(jerseyMat.map); }
       else if(nm==='Mat.3'){ o.material=o.material.clone(); helmetMats.push(o.material); o.material.map=desatMap(o.material.map);
         o.material.roughness=0.2; o.material.metalness=0.5; o.material.envMapIntensity=1.9; }          // wet-looking glossy helmet
-      // The eyeballs share the 'Bodymat' material name with the skin. Tinting them
-      // with the skin tone turned the eyes flesh-coloured — the rolled-back look.
-      else if(nm==='Bodymat' && /eye/i.test(o.name||'')){ o.material=o.material.clone();
+      // The eyeballs share the 'Bodymat' material name with the skin, so the skin tint
+      // was being applied to them too — that is the flesh-coloured, rolled-back look.
+      // Identify them by size, NOT by name: the optimizer renames meshes to Object_NN,
+      // so an /eye/ name test silently matched nothing. Eyes are ~1.5k tris, body ~24k.
+      else if(nm==='Bodymat' && o.geometry && o.geometry.index && o.geometry.index.count/3 < 4000){ o.material=o.material.clone();
         o.material.roughness=0.25; o.material.metalness=0.0; o.material.envMapIntensity=1.1; }
       else if(nm==='Bodymat'){ o.material=o.material.clone(); skinMats.push(o.material);
+        // Mild soften only. The face shards are TORN GEOMETRY in the source asset —
+        // verified by rendering the head with every map removed (they remain) and by
+        // loading the untouched 27MB source (identical). No texture treatment fixes
+        // them, so don't destroy skin detail chasing it. This much just takes the
+        // edge off the scan noise on the arms.
+        o.material.map=softenSkin(o.material.map, 0.55, 2);
+        o.material.normalMap=softenNormalMap(o.material.normalMap, 0.50, 2);
         o.material.roughness=0.78; o.material.metalness=0.0; o.material.envMapIntensity=0.38; }        // skin: matte. Higher env read as oiled-up plastic.
       else if(nm==='Mat.2_2mat'||nm==='Plastic_Matte'){ o.material=o.material.clone(); trimMats.push(o.material);
         o.material.map=desatMap(o.material.map); o.material.roughness=0.7; }                           // belt + collar take the team accent
