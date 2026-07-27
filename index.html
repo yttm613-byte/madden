@@ -237,7 +237,7 @@
         offense:'user', playType:'run', passState:null, carrier:null, blockers:[], receivers:[], defenders:[],
         userDef:null, ball:{active:false}, cam:0, msgT:0, deadT:0, spinCd:0, stamina:100, burst:0,
         snapTime:0, sel:0, selLock:0, autoSnap:0, defCall:'balanced', fg:null,
-        fx:[], shake:0, flash:0, trail:[], rec:[], replay:null, _td:false, _fg:false, _turn:false, _spot:0,
+        fx:[], shake:0, flash:0, trail:[], rec:[], replay:null, fumble:null, _td:false, _fg:false, _turn:false, _spot:0,
         _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false };
     startKickoff('user');
   }
@@ -396,7 +396,7 @@
   function setupPlay(playId){
     const play=PLAYS[playId]||PLAYS.dive; const type=play.kind; const cx=G.los;
     G.playId=playId; G.playType=type;
-    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0;
+    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.fumble=null;
     G.passState = type==='pass'?'drop':null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0;
     document.getElementById('spinpip').textContent='SPIN READY';
     if(type==='pass'){
@@ -669,6 +669,9 @@
         ? ["And the defense lets one slip — touchdown.","They march it in for six. Ouch.","Touchdown the other way — that one stings.","Six points, and the momentum swings."]
         : ["TOUCHDOWN! Are you KIDDING me?!","He finds the end zone — SIX POINTS!","Touchdown! This place is absolutely electric!","He walks in untouched — touchdown!","Got him into the end zone! What a drive!","TOUCHDOWN — and the crowd goes bananas!","SIX! He took it to the house!","Touchdown! Get the cannon ready — that's a score!","He would NOT be denied — touchdown!"];
       line=pick(six); force=true; aside = hypeStreak>=2 ? "They are ROLLING right now — somebody call a timeout!" : pick(COLOR_HYPE); }
+    else if(m.includes('FUMBLE!!')){ hypeStreak=0; line=pick(["THE BALL IS OUT! It is LOOSE!","FUMBLE! He coughed it up!","STRIPPED! The ball is on the ground!"]); force=true; aside=pick(COLOR_DEF); }
+    else if(m.includes('FUMBLE RECOVERED')){ line=pick(["They RECOVER it! What a swing!","The defence falls on it — turnover!","They come up with it! Huge play!"]); force=true; aside=pick(COLOR_DEF); }
+    else if(m.includes('RECOVERED BY THE OFFENSE')){ line=pick(["They get it back! Disaster averted.","Offence falls on it — they keep the football.","Recovered by the offence, they dodge one there."]); }
     else if(m.includes('SAFETY')){ line=pick(["SAFETY! Dragged down in his own end zone — two points and the ball!","That's a safety! Enormous swing right there!","Trapped in the end zone — safety! You hate to see it."]); force=true; aside=pick(COLOR_DEF); }
     else if(m.includes('INTERCEPT')||m.includes('PICKED OFF')){ hypeStreak=0; line=pick(["INTERCEPTED! Oh my goodness!","Picked off — and he's off to the races!","What a read! He jumps the route — INTERCEPTION!","He threw it right to him! Picked!","The defender baited him and TOOK IT!"]); force=true; aside=pick(COLOR_OOPS); }
     else if(m.includes('EXTRA POINT')){ line=pick(["The extra point is up... and good.","Tack on the point after.","Routine kick — it's good."]); }
@@ -692,7 +695,7 @@
     else if(m.includes('PUNT IS UP')){ line=pick(["The punt is UP — and it's a high one!","Booming punt — fielding it now!","He gets all of it — punt's away and the return is on!"]); force=true; }
     else if(m.includes('PUNT')){ hypeStreak=0; line=pick(["They'll punt it away.","Fourth down — out comes the punt team.","Can't convert — they boot it away.","Flipping the field with the punt."]); }
     if(line){
-      const scream = force && /TOUCHDOWN|INTERCEPT|PICKED|GONE|MONSTER|HOUSE|SAFETY|TWO-POINT|HALL OF FAME|ELECTRIC|BANANAS/.test((m+' '+line).toUpperCase());
+      const scream = force && /TOUCHDOWN|INTERCEPT|PICKED|GONE|MONSTER|HOUSE|SAFETY|FUMBLE|STRIPPED|TWO-POINT|HALL OF FAME|ELECTRIC|BANANAS/.test((m+' '+line).toUpperCase());
       if(scream){ line = pick(SCREAMS)+' '+line; hypeStreak++; }
       say(line, force);
       if(aside && Math.random()<(scream?0.85:0.55)) color(aside);
@@ -797,6 +800,7 @@
     }
 
     // live
+    if(G.fumble){ updateFumble(dt); syncHUD(); return; }
     if(G._koFlight){ updateKickoffFlight(dt); syncHUD(); return; }
     if(G.offense==='cpu' && G.userDef) moveEntity(G.userDef,dt,S.def,S.defSprint);
     const elapsed=(performance.now()-G.snapTime)/1000;
@@ -853,6 +857,7 @@
       // tackled to end it. This was ending live passes as sacks.
       if(mode!=='air' && d.whiff<=0 && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
         if(mode==='drop') return sackOrTackle();
+        if(mode==='run' && tryFumble(c,d)) return null;   // big hit knocked it out
         return endPlay(G.offense==='user'?'TACKLED':'TACKLE!', c.x);
       }
     }
@@ -1048,6 +1053,53 @@
         b.x+=Math.cos(a)*S.blocker*0.3*dt; b.y+=Math.sin(a)*S.blocker*0.3*dt; }
       else { b.vx*=0.86; b.vy*=0.86; } }
     c.vx*=0.72; c.vy*=0.72;                                // carrier is wrapped up
+  }
+  // ---- fumbles: a big hit can jar the ball loose, then it is a live scramble ----
+  function tryFumble(c,d){
+    if(G.fumble || G._returning && G._retKind==='int') return false;
+    if(G.conv || G.twoPt) return false;                       // keep conversions clean
+    const hit=Math.hypot(d.vx||0,d.vy||0)/PPY;                 // how hard he was hit
+    const carrySp=Math.hypot(c.vx||0,c.vy||0)/PPY;
+    if(hit<5.5) return false;                                  // only real collisions
+    let p=0.035 + (hit-5.5)*0.014 + Math.max(0,carrySp-6)*0.010;
+    if(G.spinCd>1.6) p+=0.03;                                  // spinning with it is risky
+    p=Math.min(0.16,p);
+    if(Math.random()>=p) return false;
+    // pop it loose
+    const a=Math.atan2(c.vy||0,(c.vx||1))+ (Math.random()-0.5)*1.6;
+    G.fumble={ x:c.x, y:c.y, vx:Math.cos(a)*yd(7), vy:Math.sin(a)*yd(7), t:0, dur:1.35,
+               by:G.offense, spot:c.x };
+    G.phase='live'; G.shake=0.34; G.flash=0.25;
+    spawnBurst(c.x,c.y,'#ffd24a',24,true); SFX.tackle(); crowdSwell(0.26,3);
+    setMsg('FUMBLE!!',1.4);
+    return true;
+  }
+  function updateFumble(dt){
+    const f=G.fumble; f.t+=dt;
+    f.x+=f.vx*dt; f.y+=f.vy*dt; f.vx*=0.90; f.vy*=0.90;        // the ball skids and slows
+    f.y=Math.max(fieldTop+2,Math.min(fieldBot-2,f.y));
+    // everybody dives on it
+    const chase=(e,sp)=>{ const a=Math.atan2(f.y-e.y,f.x-e.x); e.vx=Math.cos(a)*sp; e.vy=Math.sin(a)*sp; e.x+=e.vx*dt; e.y+=e.vy*dt; };
+    if(G.offense==='user') moveEntity(G.carrier,dt,S.carrier,S.sprint); else chase(G.carrier,S.cpuRun);
+    for(const b of G.blockers) if(!b.noblock) chase(b,S.blocker*1.1);
+    for(const d of G.defenders) chase(d,S.def*1.05);
+    G.cam+=(clampCam(f.x)-G.cam)*Math.min(1,dt*6);
+    if(f.t<f.dur) return;
+    // nearest man wins it
+    let best=null,bd=1e9,bySide=null;
+    const test=(e,side)=>{ const dd=Math.hypot(e.x-f.x,e.y-f.y); if(dd<bd){bd=dd;best=e;bySide=side;} };
+    test(G.carrier,'off'); for(const b of G.blockers) if(!b.noblock) test(b,'off');
+    for(const d of G.defenders) test(d,'def');
+    const spot=Math.max(OWN_GOAL, Math.min(GOAL_X-yd(1), f.x));
+    G.fumble=null;
+    if(bySide==='def'){                                        // defence recovers: turnover
+      setMsg('FUMBLE RECOVERED — TURNOVER!',1.6); SFX.whistle(); crowdSwell(0.24,3);
+      G.phase='dead'; G.deadT=1.5; G._td=false; G._fg=false; G._safety=false; G._turn=true; G._spot=spot;
+      if(startReplay()) G.deadT=3.4;
+    } else {                                                   // offence falls on it
+      setMsg('RECOVERED BY THE OFFENSE',1.3); SFX.whistle();
+      G.phase='dead'; G.deadT=1.2; G._td=false; G._fg=false; G._safety=false; G._turn=false; G._spot=spot;
+    }
   }
   function endPlay(reason,spot,turnover){
     G.phase='dead'; G.deadT=1.1; G._td=false; G._fg=false; G._turn=!!turnover; G._safety=false;
@@ -1779,7 +1831,12 @@
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
-    if(G.ball&&G.ball.active){ ballMesh.visible=true; ballMesh.scale.set(...BALL_FLY); const t=Math.min(1,G.ball.t/G.ball.dur);
+    if(G.fumble){ // loose ball skidding and tumbling on the ground
+      const f=G.fumble; ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE);
+      const bounce=Math.abs(Math.sin(f.t*9))*Math.max(0,0.55-f.t*0.38);
+      ballMesh.position.set(WX(f.x), 0.12+bounce, WZ(f.y));
+      _spiral+=lastDt*11; ballMesh.rotation.set(_spiral*0.8, Math.atan2(f.vx,f.vy), _spiral); }
+    else if(G.ball&&G.ball.active){ ballMesh.visible=true; ballMesh.scale.set(...BALL_FLY); const t=Math.min(1,G.ball.t/G.ball.dur);
       // height, and dh/dt so the ball can be pitched along its own trajectory
       let h, dh;
       if(G.ball.ko){ const a=G.ball.punt?24:21;        // a real kick towers 60-70ft
