@@ -1000,7 +1000,12 @@
     for(const d of G.defenders) e.push({x:d.x,y:d.y,vx:d.vx,vy:d.vy,k:'def'});
     if(G.carrier) e.push({x:G.carrier.x,y:G.carrier.y,vx:G.carrier.vx,vy:G.carrier.vy,k:'carry'});
     G._recT=(G._recT||0)+lastDt;
-    G.rec.push({t:G._recT,off:G.offense,e:e});
+    // Record the ball too. Without this a fumble replay showed the carrier still
+    // holding it, so the video never showed the ball actually coming loose.
+    let ball=null;
+    if(G.fumble) ball={x:G.fumble.x, y:G.fumble.y, loose:true, t:G.fumble.t};
+    else if(G.ball && G.ball.active) ball={x:G.ball.x, y:G.ball.y, air:true, t:G.ball.t, dur:G.ball.dur, ko:!!G.ball.ko, fg:!!G.ball.fg};
+    G.rec.push({t:G._recT,off:G.offense,e:e,b:ball});
     // keep a rolling window slightly longer than we ever replay
     while(G.rec.length>2 && G._recT-G.rec[0].t > REPLAY_SECS*1.6) G.rec.shift();
   }
@@ -1881,7 +1886,25 @@
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
-    if(G.fumble){ // loose ball skidding and tumbling on the ground
+    if(repFrame){ // replay: show exactly where the ball was, including a loose one
+      const rb=repFrame.b;
+      if(rb && rb.loose){ ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE);
+        const bo=Math.abs(Math.sin(rb.t*9))*Math.max(0,0.55-rb.t*0.38);
+        ballMesh.position.set(WX(rb.x), 0.12+bo, WZ(rb.y));
+        _spiral+=lastDt*11; ballMesh.rotation.set(_spiral*0.8,0,_spiral); }
+      else if(rb && rb.air){ ballMesh.visible=true; ballMesh.scale.set(...BALL_FLY);
+        const tt=Math.min(1,rb.t/(rb.dur||1));
+        const a= rb.ko?21 : (rb.fg?7.5:Math.min(6,3));
+        ballMesh.position.set(WX(rb.x), 0.6+Math.sin(tt*Math.PI)*a, WZ(rb.y));
+        _spiral+=lastDt*30; ballMesh.rotation.set(0,0,_spiral); }
+      else if(_carrierG){ _carrierG.updateMatrixWorld(true); ballMesh.scale.set(...BALL_LIVE);
+        const hb=_carrierG.userData.B && (_carrierG.userData.B.RightHand||_carrierG.userData.B.RightForeArm);
+        ballMesh.visible=true;
+        if(hb){ hb.getWorldPosition(_tuckV); _tuckV.y+=0.12; ballMesh.position.copy(_tuckV); }
+        ballMesh.rotation.set(0.35,_carrierG.rotation.y+0.5,0.2); }
+      else ballMesh.visible=false;
+    }
+    else if(G.fumble){ // loose ball skidding and tumbling on the ground
       const f=G.fumble; ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE);
       const bounce=Math.abs(Math.sin(f.t*9))*Math.max(0,0.55-f.t*0.38);
       ballMesh.position.set(WX(f.x), 0.12+bounce, WZ(f.y));
