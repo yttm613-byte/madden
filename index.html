@@ -200,7 +200,7 @@
   const MARGIN=26, FIELD_YDS=53.3, PLAYH=CH-MARGIN*2, PPY=PLAYH/FIELD_YDS;
   const WORLD_W=120*PPY, fieldTop=MARGIN, fieldBot=CH-MARGIN, fieldMid=fieldTop+PLAYH/2;
   const yd=y=>y*PPY, GOAL_X=yd(110), OWN_GOAL=yd(10);
-  const S={ carrier:8.0*PPY, sprint:10.6*PPY, blocker:7.2*PPY, def:7.55*PPY, defSprint:9.2*PPY, defBlocked:1.5*PPY,
+  const S={ carrier:8.1*PPY, sprint:11.3*PPY, blocker:7.2*PPY, def:7.55*PPY, defSprint:9.2*PPY, defBlocked:1.5*PPY,
     rec:7.7*PPY, cover:7.45*PPY, rush:7.5*PPY, throwSpd:34*PPY, cpuRun:7.55*PPY, cpuSprint:9.4*PPY,
     tackleR:1.5*PPY, spinR:3.0*PPY, blockR:1.8*PPY, shedR:2.4*PPY, catchR:2.0*PPY, contestR:1.5*PPY, intR:0.9*PPY };
 
@@ -550,9 +550,18 @@
   function juke(dir){
     if(G.phase!=='live' || G.offense!=='user' || (G.jukeCd||0)>0) return;
     const c=G.ctrlBlocker||G.carrier; if(!c) return;
-    G.jukeCd=1.1; G.jukeT=0.34; G.jukeDir=dir;
-    c.vy += dir*S.sprint*0.85; c.y += dir*yd(0.5);          // pop laterally
-    for(const d of G.defenders){ if(dist(d,c)<yd(2.6)) d.whiff=0.5; }   // they bite on the cut
+    G.jukeCd=1.5; G.jukeT=0.34; G.jukeDir=dir;
+    c.vy += dir*S.sprint*0.80; c.y += dir*yd(0.45);         // pop laterally
+    // A juke beats the man you cut against, not everyone in the area. It used to make
+    // every defender within 2.6yd whiff, which made it an area-of-effect panic button.
+    let nd=1e9, near=null;
+    for(const d of G.defenders){ const dd=dist(d,c); if(dd<nd){nd=dd;near=d;} }
+    if(near && nd<yd(2.8)){
+      near.whiff=0.55;                                       // the man you beat
+      const side=(near.y-c.y)*dir;                           // only if you cut away from him
+      if(side>0) near.whiff=0.30;
+      for(const d of G.defenders){ if(d!==near && dist(d,c)<yd(1.8)) d.whiff=0.22; }  // glancing effect on the pile
+    }
     SFX.throw(); crowdSwell(crowdBase+0.05,1.0);
   }
 
@@ -732,7 +741,7 @@
   function moveEntity(ent,dt,base,sprint){
     const inp=inputVec(); let spd=base;
     const want=(sprintHeld||keys['shift'])&&G.stamina>1&&inp.m>0.1;
-    if(want){ spd=sprint; G.stamina=Math.max(0,G.stamina-38*dt); } else { G.stamina=Math.min(100,G.stamina+24*dt); }
+    if(want){ spd=sprint; G.stamina=Math.max(0,G.stamina-19*dt); } else { G.stamina=Math.min(100,G.stamina+30*dt); }
     if(ent.burst>0){ ent.burst-=dt; spd*=1.32; }
     ent.vx += (inp.x*spd-ent.vx)*Math.min(1,dt*24);
     ent.vy += (inp.y*spd-ent.vy)*Math.min(1,dt*24);
