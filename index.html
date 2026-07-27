@@ -324,14 +324,37 @@
     const b=G.ball; b.t+=dt; const p=Math.min(1,b.t/b.dur);
     if(G.koKickT>0) G.koKickT-=dt;
     if(G.offense==='user') moveEntity(G.carrier, dt, S.carrier, S.sprint);
-    else { G.carrier.x += S.cpuRun*0.25*dt; }
+    else {
+      // A returner settles UNDER the ball — he does not jog upfield into his own
+      // coverage. The old code marched him forward for the whole hang time, which
+      // burned ~7 yards of cushion and left him tackled on the catch every time.
+      // Track the ball laterally only, and set velocity (not just position) so the
+      // pose state machine animates him instead of sliding him in an idle stance.
+      const dy=b.ty-G.carrier.y, sp=Math.max(-S.cpuRun, Math.min(S.cpuRun, dy*2.2));
+      G.carrier.vx=0; G.carrier.vy=sp; G.carrier.y+=sp*dt;
+    }
+    // The return team blocks DURING the hang — that is when a real return is set up.
+    // They used to stand frozen for the whole flight and only start blocking on the
+    // catch, by which point they were 9 yards off their man and could never close the
+    // 1.8-yard engage radius: measured 0.2 of 12 coverage defenders ever blocked.
+    blockNearest(dt, G.defenders);
+    const capX=G.carrier.x+yd(22);                     // don't abandon the returner
+    for(const bl of G.blockers) if(bl.x>capX){ bl.x=capX; bl.vx=Math.min(bl.vx,0); }
     b.tx += (G.carrier.x-b.tx)*Math.min(1,dt*1.4);          // drifts onto the returner, not glued to him
     b.ty += (G.carrier.y-b.ty)*Math.min(1,dt*1.4);
     b.x=b.fromX+(b.tx-b.fromX)*p; b.y=b.fromY+(b.ty-b.fromY)*p;
+    // Punt coverage has to beat a jam at the line and run further than kickoff
+    // coverage does. Unjammed at full sprint they covered the whole 36-yard gap in
+    // exactly the hang time and tackled the returner on the catch — measured 0.6 yd
+    // average return against an NFL average near 9. The hold plus the reduced sprint
+    // stand in for the gunners being jammed.
+    const jam = b.punt ? 0.55 : 0;
+    const covSp = S.defSprint * (b.punt ? 0.78 : 0.92);
     for(const d of G.defenders){
       if(d===G.koKicker && G.koKickT>0){ d.vx=0; d.vy=0; continue; }   // kicker holds his follow-through
-      const a=Math.atan2(G.carrier.y-d.y,(G.carrier.x+yd(4))-d.x), sp=S.defSprint*0.92;
-      d.vx=Math.cos(a)*sp; d.vy=Math.sin(a)*sp; d.x+=d.vx*dt; d.y+=d.vy*dt;
+      if(b.t<jam){ d.vx=0; d.vy=0; continue; }
+      const a=Math.atan2(G.carrier.y-d.y,(G.carrier.x+yd(4))-d.x);
+      d.vx=Math.cos(a)*covSp; d.vy=Math.sin(a)*covSp; d.x+=d.vx*dt; d.y+=d.vy*dt;
     }
     G.cam+=(clampCam(b.x)-G.cam)*Math.min(1,dt*4);
     if(p>=1){ G._koFlight=false; G._koPhase=null; G.ball={active:false}; SFX.catch();
@@ -752,7 +775,12 @@
     for(const b of G.blockers){
       if(b.noblock || b===G.ctrlBlocker) continue;   // QB hands off; user-controlled blocker is steered by you
       let best=null,bd=1e9;
-      for(const d of pool){ if(d._takenBy&&d._takenBy!==b) continue; const dd=dist(d,G.carrier); if(dd<bd){bd=dd;best=d;} }
+      // Rank by threat to the carrier AND reachability by THIS blocker. Ranking purely
+      // on proximity to the carrier assigned blockers to men 30 yards across the field
+      // on kick/punt returns, where coverage is spread over the full width — they never
+      // arrived, and only 0.2 of 12 coverage defenders ever got blocked.
+      for(const d of pool){ if(d._takenBy&&d._takenBy!==b) continue;
+        const dd=dist(d,G.carrier)+dist(d,b)*0.6; if(dd<bd){bd=dd;best=d;} }
       b.target=best;
       if(best){ best._takenBy=b;
         const gx=best.x*0.62+G.carrier.x*0.38, gy=best.y*0.62+G.carrier.y*0.38, a=Math.atan2(gy-b.y,gx-b.x);
@@ -888,7 +916,24 @@
   function cpuRunAI(c,dt){
     let hx=1,hy=0,near=null,nd=1e9;
     for(const d of G.defenders){ if(d.x>c.x-yd(1.5)){ const dd=dist(d,c); if(dd<nd){nd=dd;near=d;} } }
-    if(near && nd<yd(12)){ const dy=c.y-near.y; hy += (dy>=0?1:-1)*(1-nd/yd(12))*1.7; }
+    if(G._returning){
+      // On a kick/punt return the coverage is spread across the full width, so
+      // flinching away from the single nearest man just runs you into the next one.
+      // Look ahead and take the emptiest lane instead — this is the difference
+      // between a 3-yard return and a real one.
+      let bestY=c.y, best=-1e9;
+      for(let k=-4;k<=4;k++){
+        const ty=c.y+k*yd(3.5);
+        if(ty<fieldTop+yd(2)||ty>fieldBot-yd(2)) continue;
+        let clear=1e9;
+        for(const d of G.defenders){ if(d.x<c.x-yd(2)) continue;
+          clear=Math.min(clear, Math.hypot(d.x-(c.x+yd(8)), d.y-ty)); }
+        const score=clear-Math.abs(ty-c.y)*0.25;         // don't run sideways for nothing
+        if(score>best){ best=score; bestY=ty; }
+      }
+      hy=Math.max(-1.2,Math.min(1.2,(bestY-c.y)/yd(6)));
+    }
+    else if(near && nd<yd(12)){ const dy=c.y-near.y; hy += (dy>=0?1:-1)*(1-nd/yd(12))*1.7; }
     if(c.y<fieldTop+yd(7)) hy+=0.5; if(c.y>fieldBot-yd(7)) hy-=0.5;
     hy=Math.max(-1.0,Math.min(1.0,hy));
     const m=Math.hypot(hx,hy)||1; hx/=m; hy/=m;
@@ -1496,7 +1541,9 @@
           t.anisotropy=maxAniso; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter;
           t.generateMipmaps=true; t.needsUpdate=true;
         }
-        if(m.normalMap && m.normalScale) m.normalScale.set(1.6,1.6);   // deepen fabric/pad relief
+        // Deepen fabric/pad relief — but NOT on skin. At 1.6 the body normal map's
+        // muscle striations amplified into hard horizontal banding down the arms.
+        if(m.normalMap && m.normalScale){ const s=(m.name==='Bodymat')?0.55:1.6; m.normalScale.set(s,s); }
         m.needsUpdate=true;
       }});
     return maxAniso;
@@ -1580,6 +1627,10 @@
       if(nm==='shirt_0'){ o.material=o.material.clone(); jerseyMat=o.material; jerseyMat.map=desatMap(jerseyMat.map); }
       else if(nm==='Mat.3'){ o.material=o.material.clone(); helmetMats.push(o.material); o.material.map=desatMap(o.material.map);
         o.material.roughness=0.2; o.material.metalness=0.5; o.material.envMapIntensity=1.9; }          // wet-looking glossy helmet
+      // The eyeballs share the 'Bodymat' material name with the skin. Tinting them
+      // with the skin tone turned the eyes flesh-coloured — the rolled-back look.
+      else if(nm==='Bodymat' && /eye/i.test(o.name||'')){ o.material=o.material.clone();
+        o.material.roughness=0.25; o.material.metalness=0.0; o.material.envMapIntensity=1.1; }
       else if(nm==='Bodymat'){ o.material=o.material.clone(); skinMats.push(o.material);
         o.material.roughness=0.78; o.material.metalness=0.0; o.material.envMapIntensity=0.38; }        // skin: matte. Higher env read as oiled-up plastic.
       else if(nm==='Mat.2_2mat'||nm==='Plastic_Matte'){ o.material=o.material.clone(); trimMats.push(o.material);
@@ -1592,9 +1643,18 @@
         o.material.roughness=0.88; o.material.metalness=0.0; o.material.envMapIntensity=0.5; }         // matte cloth
     }});
     if(jerseyMat){ jerseyMat.roughness=0.8; jerseyMat.metalness=0.0; jerseyMat.envMapIntensity=0.65; } // jersey reads as fabric
-    // per-player skin tone variation (multiplies the body texture)
-    { const f=0.66+Math.random()*0.46, warm=0.94+Math.random()*0.10;
-      for(const m of skinMats) m.color.setRGB(f, f*0.96*warm, f*0.90*warm); }
+    // Per-player skin tone. This multiplies a light-tan body texture (avg #b3806c),
+    // so the old 0.66..1.12 range could only ever produce light players — the whole
+    // squad came out the same tan. Sample instead from tone anchors spanning deep to
+    // pale, weighted toward the darker end to match who actually plays this sport.
+    // Deeper tones also keep more blue; scaling the channels evenly makes dark skin
+    // read as orange.
+    { const TONES=[[0.26,1.03],[0.34,1.01],[0.45,1.00],[0.60,0.99],[0.78,0.98],[0.96,0.97]];
+      const W    =[0.16, 0.17, 0.15, 0.12, 0.21, 0.19];
+      let r=Math.random(), i=0; while(i<W.length-1 && (r-=W[i])>0) i++;
+      const f=Math.max(0.19, TONES[i][0]+(Math.random()-0.5)*0.07), warm=TONES[i][1];
+      const bMul=0.94-0.06*Math.min(1,f);
+      for(const m of skinMats) m.color.setRGB(f, f*0.95*warm, f*bMul*warm); }
     // ---- per-player kit ----------------------------------------------------------
     // One base model becomes a squad of individuals the same way a real sports game
     // does it: shared body, per-player equipment. Each part is its own material here.
