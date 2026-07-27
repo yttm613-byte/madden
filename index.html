@@ -396,7 +396,7 @@
   function setupPlay(playId){
     const play=PLAYS[playId]||PLAYS.dive; const type=play.kind; const cx=G.los;
     G.playId=playId; G.playType=type;
-    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null;
+    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0;
     G.passState = type==='pass'?'drop':null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0;
     document.getElementById('spinpip').textContent='SPIN READY';
     if(type==='pass'){
@@ -1402,12 +1402,13 @@
     B.RightHand=findBone(model,'RightHand'); B.LeftHand=findBone(model,'LeftHand');
     // Close the fingers into a relaxed grip once, at load. The model ships with the
     // fingers splayed wide open, which reads as claws at gameplay distance.
-    { const curl=[];
-      model.traverse(o=>{ if(o.isBone && /Hand(Index|Thumb)\d/.test(o.name)) curl.push(o); });
-      for(const f of curl){ const isThumb=/Thumb/.test(f.name);
+    const gripBones=[];
+    { model.traverse(o=>{ if(o.isBone && /Hand(Index|Thumb)\d/.test(o.name)) gripBones.push(o); });
+      for(const f of gripBones){ const isThumb=/Thumb/.test(f.name);
         const amt=isThumb?0.35:0.62, sgn=(f.name.indexOf('Left')>=0)?1:-1;
-        f.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,sgn*amt))); }
-      grp.userData_fingers=curl.length; }
+        f.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,sgn*amt)));
+        f.userData.grip=f.quaternion.clone();   // remembered so the mocap idle can't undo it
+      } }
     // per-instance jersey/helmet/skin materials so each player can be tinted independently
     let jerseyMat=null, helmetMat=null; const skinMats=[];
     model.traverse(o=>{ if(o.isMesh && o.material){ const nm=o.material.name||'';
@@ -1442,7 +1443,7 @@
       idleAct=mixer.clipAction(playerProto.animations[0]);
       idleAct.play(); mixer.setTime(Math.random()*playerProto.animations[0].duration);
     }
-    grp.userData={B,ring,jerseyMat,helmetMat,model,mixer,idleAct,baseS,buildVh,buildVg,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
+    grp.userData={B,ring,jerseyMat,helmetMat,model,mixer,idleAct,gripBones,baseS,buildVh,buildVg,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
     grp.visible=false; scene.add(grp); return grp;
   }
   // Pose the Mixamo rig per state.
@@ -1545,7 +1546,7 @@
       playerProto=gltf;
       const aniso=upgradeTextures(playerProto.scene);
       if(window.__gbDebug) console.log('texture anisotropy:',aniso);
-      for(let i=0;i<22;i++) pPool.push(makePlayer());
+      for(let i=0;i<24;i++) pPool.push(makePlayer());
       for(let i=0;i<6;i++){ const r=new THREE.Mesh(new THREE.RingGeometry(0.95,1.3,28),
         new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.DoubleSide,transparent:true,opacity:0.85,fog:false}));
         r.rotation.x=-Math.PI/2; r.position.y=0.06; r.visible=false; scene.add(r); ringPool.push(r); }
@@ -1685,7 +1686,7 @@
     if(repFrame){
       for(const it of repFrame.e){
         const isDef=it.k==='def';
-        ents.push({ e:it, def:isDef, kind:it.k,
+        (it.k==='carry'?ents.unshift:ents.push).call(ents,{ e:it, def:isDef, kind:it.k,
           jc: isDef?defJ:(it.k==='carry'?(off==='user'?0x13284a:0x7a1d22):(off==='user'?0x2f6bd6:0xa33b42)),
           hc: isDef?defH:(it.k==='carry'?0xffd24a:(off==='user'?0x244e86:0x7a2a30)),
           ring: it.k==='carry'?0xffd24a:0 });
@@ -1695,7 +1696,10 @@
     for(const r of G.receivers) ents.push({e:r, jc:0x1f7a52, hc:0x165c3e, ring:0, def:false, kind:'rec'});
     for(const d of G.defenders) ents.push({e:d, jc:defJ, hc:defH, ring:(off==='cpu'&&d===G.userDef)?0x46e3ff:0, def:true, kind:'def'});
     if(off==='user' && G.phase==='live' && G.playType==='pass' && G.passState==='drop' && G.receivers[G.sel]){ const sel=G.receivers[G.sel], f=ents.find(o=>o.e===sel); if(f) f.ring=0xffd24a; }
-    if(G.carrier) ents.push({e:G.carrier, jc:off==='user'?0x13284a:0x7a1d22, hc:0xffd24a, ring:0xffd24a, def:false, kind:'carry'});
+    // The carrier is unshifted, not pushed: if a formation ever exceeds the render
+    // pool the tail is dropped, and the man you control must never be the casualty.
+    // (Kickoff/punt units are 23 entities, which silently hid the returner.)
+    if(G.carrier) ents.unshift({e:G.carrier, jc:off==='user'?0x13284a:0x7a1d22, hc:0xffd24a, ring:0xffd24a, def:false, kind:'carry'});
     }
     let ringI=0; for(const r of ringPool) r.visible=false;
     _frameNo++; _carrierG=null;
@@ -1750,7 +1754,9 @@
         else if(o.kind==='rec' && G.passState==='air' && G.ball && G.ball.rec===e) want='reach';   // target receiver reaches for the ball
         else if(G.phase==='presnap' && spy<1 && (o.kind==='block' || (o.kind==='def' && G.carrier && Math.abs(e.x-G.los)<yd(3.4)))) want='set';
         else want = spy>1.4 ? 'run' : 'idle';
-        if(want==='idle' && u.mixer){ u.mixer.update(lastDt*(far?2:1)); }   // real mocap idle
+        if(want==='idle' && u.mixer){ u.mixer.update(lastDt);      // real mocap idle
+          // the clip drives 11 finger bones, so restore the closed grip it just overwrote
+          if(u.gripBones) for(const f of u.gripBones) if(f.userData.grip) f.quaternion.copy(f.userData.grip); }
         else if(!far || (_frameNo&1)===0) applyPose(u, want, spy);
         // Going to ground: a tackled player pitches over AND drops toward the turf.
         // Previously he only leaned ~30deg and stayed upright, so nobody ever fell.
