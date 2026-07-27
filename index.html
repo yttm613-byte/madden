@@ -191,7 +191,7 @@
   const yd=y=>y*PPY, GOAL_X=yd(110), OWN_GOAL=yd(10);
   const S={ carrier:8.0*PPY, sprint:10.6*PPY, blocker:7.2*PPY, def:7.55*PPY, defSprint:9.2*PPY, defBlocked:1.5*PPY,
     rec:7.7*PPY, cover:7.45*PPY, rush:7.5*PPY, throwSpd:34*PPY, cpuRun:7.55*PPY, cpuSprint:9.4*PPY,
-    tackleR:1.2*PPY, spinR:3.0*PPY, blockR:1.8*PPY, shedR:2.4*PPY, catchR:2.0*PPY, contestR:1.5*PPY, intR:0.9*PPY };
+    tackleR:1.5*PPY, spinR:3.0*PPY, blockR:1.8*PPY, shedR:2.4*PPY, catchR:2.0*PPY, contestR:1.5*PPY, intR:0.9*PPY };
 
   // ---- synthesized sound ----
   let actx=null, muted=false;
@@ -294,6 +294,21 @@
       }
       return;
     }
+    // ---- punt: the punter takes his steps, then boots it high ----
+    if(G._koPhase==='punt'){
+      G._koT+=dt;
+      const k=G.koKicker;
+      if(k){ k.vx=-S.blocker*0.5; k.x+=k.vx*dt; k.vy=0; }        // step into the kick
+      if(G.offense==='user') moveEntity(G.carrier, dt, S.carrier, S.sprint);
+      G.cam+=(clampCam(tee.x-yd(14))-G.cam)*Math.min(1,dt*4);
+      if(G._koT>=0.7){
+        G._koPhase='flight'; G._koT=0; SFX.kick(); crowdSwell(0.14,2.5);
+        G.ball={active:true, ko:true, punt:true, x:tee.x, y:tee.y, fromX:tee.x, fromY:tee.y,
+                tx:G.carrier.x, ty:G.carrier.y, t:0, dur:3.6};   // punts hang even longer
+        G.koKickT=0.45;
+      }
+      return;
+    }
     // ---- flight: high hang time, coverage sprinting down under it ----
     const b=G.ball; b.t+=dt; const p=Math.min(1,b.t/b.dur);
     if(G.koKickT>0) G.koKickT-=dt;
@@ -381,7 +396,7 @@
   function setupPlay(playId){
     const play=PLAYS[playId]||PLAYS.dive; const type=play.kind; const cx=G.los;
     G.playId=playId; G.playType=type;
-    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null;
+    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null;
     G.passState = type==='pass'?'drop':null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0;
     document.getElementById('spinpip').textContent='SPIN READY';
     if(type==='pass'){
@@ -797,7 +812,13 @@
   }
 
   // shared defender stepping for non-user-controlled defenders
-  function tackleHit(d,c){ const sp=Math.hypot(d.vx||0,d.vy||0); const reach=S.tackleR + Math.min(0.45*PPY, sp*0.05); return dist(d,c)<reach; }
+  function tackleHit(d,c){
+    // Reach grows with how fast the defender is closing, so a full-speed hit lands
+    // decisively instead of the two of them jogging alongside each other.
+    const sp=Math.hypot(d.vx||0,d.vy||0);
+    const reach=S.tackleR + Math.min(0.9*PPY, sp*0.085);
+    return dist(d,c)<reach;
+  }
   function stepDefenders(dt,mode,elapsed){
     const c=G.carrier;
     const ds = (G.offense==='user'?G.diff.cpu:G.diff.you);  // whose defenders these are
@@ -1041,7 +1062,14 @@
     }
     if(spot<OWN_GOAL) spot=OWN_GOAL;
     G._spot=spot;
-    if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT'){ spawnBurst(G.carrier.x,G.carrier.y,'#fff5d6',12); G.shake=0.16; SFX.tackle(); SFX.whistle(); }
+    if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT'){
+      // hit impact scales with how fast he was going when he got hit
+      const hitSp=Math.hypot(G.carrier.vx||0,G.carrier.vy||0)/PPY;
+      spawnBurst(G.carrier.x,G.carrier.y,'#fff5d6', 12+Math.round(hitSp*1.6), hitSp>6);
+      G.shake=0.20+Math.min(0.22,hitSp*0.026);
+      G.carrier.vx*=0.15; G.carrier.vy*=0.15;              // stopped dead on contact
+      SFX.tackle(); SFX.whistle(); if(hitSp>6.5) crowdSwell(crowdBase+0.10,1.6);
+    }
     else SFX.whistle();
     if(turnover) spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',16,true);
     const gain=(spot-G.los)/PPY; if(G.offense==='user' && !G._returning) G.longest=Math.max(G.longest,Math.round(gain));
@@ -1072,7 +1100,11 @@
     const go2 = Math.random() < (late ? ([-2,-1,1,2,5].includes(lead)?0.62:0.2) : 0.16);
     if(go2){ G.twoPt=true; const pool=Math.random()<0.5?RUN_PLAYS:PASS_PLAYS; const id=pool[Math.floor(Math.random()*pool.length)];
       setupPlay(id); G.phase='presnap'; G.defCall='balanced'; G.autoSnap=2.6; document.getElementById('defcall').classList.remove('hidden'); setMsg('CPU GOES FOR 2 — pick your D',1.2); }
-    else { G.conv=null; if(Math.random()<0.96) G.cpuScore+=1; G._td=true; G.phase='dead'; G.deadT=1.4; setMsg('CPU EXTRA POINT',1.2); syncHUD(); }
+    else { // CPU extra point — kick it for real instead of silently adding a point
+      G.conv=null; G.kickKind='pat'; G.kickTeam='cpu'; G.phase='fg'; buildFGFormation();
+      const good=Math.random()<0.96;
+      launchFGKick(good, good?0:yd(3.5)*(Math.random()<0.5?1:-1), false);
+      setMsg('CPU EXTRA POINT',1.0); }
   }
   function startPunt(){
     const recv=other(G.offense), net=38+Math.random()*15;
@@ -1089,10 +1121,13 @@
     for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5+0.05); G.blockers.push(mk(retX+yd(20), yy, 70+i)); }
     G.defenders=[]; for(let i=0;i<11;i++){ const yy=fieldTop+W*((i+0.5)/11); G.defenders.push(def(kickX-yd(4+(i%2)*5), yy, 0.12, 30+i,'pursue',null)); } // punt coverage
     G.defenders[0].contain=true; G.defenders[10].contain=true;
-    G.receivers=[]; G.trail=[]; G._koFlight=true;
-    G.ball={active:true, x:kickX, y:fieldMid, fromX:kickX, fromY:fieldMid, tx:retX, ty:fieldMid, t:0, dur:1.1};
+    G.receivers=[]; G.trail=[];
+    // the punter stands off by himself and boots it; coverage releases with the kick
+    G.koKicker=def(kickX+yd(3), fieldMid, 0, 8, 'pursue', null); G.defenders.push(G.koKicker);
+    G._koFlight=true; G._koPhase='punt'; G._koT=0; G._koTee={x:kickX,y:fieldMid};
+    G.ball={active:false};
     G.userDef=(G.offense==='cpu')? nearestDefToBall(): null;
-    setMsg('PUNT IS UP!',1.2); SFX.kick(); crowdSwell(0.08,2);
+    setMsg('PUNT IS UP!',1.2); crowdSwell(0.08,2);
     G.phase='live'; G.snapTime=performance.now();
   }
   function userPunt(){ startPunt(); }
@@ -1134,7 +1169,7 @@
     G.userDef=null;
   }
   function startKick(kind){
-    G.kickKind=kind;
+    G.kickKind=kind; G.kickTeam='user';
     const fy = kind==='pat'? 33 : fgYards(); G.phase='fg'; buildFGFormation();
     const req = kind==='pat'? 42 : Math.max(30,Math.min(95,30+(fy-17)*1.45));
     const aimWin = kind==='pat'? 32 : Math.max(12,30-(fy-17)*0.32);
@@ -1177,7 +1212,10 @@
     b.x=b.fromX+(b.tx-b.fromX)*p; b.y=b.fromY+(b.ty-b.fromY)*p;
     G.cam+=(clampCam(b.x)-G.cam)*Math.min(1,dt*5);
     if(p>=1){ G._fgFlight=false; G.ball={active:false}; const good=G._fgRes, kind=G.kickKind; G.phase='dead'; G.deadT=1.1;
-      if(kind==='pat'){ if(good) G.userScore+=1; G._td=true; G._turn=false; G._fg=false; setMsg(good?'EXTRA POINT IS GOOD':'EXTRA POINT MISSED',1.3); }
+      if(kind==='pat'){ const cpu=(G.kickTeam==='cpu');
+        if(good){ if(cpu) G.cpuScore+=1; else G.userScore+=1; }   // credit whoever actually kicked it
+        G._td=true; G._turn=false; G._fg=false;
+        setMsg((cpu?'CPU ':'')+(good?'EXTRA POINT IS GOOD':'EXTRA POINT MISSED'),1.3); }
       else if(good){ if(G.offense==='user') G.userScore+=3; else G.cpuScore+=3; G._fg=true; G._turn=false; setMsg(G.offense==='user'?'FIELD GOAL — GOOD!':'CPU FIELD GOAL — GOOD',1.4); }
       else { G._fg=false; G._turn=true; G._spot=G.los; setMsg(G.offense==='user'?'FIELD GOAL — NO GOOD':'CPU FG — NO GOOD',1.4); }
       if(good) SFX.roar();
@@ -1185,7 +1223,7 @@
   }
   function cpuKick(fy){
     const prob=Math.max(0.3,Math.min(0.96,(0.92-(fy-20)*0.02)*G.diff.fg)); const good=Math.random()<prob;
-    G.kickKind='fg'; G.phase='fg'; buildFGFormation();
+    G.kickKind='fg'; G.kickTeam=G.offense; G.phase='fg'; buildFGFormation();
     launchFGKick(good, good?0:yd(5)*(Math.random()<0.5?1:-1), !good && Math.random()<0.4);
     setMsg('CPU FIELD GOAL ATTEMPT',0.9);
   }
@@ -1719,9 +1757,9 @@
         if(u.model){
           const goingDown = (want==='tackle');
           const pt = goingDown ? (o.kind==='carry'?1.25:0.85) : 0;
-          u.model.rotation.x += (pt-u.model.rotation.x)*0.16;
+          u.model.rotation.x += (pt-u.model.rotation.x)*0.34;
           const drop = goingDown ? (o.kind==='carry'?0.62:0.34) : 0;
-          u.fall = (u.fall||0) + (drop-(u.fall||0))*0.16;
+          u.fall = (u.fall||0) + (drop-(u.fall||0))*0.34;
         } else u.fall=0;
         // contextual overrides: stiff-arm (carrier) and blocking engagement (linemen)
         if(u.B && !repFrame){
@@ -1738,7 +1776,7 @@
     if(G.ball&&G.ball.active){ ballMesh.visible=true; ballMesh.scale.set(...BALL_FLY); const t=Math.min(1,G.ball.t/G.ball.dur);
       // height, and dh/dt so the ball can be pitched along its own trajectory
       let h, dh;
-      if(G.ball.ko){ const a=21;                       // a real kickoff towers ~60ft
+      if(G.ball.ko){ const a=G.ball.punt?24:21;        // a real kick towers 60-70ft
         h = 0.25+Math.sin(t*Math.PI)*a; dh = Math.PI*Math.cos(t*Math.PI)*a; }
       else if(G.ball.fg){ const a=G.ball.short?4:7.5, k=G.ball.short?1:0.82;
         h = 1+Math.sin(t*Math.PI*k)*a; dh = Math.PI*k*Math.cos(t*Math.PI*k)*a; }
