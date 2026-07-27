@@ -2065,6 +2065,8 @@
   newGame(); G.phase='start';
   document.getElementById('playcall').classList.add('hidden'); document.getElementById('defcall').classList.add('hidden');
   init3D();
+  window.__sim={ get G(){return G;}, update, keys, choosePlay, action, snap, chooseDef,
+    startFG, startKick, fgLock, get ready(){return playersReady;} };
   requestAnimationFrame(loop);
 })();
 </script>
