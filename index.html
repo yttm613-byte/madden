@@ -1008,6 +1008,15 @@
   function updateRun(dt){
     const c=G.carrier;
     if(G.handoff){ G.handoff.t+=dt; if(G.handoff.t>0.45) G.handoff=null; }
+    // During the mesh the back is still taking the handoff, so hold him to a slow
+    // approach instead of letting him sprint away before he has the ball.
+    if(G.handoff && G.runQB && G.handoff.t<0.30){
+      const a=Math.atan2(G.runQB.y-c.y, G.runQB.x-c.x);
+      c.vx=Math.cos(a)*S.carrier*0.42; c.vy=Math.sin(a)*S.carrier*0.42;
+      c.x+=c.vx*dt; c.y+=c.vy*dt;
+      G.cam+=(clampCam(c.x)-G.cam)*Math.min(1,dt*6);
+      return;
+    }
     const ub = (G.ctrlBlocker && G.blockers.indexOf(G.ctrlBlocker)>=0) ? G.ctrlBlocker : null;
     if(G.offense==='user'){
       if(ub){ moveEntity(ub,dt,S.blocker*1.25,S.blocker*1.55); cpuRunAI(c,dt);   // you block; runner is AI
@@ -1067,7 +1076,7 @@
     if(Math.random()>=p) return false;
     // pop it loose
     const a=Math.atan2(c.vy||0,(c.vx||1))+ (Math.random()-0.5)*1.6;
-    G.fumble={ x:c.x, y:c.y, vx:Math.cos(a)*yd(7), vy:Math.sin(a)*yd(7), t:0, dur:1.35,
+    G.fumble={ x:c.x, y:c.y, vx:Math.cos(a)*yd(13), vy:Math.sin(a)*yd(13), t:0, dur:1.5,
                by:G.offense, spot:c.x };
     G.phase='live'; G.shake=0.34; G.flash=0.25;
     spawnBurst(c.x,c.y,'#ffd24a',24,true); SFX.tackle(); crowdSwell(0.26,3);
@@ -1076,7 +1085,16 @@
   }
   function updateFumble(dt){
     const f=G.fumble; f.t+=dt;
-    f.x+=f.vx*dt; f.y+=f.vy*dt; f.vx*=0.90; f.vy*=0.90;        // the ball skids and slows
+    // Time-based damping (was 0.90 PER FRAME, which killed the ball in a third of a
+    // second, let it travel barely a yard, and was framerate-dependent). It now skids
+    // and tumbles a realistic distance, and kicks sideways on each bounce.
+    f.x+=f.vx*dt; f.y+=f.vy*dt;
+    const damp=Math.pow(0.45, dt); f.vx*=damp; f.vy*=damp;
+    f.bt=(f.bt||0)+dt;
+    if(f.bt>0.28 && f.t<0.9){ f.bt=0;                          // an odd-shaped ball bounces crooked
+      const sp=Math.hypot(f.vx,f.vy), a=Math.atan2(f.vy,f.vx)+(Math.random()-0.5)*1.1;
+      f.vx=Math.cos(a)*sp*0.85; f.vy=Math.sin(a)*sp*0.85; }
+    if(f.y<fieldTop+2||f.y>fieldBot-2) f.vy*=-0.6;              // ricochet off the sideline
     f.y=Math.max(fieldTop+2,Math.min(fieldBot-2,f.y));
     // everybody dives on it
     const chase=(e,sp)=>{ const a=Math.atan2(f.y-e.y,f.x-e.x); e.vx=Math.cos(a)*sp; e.vy=Math.sin(a)*sp; e.x+=e.vx*dt; e.y+=e.vy*dt; };
@@ -1861,9 +1879,11 @@
         _spiral += lastDt*(G.ball.fg?14:52);            // a real pass spirals fast
         ballMesh.quaternion.setFromUnitVectors(_spinAxis,_fdir).multiply(_qs.setFromAxisAngle(_spinAxis,_spiral));
       } }
-    else if(G.handoff && G.runQB && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE); const p=Math.min(1,G.handoff.t/0.4);
+    else if(G.handoff && G.runQB && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE);
+      const p=Math.min(1,G.handoff.t/0.34), e=p*p*(3-2*p);
       const qx=WX(G.runQB.x), qz=WZ(G.runQB.y), cx2=WX(G.carrier.x), cz2=WZ(G.carrier.y);
-      ballMesh.position.set(qx+(cx2-qx)*p, 1.0, qz+(cz2-qz)*p); ballMesh.rotation.x+=0.3; }
+      ballMesh.position.set(qx+(cx2-qx)*e, 1.08-Math.sin(e*Math.PI)*0.06, qz+(cz2-qz)*e);
+      ballMesh.rotation.set(0.3, Math.atan2(cx2-qx,cz2-qz), 0.5); }
     else if(_carrierG && (G.phase==='live'||G.phase==='dead') && !G._fgFlight && G.passState!=='air'){
       // Carry the ball in the actual hand/forearm rather than at a fixed body offset,
       // so it stays tucked correctly as the arms pump.
