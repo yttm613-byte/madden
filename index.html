@@ -59,6 +59,16 @@
   #commtog.off{opacity:.4;}
   #comm{position:absolute; left:50%; bottom:70px; transform:translateX(-50%); max-width:78%; font-family:'Oswald',sans-serif; font-weight:600; font-size:clamp(12px,2.7vw,16px); letter-spacing:.01em; color:#eaf2ff; background:rgba(8,12,20,.74); border-left:3px solid var(--gold); padding:6px 13px; border-radius:4px; opacity:0; transition:opacity .25s; pointer-events:none; text-align:center; box-shadow:0 6px 20px rgba(0,0,0,.45);}
   #comm.show{opacity:1;}
+  #poss{position:absolute; left:50%; top:44%; transform:translate(-50%,-50%) scale(.82); z-index:7; opacity:0;
+    font-family:'Anton',sans-serif; font-size:clamp(20px,5.2vw,44px); letter-spacing:.06em; color:#fff;
+    padding:10px 26px; border-radius:10px; white-space:nowrap; pointer-events:none;
+    text-shadow:0 3px 0 rgba(0,0,0,.45); box-shadow:0 10px 34px rgba(0,0,0,.55);
+    transition:opacity .18s, transform .18s;}
+  #poss.show{opacity:1; transform:translate(-50%,-50%) scale(1);}
+  #poss.you{background:linear-gradient(180deg,#2f6bd6,#12305e); border:2px solid #8fc4ff;}
+  #poss.cpu{background:linear-gradient(180deg,#d23b34,#6d1a15); border:2px solid #ff9a8a;}
+  #poss small{display:block; font-family:'Oswald',sans-serif; font-weight:600; font-size:.36em;
+    letter-spacing:.22em; opacity:.85; margin-top:3px;}
   #replay{position:absolute; left:14px; top:12px; z-index:6; display:none; align-items:center; gap:7px; font-family:'Anton',sans-serif; font-size:15px; letter-spacing:.16em; color:#fff; background:rgba(180,20,20,.82); padding:5px 12px; border-radius:4px; box-shadow:0 4px 16px rgba(0,0,0,.5);}
   #replay.show{display:flex;}
   #replay i{width:9px; height:9px; border-radius:50%; background:#fff; animation:rblink 1s infinite;}
@@ -120,6 +130,7 @@
       <div class="tbtn" id="t-sprint">SPRINT</div>
     </div>
 
+    <div id="poss"></div>
     <div id="replay"><i></i>INSTANT REPLAY</div>
     <div id="fstog" title="Fullscreen (F)">⛶</div>
     <div id="qtog" title="Graphics quality">◆ ULTRA</div>
@@ -1302,13 +1313,30 @@
   // ---- HUD ----
   function ordinal(n){ return ['','1st','2nd','3rd','4th'][n]||n+'th'; }
   function ballOn(){ const ya=G.los/PPY; if(Math.abs(ya-60)<0.5) return '50'; if(ya<60) return 'OWN '+Math.max(0,Math.round(ya-10)); return 'OPP '+Math.max(0,Math.round(110-ya)); }
+  // Possession can flip from a punt, kickoff, interception, fumble, downs or a score.
+  // Rather than instrument every one of those paths, watch the value itself.
+  let _lastOff=null;
+  function possessionWatch(){
+    if(!G || G.phase==='start') return;
+    if(_lastOff===null){ _lastOff=G.offense; return; }
+    if(G.offense===_lastOff) return;
+    _lastOff=G.offense;
+    const el=document.getElementById('poss'); if(!el) return;
+    const you=(G.offense==='user');
+    el.className=you?'you':'cpu';
+    el.innerHTML=(you?'YOUR BALL':'CPU BALL')+'<small>'+(you?'OFFENSE — GO SCORE':'DEFENSE — STOP THEM')+'</small>';
+    el.classList.add('show');
+    clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'), 1900);
+    try{ tone(you?520:300,0.16,'triangle',0.10, you?700:220); }catch(e){}
+  }
   function syncHUD(){
+    possessionWatch();
     document.getElementById('v-you').textContent=G.userScore;
     document.getElementById('v-cpu').textContent=G.cpuScore;
     let dd; if(G.firstX>=GOAL_X && (GOAL_X-G.los)/PPY<=10) dd='Goal'; else dd=Math.max(1,Math.round((G.firstX-G.los)/PPY));
     document.getElementById('v-dd').textContent=ordinal(G.down)+' & '+dd;
     const ddc=document.getElementById('sb-dd'); ddc.classList.toggle('you',G.offense==='user'); ddc.classList.toggle('cpu',G.offense==='cpu');
-    document.getElementById('dd-lbl').textContent = G.offense==='user'?'▶ Your Ball':'CPU Ball ◀';
+    document.getElementById('dd-lbl').textContent = G.offense==='user'?'🏈 YOUR BALL':'CPU BALL 🏈';
     document.getElementById('v-on').textContent=ballOn();
     const m=Math.floor(G.clock/60), s=Math.floor(G.clock%60);
     document.getElementById('v-clock').textContent=m+':'+String(s).padStart(2,'0');
