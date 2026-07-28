@@ -171,7 +171,7 @@
       <h1 class="title">GRIDIRON<br>BLITZ<small>HEAD TO HEAD</small></h1>
       <div class="keys">
         <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · <b>Q·E juke</b> · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> change announcer voice.<br>
-        <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down.<br>
+        <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down, and <b>Q/E dives</b> for the tackle (extra reach; miss it and you're on the floor).<br>
         Call your plays, stop the CPU's drives, win on the scoreboard before time runs out.
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
@@ -539,7 +539,7 @@
   addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
     if(k===' ') action(); if(k==='shift') sprintHeld=true;
-    if(k==='q') juke(-1); if(k==='e') juke(1);   // hard lateral cut
+    if(k==='q') juke(-1); if(k==='e') juke(1);   // hard lateral cut (defense: dive tackle)
     if(k==='f') toggleFullscreen();
     if(k==='b') toggleBlockerControl();   // run plays: take control of a lineman and block
     if((k==='1'||k==='2'||k==='3') && G.offense==='user'){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
@@ -578,7 +578,18 @@
     if(G.offense==='user') document.getElementById('spinpip').textContent='SPIN!';
   }
   // Juke: a sharp sideways cut that leaves close defenders grabbing air.
+  // On defense the same key is a DIVE TACKLE. Tackling used to be pure proximity —
+  // you had no way to commit to a hit, which is a big part of why defense felt
+  // hopeless. A dive extends your reach for a moment; miss and you are on the floor.
+  function diveTackle(){
+    const d=G.userDef;
+    if(G.phase!=='live' || G.offense!=='cpu' || !d || (d.diveCd||0)>0) return;
+    d.diveT=0.32; d.diveCd=1.25;
+    const c=G.carrier;
+    if(c){ const a=Math.atan2(c.y-d.y,c.x-d.x); d.vx=Math.cos(a)*S.defSprint*1.5; d.vy=Math.sin(a)*S.defSprint*1.5; }
+  }
   function juke(dir){
+    if(G.offense==='cpu'){ diveTackle(); return; }
     if(G.phase!=='live' || G.offense!=='user' || (G.jukeCd||0)>0) return;
     const c=G.ctrlBlocker||G.carrier; if(!c) return;
     G.jukeCd=1.5; G.jukeT=0.34; G.jukeDir=dir;
@@ -848,6 +859,11 @@
 
     if(G.spinCd>0){ G.spinCd-=dt; if(G.spinCd<=0){ G.spinCd=0; if(G.offense==='user') document.getElementById('spinpip').textContent='SPIN READY'; } }
     if(G.jukeCd>0) G.jukeCd-=dt; if(G.jukeT>0) G.jukeT-=dt; if(G.throwT>0) G.throwT-=dt;
+    // dive tackle: while diveT runs you have extra reach; if it lapses without a
+    // tackle you have committed and missed, so you are slow getting up.
+    { const d=G.userDef;
+      if(d){ if(d.diveCd>0) d.diveCd-=dt;
+        if(d.diveT>0){ d.diveT-=dt; if(d.diveT<=0) d.whiff=Math.max(d.whiff||0,0.45); } } }
     if(G.msgT>0){ G.msgT-=dt; if(G.msgT<=0) setMsg('',0); }
     if(G.selLock>0) G.selLock-=dt;
 
@@ -890,7 +906,8 @@
     // Reach grows with how fast the defender is closing, so a full-speed hit lands
     // decisively instead of the two of them jogging alongside each other.
     const sp=Math.hypot(d.vx||0,d.vy||0);
-    const reach=S.tackleR + Math.min(0.9*PPY, sp*0.085);
+    let reach=S.tackleR + Math.min(0.9*PPY, sp*0.085);
+    if((d.diveT||0)>0) reach += yd(1.15);          // committed dive: real extra reach
     return dist(d,c)<reach;
   }
   function stepDefenders(dt,mode,elapsed){
