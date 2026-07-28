@@ -1761,7 +1761,9 @@
     model.traverse(o=>{ if(o.isMesh && o.material){ const nm=o.material.name||'';
       if(nm==='shirt_0'){ o.material=o.material.clone(); jerseyMat=o.material; jerseyMat.map=desatMap(jerseyMat.map); }
       else if(nm==='Mat.3'){ o.material=o.material.clone(); helmetMats.push(o.material); o.material.map=desatMap(o.material.map);
-        o.material.roughness=0.2; o.material.metalness=0.5; o.material.envMapIntensity=1.9; }          // wet-looking glossy helmet
+        // envMapIntensity 1.9 + metalness 0.5 made the shell mirror the bright stadium,
+        // so the away team's BLACK helmet rendered silver and both teams wore the same lid.
+        o.material.roughness=0.26; o.material.metalness=0.32; o.material.envMapIntensity=0.85; }   // glossy, but the team colour still wins
       // The eyeballs share the 'Bodymat' material name with the skin, so the skin tint
       // was being applied to them too — that is the flesh-coloured, rolled-back look.
       // Identify them by size, NOT by name: the optimizer renames meshes to Object_NN,
@@ -1777,10 +1779,18 @@
         o.material.map=softenSkin(o.material.map, 0.55, 2);
         o.material.normalMap=softenNormalMap(o.material.normalMap, 0.50, 2);
         o.material.roughness=0.78; o.material.metalness=0.0; o.material.envMapIntensity=0.38; }        // skin: matte. Higher env read as oiled-up plastic.
-      else if(nm==='Mat.2_2mat'||nm==='Plastic_Matte'){ o.material=o.material.clone(); trimMats.push(o.material);
-        o.material.map=desatMap(o.material.map); o.material.roughness=0.7; }                           // belt + collar take the team accent
-      else if(nm==='material'||nm==='Mat.8_1'||nm==='Mat.2'||nm==='default'){ o.material=o.material.clone(); maskMats.push(o.material);
-        o.material.map=desatMap(o.material.map); o.material.roughness=0.45; o.material.metalness=0.25; } // facemask/chinstrap: uniform within a team
+      else if(nm==='Plastic_Matte'){ o.material=o.material.clone(); trimMats.push(o.material);
+        o.material.map=desatMap(o.material.map); o.material.roughness=0.7; }                           // collar / jaw pads take the team accent
+      // Corrected by colour-coding each material and shooting the head: `default` is
+      // the FACEMASK (the whole cage, the most visible thing on a player) and
+      // `Mat.2_2mat` is the CHIN CUP — not generic hardware and a belt. With the chin
+      // cup in the accent group it rendered as a big gold blob under the jaw.
+      // These also need low metalness and env: at 0.25/1.0 a dark navy washed out to
+      // pale grey under the stadium rig, which is the "funny helmet" look.
+      else if(nm==='material'||nm==='Mat.8_1'||nm==='Mat.2'||nm==='default'||nm==='Mat.2_2mat'){
+        o.material=o.material.clone(); maskMats.push(o.material);
+        o.material.map=desatMap(o.material.map);
+        o.material.roughness=0.62; o.material.metalness=0.10; o.material.envMapIntensity=0.35; }
       else if(nm==='Default'){ o.material=o.material.clone(); sockMats.push(o.material); o.material.map=desatMap(o.material.map);
         o.material.roughness=0.9; o.material.metalness=0.0; }                                          // socks
       else if(nm==='pants'||nm==='Fabric-Linen'||nm==='Fabric-Silk'){ o.material=o.material.clone();
@@ -1809,12 +1819,18 @@
     { const kit={};
       model.traverse(o=>{ if(o.isMesh && o.material){ const n=o.material.name||''; (kit[n]=kit[n]||[]).push(o); } });
       const pickOf=a=>a[(Math.random()*a.length)|0];
-      // visor: worn by some, either smoked or a light tint
-      const wearsVisor=Math.random()<0.45;
+      // Visor. Worn by most players here rather than a minority, and smoked darker,
+      // because it is also the only thing that can shade the face: the head mesh in
+      // this asset has torn polygons across the cheeks (verified against the untouched
+      // source, so it is not something the optimiser did) and it cannot be fixed
+      // without replacing the head. Behind a dark visor it reads as a shadowed face,
+      // which is what a real helmet interior looks like anyway.
+      const wearsVisor=Math.random()<0.82;
       for(const o of (kit['frosted_glass']||[])){ o.visible=wearsVisor;
         if(wearsVisor){ o.material=o.material.clone();
-          o.material.color.setHex(pickOf([0x0d0d12,0x0d0d12,0x24405e,0x3a2a12]));
-          o.material.transparent=true; o.material.opacity=0.62; o.material.roughness=0.12; o.material.metalness=0.35; } }
+          o.material.color.setHex(pickOf([0x090a0e,0x090a0e,0x0d1420,0x18120a]));
+          o.material.transparent=true; o.material.opacity=0.88; o.material.roughness=0.10; o.material.metalness=0.45;
+          o.material.envMapIntensity=1.5; } }                 // keep the glassy highlight
       // cleats
       for(const o of (kit['sepatu_key.obj']||[])){ o.material=o.material.clone();
         o.material.color.setHex(pickOf([0x101014,0x101014,0xf0f0f2,0xc9302c,0x1d4ea8])); }
@@ -2153,8 +2169,8 @@
           // (red lid, red socks) had no internal contrast and read as a pink blob, so
           // the away team is red-on-black against the home royal-on-silver.
           const C = team==='user'
-            ? {jersey:0x1e58d8, helmet:0xe8ecf4, trim:0xf0b429, mask:0x2a3140, sock:0x1e58d8}   // home: royal, silver lid, gold trim
-            : {jersey:0xa5131d, helmet:0x15171d, trim:0xe6e8ee, mask:0x15171d, sock:0x15171d};  // away: deep red, black lid, white trim
+            ? {jersey:0x1e58d8, helmet:0xe8ecf4, trim:0xf0b429, mask:0x10131a, sock:0x1e58d8}   // home: royal, silver lid, gold trim, black cage
+            : {jersey:0xa5131d, helmet:0x15171d, trim:0xe6e8ee, mask:0x0e1014, sock:0x15171d};  // away: deep red, black lid, white trim
           if(u.jerseyMat) u.jerseyMat.color.setHex(C.jersey);
           for(const m of u.helmetMats) m.color.setHex(C.helmet);
           for(const m of u.trimMats)   m.color.setHex(C.trim);
