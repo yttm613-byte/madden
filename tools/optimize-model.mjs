@@ -91,6 +91,45 @@ for (const mesh of doc.getRoot().listMeshes()) {
   }
 }
 
+// Smooth the SKIN normals across UV seams.
+//
+// The body mesh has 2,467 of 13,944 vertices sitting at duplicate positions — it was
+// stitched together from converted parts, and every UV/material seam splits a vertex.
+// Split vertices carry independent normals, so the two halves of a seam shade
+// differently and the surface breaks into hard angular facets. That is the shredded
+// look on the face and the banding on the arms; it is NOT torn geometry, which is why
+// removing every texture map never helped.
+//
+// Fix: average each vertex normal across all vertices that share a position, then write
+// the same normal back to each. Seams shade continuously again, and because the
+// vertices stay split the UVs are untouched.
+function smoothNormalsAcrossSeams(prim){
+  const pos = prim.getAttribute('POSITION'), nor = prim.getAttribute('NORMAL');
+  if (!pos || !nor) return 0;
+  const n = pos.getCount(), acc = new Map(), p = [0,0,0], q = [0,0,0];
+  for (let i = 0; i < n; i++) {
+    pos.getElement(i, p); nor.getElement(i, q);
+    const k = `${p[0].toFixed(4)},${p[1].toFixed(4)},${p[2].toFixed(4)}`;
+    const a = acc.get(k); if (a) { a[0]+=q[0]; a[1]+=q[1]; a[2]+=q[2]; a[3]++; }
+    else acc.set(k, [q[0],q[1],q[2],1]);
+  }
+  let welded = 0;
+  for (let i = 0; i < n; i++) {
+    pos.getElement(i, p);
+    const k = `${p[0].toFixed(4)},${p[1].toFixed(4)},${p[2].toFixed(4)}`;
+    const a = acc.get(k); if (!a || a[3] < 2) continue;
+    const L = Math.hypot(a[0],a[1],a[2]) || 1;
+    nor.setElement(i, [a[0]/L, a[1]/L, a[2]/L]);
+    welded++;
+  }
+  return welded;
+}
+let smoothed = 0;
+for (const mesh of doc.getRoot().listMeshes())
+  for (const prim of mesh.listPrimitives())
+    if ((prim.getMaterial() && prim.getMaterial().getName()) === 'Bodymat')
+      smoothed += smoothNormalsAcrossSeams(prim);
+
 // NB: no prune() here. Running one after simplification removed the Skin, which
 // would leave the model rigid.
 await doc.transform(
@@ -140,6 +179,7 @@ const afterTris = triCount(doc);
 console.log(`in : ${(beforeBytes/1e6).toFixed(1)}MB  ${Math.round(beforeTris).toLocaleString()} tris`);
 console.log(`out: ${(glb.byteLength/1e6).toFixed(2)}MB  ${Math.round(afterTris).toLocaleString()} tris  @${TEX_SIZE}px`);
 console.log(`     textures ${(texBytes/1e6).toFixed(2)}MB (${(100*texBytes/glb.byteLength).toFixed(0)}% of file), geometry ${(100*(glb.byteLength-texBytes)/glb.byteLength).toFixed(0)}%`);
+console.log(`     skin normals smoothed across seams: ${smoothed} vertices`);
 console.log('     per-part triangle budget (share of the model is what matters):');
 for (const [name, k] of Object.entries(kept).sort((a, b) => b[1].after - a[1].after))
   console.log(`       ${name.padEnd(16)} ${String(Math.round(k.before)).padStart(7)} -> ${String(Math.round(k.after)).padStart(6)}  ${(100*k.after/afterTris).toFixed(1).padStart(5)}%`);
