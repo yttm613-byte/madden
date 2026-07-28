@@ -2179,7 +2179,12 @@
       // height, and dh/dt so the ball can be pitched along its own trajectory
       let h, dh;
       if(G.ball.ko){ const a=G.ball.punt?24:21;        // a real kick towers 60-70ft
-        h = 0.25+Math.sin(t*Math.PI)*a; dh = Math.PI*Math.cos(t*Math.PI)*a; }
+        // Land it in his HANDS. The old arc was a pure sine, so at t=1 it returned to
+        // h=0.25 — ankle height — and every kickoff and punt ended with the ball
+        // dropping to the turf as the returner "caught" it. Ride a baseline from the
+        // tee up to chest height across the flight, the way the pass arc already does.
+        h  = 0.35 + (1.35-0.35)*t + Math.sin(t*Math.PI)*a;
+        dh = (1.35-0.35)          + Math.PI*Math.cos(t*Math.PI)*a; }
       else if(G.ball.fg){ const a=G.ball.short?4:7.5, k=G.ball.short?1:0.82;
         h = 1+Math.sin(t*Math.PI*k)*a; dh = Math.PI*k*Math.cos(t*Math.PI*k)*a; }
       else { // pass: leaves the QB's hand, arrives at chest height, arc scaled to the throw
