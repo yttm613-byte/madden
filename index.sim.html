@@ -226,6 +226,7 @@
     throw:()=>{ tone(420,0.09,'triangle',0.08,260); },
     catch:()=>{ tone(520,0.08,'sine',0.1); },
     kick:()=>{ noise(0.1,0.18,2000); tone(220,0.12,'sine',0.16,120); },
+    dive:()=>{ noise(0.13,0.20,2600); tone(300,0.10,'triangle',0.07,150); },   // defensive lunge
     roar:()=>{ if(!actx||muted) return; noise(0.9,0.22,900); tone(330,0.5,'sawtooth',0.05,520); tone(440,0.5,'sawtooth',0.04,660); },
   };
   // ---- ambient crowd ----
@@ -587,6 +588,9 @@
     d.diveT=0.32; d.diveCd=1.25;
     const c=G.carrier;
     if(c){ const a=Math.atan2(c.y-d.y,c.x-d.x); d.vx=Math.cos(a)*S.defSprint*1.5; d.vy=Math.sin(a)*S.defSprint*1.5; }
+    // it has to FEEL like you committed to something
+    SFX.dive(); spawnBurst(d.x,d.y,'#9fe8ff',7);
+    document.getElementById('spinpip').textContent='DIVE!';
   }
   function juke(dir){
     if(G.offense==='cpu'){ diveTackle(); return; }
@@ -863,7 +867,11 @@
     // tackle you have committed and missed, so you are slow getting up.
     { const d=G.userDef;
       if(d){ if(d.diveCd>0) d.diveCd-=dt;
-        if(d.diveT>0){ d.diveT-=dt; if(d.diveT<=0) d.whiff=Math.max(d.whiff||0,0.45); } } }
+        if(d.diveT>0){ d.diveT-=dt; if(d.diveT<=0) d.whiff=Math.max(d.whiff||0,0.45); } }
+      // the pip is a spin meter on offense; on defense it doubles as the dive meter
+      if(G.offense==='cpu' && !(d&&d.diveT>0)){
+        const el=document.getElementById('spinpip'), want=(d&&d.diveCd>0)?'DIVE…':'DIVE READY';
+        if(el.textContent!==want) el.textContent=want; } }
     if(G.msgT>0){ G.msgT-=dt; if(G.msgT<=0) setMsg('',0); }
     if(G.selLock>0) G.selLock-=dt;
 
