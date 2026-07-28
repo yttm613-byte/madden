@@ -25,7 +25,11 @@
   #stage:focus,#stage:focus-visible{outline:none;}
   canvas{display:block; width:100%; height:100%;}
   #gl{position:absolute; inset:0;} #gl canvas{display:block; width:100%; height:100%;}
-  #msg{position:absolute; left:50%; top:26%; transform:translate(-50%,-50%); font-family:'Anton',sans-serif; font-size:clamp(22px,6vw,52px); letter-spacing:.04em; color:#fff; text-shadow:0 4px 0 rgba(0,0,0,.45),0 0 24px rgba(0,0,0,.6); opacity:0; transition:opacity .2s; pointer-events:none; text-align:center; white-space:nowrap;}
+  /* Was clamp(22px,6vw,52px) at top:26% — the banner spanned the full width and sat
+     right over the play. Now that the camera frames the action tightly instead of
+     showing 44 yards of empty grass, that covered the thing you are looking at.
+     Smaller, higher, and on a plate so it stays readable over the field. */
+  #msg{position:absolute; left:50%; top:13%; transform:translate(-50%,-50%); font-family:'Anton',sans-serif; font-size:clamp(15px,3.1vw,30px); letter-spacing:.05em; color:#fff; text-shadow:0 2px 0 rgba(0,0,0,.5); opacity:0; transition:opacity .2s; pointer-events:none; text-align:center; white-space:nowrap; background:rgba(6,10,18,.5); padding:4px 16px; border-radius:8px; backdrop-filter:blur(2px);}
   #msg.show{opacity:1;}
   #stamina{position:absolute; left:10px; bottom:10px; width:120px; height:9px; background:rgba(0,0,0,.45); border-radius:6px; overflow:hidden; border:1px solid rgba(255,255,255,.25);}
   #stamina i{display:block; height:100%; background:linear-gradient(90deg,#ffd24a,#ff8a3d);}
