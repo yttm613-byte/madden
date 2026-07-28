@@ -857,14 +857,14 @@
 
     if(G.phase==='presnap'){
       if(G.offense==='cpu'){ G.autoSnap-=dt; if(G.autoSnap<=0) snap();
-        if(G.userDef){ moveEntity(G.userDef,dt,S.def,S.defSprint); if(G.userDef.x<G.los+yd(0.5)) G.userDef.x=G.los+yd(0.5); } }
+        if(G.userDef){ moveEntity(G.userDef,dt,userDefBase(),userDefSprint()); if(G.userDef.x<G.los+yd(0.5)) G.userDef.x=G.los+yd(0.5); } }
       syncHUD(); return;
     }
 
     // live
     if(G.fumble){ updateFumble(dt); syncHUD(); return; }
     if(G._koFlight){ updateKickoffFlight(dt); syncHUD(); return; }
-    if(G.offense==='cpu' && G.userDef) moveEntity(G.userDef,dt,S.def,S.defSprint);
+    if(G.offense==='cpu' && G.userDef) moveEntity(G.userDef,dt,userDefBase(),userDefSprint());
     G.playT=(G.playT||0)+dt;
     const elapsed=G.playT;      // game time, so tabbing away cannot kill a play
     if(elapsed>14){ // play clock: nothing lasts forever
@@ -879,6 +879,13 @@
   }
 
   // shared defender stepping for non-user-controlled defenders
+  // The defender YOU control was pinned to S.defSprint (9.2 yd/s) while the CPU ball
+  // carrier runs cpuSprint*diff.cpu — 9.4 on Pro, 10.9 on All-Pro. A stern chase could
+  // therefore never catch him at any difficulty, which is what "impossible to tackle"
+  // actually was. Give the controlled defender a small closing edge, and never scale
+  // him DOWN on All-Pro: difficulty belongs in the CPU's speed, not in crippling you.
+  function userDefSprint(){ return S.defSprint*Math.max(1,G.diff.you)*1.08; }
+  function userDefBase(){   return S.def      *Math.max(1,G.diff.you); }
   function tackleHit(d,c){
     // Reach grows with how fast the defender is closing, so a full-speed hit lands
     // decisively instead of the two of them jogging alongside each other.
@@ -2232,9 +2239,16 @@
       camLook.lerp(new THREE.Vector3(cx, 1.4, cz), 0.18);
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(G.carrier){ const cx=WX(G.carrier.x), cz=WZ(G.carrier.y);
-      // broadcast-style chase: higher and further back, biased toward the middle of the field
-      const cmid=cz+(WZ(fieldMid)-cz)*0.25;
-      camPos.lerp(new THREE.Vector3(cx-18,13.0,cmid),0.07); camLook.lerp(new THREE.Vector3(cx+12,1.6,cz),0.10);
+      // Broadcast chase. The old rig sat 18 back / 13 high and looked 12 AHEAD of the
+      // carrier, which framed ~44 yards of field and pushed the whole 22-man scrum into
+      // the bottom corner — players were specks and you could not tell who you were
+      // controlling on defense. Pulled in to frame ~34 yards with the carrier nearer
+      // the middle, at a lower angle so less empty grass fills the shot. Widens on a
+      // dropback so the routes still fit.
+      const wide=(G.passState==='drop'||G.passState==='air')?1.22:1.0;
+      const cmid=cz+(WZ(fieldMid)-cz)*0.20;
+      camPos.lerp(new THREE.Vector3(cx-13*wide,8.2*wide,cmid),0.10);
+      camLook.lerp(new THREE.Vector3(cx+6*wide,1.5,cz),0.13);
       const s=G.shake>0?Math.min(0.45,G.shake*2.4):0;
       camera.position.set(camPos.x+(Math.random()-0.5)*s, camPos.y+(Math.random()-0.5)*s, camPos.z+(Math.random()-0.5)*s);
       camera.lookAt(camLook); }
