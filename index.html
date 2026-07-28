@@ -1605,6 +1605,13 @@
     const maxAniso = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 8;
     const seen=new Set();
     root.traverse(o=>{ if(!o.isMesh||!o.material) return;
+      // The build bakes ambient occlusion into COLOR_0 (see tools/optimize-model.mjs).
+      // three ignores vertex colours unless the material opts in, so switch it on
+      // wherever the attribute actually exists — this is what puts contact shadow in
+      // the neck, under the shoulder pads and along the cloth folds.
+      if(o.geometry && o.geometry.attributes && o.geometry.attributes.color){
+        for(const mm of (Array.isArray(o.material)?o.material:[o.material])) if(mm) mm.vertexColors=true;
+      }
       for(const m of (Array.isArray(o.material)?o.material:[o.material])){
         if(!m) continue;
         for(const slot of ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap']){
@@ -1615,6 +1622,7 @@
         // Deepen fabric/pad relief — but NOT on skin. At 1.6 the body normal map's
         // muscle striations amplified into hard horizontal banding down the arms.
         if(m.normalMap && m.normalScale){ const s=(m.name==='Bodymat')?0.50:1.6; m.normalScale.set(s,s); }
+        m.needsUpdate=true;
         m.needsUpdate=true;
       }});
     return maxAniso;
