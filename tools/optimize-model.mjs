@@ -281,6 +281,147 @@ await doc.transform(
 );
 
 const sharp = (await import('sharp')).default;
+
+// ---- paint a new face ------------------------------------------------------------
+//
+// The last cheap thing about this asset is the FACE TEXTURE: a small blotchy painted
+// patch inside the shared body atlas, full of photographic noise that reads as dirt at
+// any distance. So paint a new one instead of shipping theirs.
+//
+// The head's UV island is not a neat rectangle — its bounding box also contains 18% of
+// the BODY's vertices, so painting a rect would destroy the torso. Instead rasterise
+// the head TRIANGLES into UV space to get an exact per-texel mask, and interpolate each
+// texel's 3D position while doing it. That 3D position is what makes this possible
+// without guessing the UV layout: features get placed by where a texel actually sits on
+// the head (chin to crown, left to right, front to back), not by where it lands in the
+// atlas.
+async function paintFace(doc, sharp){
+  let prim = null, mat = null;
+  for (const mesh of doc.getRoot().listMeshes())
+    for (const p of mesh.listPrimitives()) {
+      const m = p.getMaterial(); if (!m || m.getName() !== 'Bodymat') continue;
+      const idx = p.getIndices(); if (!idx || idx.getCount()/3 < 4000) continue;   // skip eyes
+      prim = p; mat = m;
+    }
+  if (!prim) return 'no body primitive';
+  const tex = mat.getBaseColorTexture(); if (!tex) return 'no base texture';
+
+  const img = await sharp(Buffer.from(tex.getImage()));
+  const meta = await img.metadata();
+  const W = meta.width, H = meta.height;
+  const { data } = await img.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+
+  const pos = prim.getAttribute('POSITION'), uv = prim.getAttribute('TEXCOORD_0'), idx = prim.getIndices();
+  const nV = pos.getCount(), v = [0,0,0];
+  let maxY=-1e9, minY=1e9;
+  for (let i=0;i<nV;i++){ pos.getElement(i,v); if(v[1]>maxY)maxY=v[1]; if(v[1]<minY)minY=v[1]; }
+  // Reach LOWER than the denoise cut (0.17). At 0.17 the chin and upper neck fell
+  // outside the mask and kept the original blotchy texture, which is what was still
+  // mottling the jaw. Paint further down; unlike denoising, repainting the neck is free.
+  const cut = maxY - (maxY-minY)*0.235;
+
+  // head bounds, for the normalised face frame
+  const faceCut = maxY - (maxY-minY)*0.17;      // the head proper, for feature placement
+  let hx0=1e9,hx1=-1e9,hy0=1e9,hy1=-1e9,hz0=1e9,hz1=-1e9;
+  for (let i=0;i<nV;i++){ pos.getElement(i,v); if(v[1]<faceCut) continue;
+    hx0=Math.min(hx0,v[0]); hx1=Math.max(hx1,v[0]);
+    hy0=Math.min(hy0,v[1]); hy1=Math.max(hy1,v[1]);
+    hz0=Math.min(hz0,v[2]); hz1=Math.max(hz1,v[2]); }
+  const cx=(hx0+hx1)/2, cz=(hz0+hz1)/2, halfW=(hx1-hx0)/2||1, halfD=(hz1-hz0)/2||1, hH=(hy1-hy0)||1;
+
+  const P=[[0,0,0],[0,0,0],[0,0,0]], T=[[0,0],[0,0],[0,0]];
+  const mask=new Uint8Array(W*H);
+  let painted = 0;
+  for (let t=0; t<idx.getCount(); t+=3) {
+    const a=idx.getScalar(t), b=idx.getScalar(t+1), c=idx.getScalar(t+2);
+    pos.getElement(a,P[0]); pos.getElement(b,P[1]); pos.getElement(c,P[2]);
+    if (P[0][1]<cut || P[1][1]<cut || P[2][1]<cut) continue;          // head triangles only
+    uv.getElement(a,T[0]); uv.getElement(b,T[1]); uv.getElement(c,T[2]);
+    const x0=T[0][0]*W, y0=T[0][1]*H, x1=T[1][0]*W, y1=T[1][1]*H, x2=T[2][0]*W, y2=T[2][1]*H;
+    const den=(y1-y2)*(x0-x2)+(x2-x1)*(y0-y2); if (Math.abs(den)<1e-9) continue;
+    const bx0=Math.max(0,Math.floor(Math.min(x0,x1,x2))), bx1=Math.min(W-1,Math.ceil(Math.max(x0,x1,x2)));
+    const by0=Math.max(0,Math.floor(Math.min(y0,y1,y2))), by1=Math.min(H-1,Math.ceil(Math.max(y0,y1,y2)));
+    for (let py=by0; py<=by1; py++) for (let px=bx0; px<=bx1; px++) {
+      const l0=((y1-y2)*(px+0.5-x2)+(x2-x1)*(py+0.5-y2))/den;
+      const l1=((y2-y0)*(px+0.5-x2)+(x0-x2)*(py+0.5-y2))/den;
+      const l2=1-l0-l1;
+      if (l0<-0.002||l1<-0.002||l2<-0.002) continue;
+      // this texel's position on the head
+      const wx=l0*P[0][0]+l1*P[1][0]+l2*P[2][0];
+      const wy=l0*P[0][1]+l1*P[1][1]+l2*P[2][1];
+      const wz=l0*P[0][2]+l1*P[1][2]+l2*P[2][2];
+      const fy=(wy-hy0)/hH;                    // 0 chin .. 1 crown
+      const fx=(wx-cx)/halfW;                  // -1 .. 1 across
+      const fz=(wz-cz)/halfD;                  // +1 = front of the face
+      const front=Math.max(0,fz);
+
+      // Base skin, painted rather than photographed: warm, slightly deeper toward the
+      // sides of the head so it turns without relying on the noisy source map.
+      let r=196, g=150, b=126;
+      const side=Math.min(1,Math.abs(fx));
+      r-=side*22; g-=side*18; b-=side*15;
+
+      // brow ridge shadow
+      const brow=Math.exp(-Math.pow((fy-0.66)/0.055,2))*front;
+      r-=brow*38; g-=brow*32; b-=brow*27;
+      // eye sockets, left and right
+      for (const s of [-1,1]) {
+        const e=Math.exp(-Math.pow((fy-0.60)/0.05,2))*Math.exp(-Math.pow((fx-s*0.42)/0.20,2))*front;
+        r-=e*46; g-=e*40; b-=e*34;
+      }
+      // nose: a soft highlight down the centre with shadow either side
+      const noseC=Math.exp(-Math.pow((fy-0.50)/0.13,2))*Math.exp(-Math.pow(fx/0.11,2))*front;
+      r+=noseC*16; g+=noseC*12; b+=noseC*10;
+      const noseS=Math.exp(-Math.pow((fy-0.47)/0.10,2))*Math.exp(-Math.pow((Math.abs(fx)-0.19)/0.07,2))*front;
+      r-=noseS*26; g-=noseS*24; b-=noseS*21;
+      // lips
+      const lip=Math.exp(-Math.pow((fy-0.30)/0.045,2))*Math.exp(-Math.pow(fx/0.26,2))*front;
+      r+=lip*26; g-=lip*10; b-=lip*4;
+      // jaw and upper lip stubble, cool and slightly darker
+      const stub=Math.max(0, Math.exp(-Math.pow((fy-0.20)/0.14,2)) - 0.15)*front;
+      r-=stub*30; g-=stub*26; b-=stub*18;
+      // cheek warmth
+      for (const s of [-1,1]) {
+        const ch=Math.exp(-Math.pow((fy-0.42)/0.12,2))*Math.exp(-Math.pow((fx-s*0.55)/0.22,2))*front;
+        r+=ch*14; g+=ch*4; b+=ch*2;
+      }
+
+      const o=(py*W+px)*4;
+      data[o]  =Math.max(0,Math.min(255,r));
+      data[o+1]=Math.max(0,Math.min(255,g));
+      data[o+2]=Math.max(0,Math.min(255,b));
+      mask[py*W+px]=1;
+      painted++;
+    }
+  }
+  const out = await sharp(data, { raw: { width: W, height: H, channels: 4 } }).png().toBuffer();
+  tex.setImage(new Uint8Array(out)).setMimeType('image/png');
+
+  // The diffuse alone is not enough: the NORMAL and ROUGHNESS maps carry the same
+  // photographic scan detail, and it kept showing through as a faint "braces" pattern
+  // across the jaw. Neutralise both inside the identical mask so the painted face is
+  // lit by its own geometry instead of someone's pores.
+  const neutralise = async (t2, flat) => {
+    if (!t2) return 0;
+    const im = sharp(Buffer.from(t2.getImage()));
+    const md = await im.metadata();
+    if (md.width !== W || md.height !== H) return 0;      // masks are only valid at matching size
+    const { data: d2 } = await im.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let k = 0;
+    for (let i = 0; i < W*H; i++) {
+      if (!mask[i]) continue;
+      d2[i*4] = flat[0]; d2[i*4+1] = flat[1]; d2[i*4+2] = flat[2]; k++;
+    }
+    const o2 = await sharp(d2, { raw: { width: W, height: H, channels: 4 } }).png().toBuffer();
+    t2.setImage(new Uint8Array(o2)).setMimeType('image/png');
+    return k;
+  };
+  const nrmN = await neutralise(mat.getNormalTexture(), [128,128,255]);          // flat normal
+  const mrN  = await neutralise(mat.getMetallicRoughnessTexture(), [0,170,0]);   // G = roughness
+  return `${painted} diffuse texels, ${nrmN} normal, ${mrN} roughness on a ${W}x${H} atlas`;
+}
+const faceReport = (process.env.FACE_PAINT === '0') ? 'skipped' : await paintFace(doc, sharp);
+
 await doc.transform(textureCompress({
   encoder: sharp, targetFormat: 'webp', quality: QUALITY, resize: [TEX_SIZE, TEX_SIZE], resizeFilter: 'lanczos3',
 }));
@@ -320,6 +461,7 @@ const afterTris = triCount(doc);
 console.log(`in : ${(beforeBytes/1e6).toFixed(1)}MB  ${Math.round(beforeTris).toLocaleString()} tris`);
 console.log(`out: ${(glb.byteLength/1e6).toFixed(2)}MB  ${Math.round(afterTris).toLocaleString()} tris  @${TEX_SIZE}px`);
 console.log(`     textures ${(texBytes/1e6).toFixed(2)}MB (${(100*texBytes/glb.byteLength).toFixed(0)}% of file), geometry ${(100*(glb.byteLength-texBytes)/glb.byteLength).toFixed(0)}%`);
+console.log(`     face repainted: ${faceReport}`);
 console.log(`     ambient occlusion baked into COLOR_0: ${aoVerts} vertices (strength ${AO_STRENGTH})`);
 console.log(`     head denoised: ${denoised} position-groups, ${HEAD_ITERS} iterations`);
 console.log(`     skin normals smoothed across seams: ${smoothed} vertices`);
