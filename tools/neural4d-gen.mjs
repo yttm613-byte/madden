@@ -11,9 +11,11 @@
  * registry.npmjs.org is outside the sandbox egress allowlist, and this step must work
  * regardless of that.
  *
- * The endpoint layout is env-overridable because Neural4D publishes its contract in a
- * dashboard PDF rather than a machine-readable spec. Defaults follow the documented
- * names; override N4D_BASE / N4D_GEN_PATH / N4D_STATUS_PATH if they move.
+ * Neural4D publishes its contract as a dashboard PDF of page images, so the layout
+ * below was read out of their own web client instead (the Nuxt runtime config names
+ * BASE_URL and GENERATE_BASE_URL, and the bundles call the /models/* routes). Note
+ * the port: the whole API is on :3000, which is why every path 404s on :443.
+ * Override N4D_BASE / N4D_GEN_PATH / N4D_STATUS_PATH if they move.
  */
 import fs from 'fs';
 import path from 'path';
@@ -21,9 +23,13 @@ import path from 'path';
 const KEY = process.env.N4D_API_KEY;
 if (!KEY) { console.error('N4D_API_KEY is not set — get one at https://www.neural4d.com/api'); process.exit(1); }
 
-const BASE        = process.env.N4D_BASE        || 'https://alb.neural4d.com';
-const GEN_PATH    = process.env.N4D_GEN_PATH    || '/api/generateModelWithText';
-const STATUS_PATH = process.env.N4D_STATUS_PATH || '/api/queryModelStatus';
+const BASE        = process.env.N4D_BASE        || 'https://alb.neural4d.com:3000';
+// Two surfaces exist and only one key type reaches each: the developer API documented
+// on the blog, and the /models/* routes their own web client uses. Try both rather
+// than betting on one — a wrong guess here costs a confusing 404, not a failed model.
+const GEN_PATHS   = (process.env.N4D_GEN_PATH    || '/api/generateModelWithText,/models/generate').split(',');
+const STATUS_PATH = process.env.N4D_STATUS_PATH || '/models/checkModelConversionStatus';
+const DL_PATH     = process.env.N4D_DL_PATH     || '/models/getModelDownloading';
 const OUT         = process.argv[2] || 'assets/fbplayer_src.glb';
 const SPEC        = process.env.N4D_SPEC        || 'PLAYER_MODEL_PROMPT.md';
 const POLL_MS     = +(process.env.N4D_POLL_MS   || 10000);
@@ -60,11 +66,30 @@ const dig = (o, re, depth = 0) => {
 };
 
 // ---- submit ----------------------------------------------------------------------
-console.log(`POST ${BASE}${GEN_PATH}`);
-const submitted = await jsonOrThrow(await fetch(BASE + GEN_PATH, {
-  method: 'POST', headers,
-  body: JSON.stringify({ prompt, modelCount: 1, disablePbr: 0 }),
-}), 'generate');
+let submitted = null;
+for (const p of GEN_PATHS) {
+  console.log(`POST ${BASE}${p}`);
+  let res;
+  try {
+    res = await fetch(BASE + p, {
+      method: 'POST', headers,
+      body: JSON.stringify({ prompt, modelCount: 1, disablePbr: 0 }),
+    });
+  } catch (e) {
+    const code = (e.cause && e.cause.code) || e.message;
+    const port = new URL(BASE).port;
+    console.error(`\ncannot reach ${BASE} (${code})`);
+    if (port && port !== '443')
+      console.error(`The whole Neural4D API is on port ${port}. Sandboxes that allow only 443\n` +
+                    `reach the host but not the API — allow ${new URL(BASE).hostname}:${port} in the\n` +
+                    `environment's network egress settings, or run this where that port is open.`);
+    process.exit(1);
+  }
+  if (res.status === 404) { console.log('  404 — not this surface, trying the next'); continue; }
+  submitted = await jsonOrThrow(res, 'generate');
+  break;
+}
+if (!submitted) { console.error(`no generate endpoint answered on ${BASE} — tried ${GEN_PATHS.join(', ')}`); process.exit(1); }
 
 const uuid = dig(submitted, /^(uuid|id|taskId|task_id|jobId)$/i);
 if (!uuid) { console.error('no job id in response:', JSON.stringify(submitted).slice(0, 600)); process.exit(1); }
@@ -76,9 +101,23 @@ let url = null;
 while (!url) {
   if (Date.now() - started > TIMEOUT_MS) { console.error(`timed out after ${TIMEOUT_MS / 1000}s`); process.exit(1); }
   await new Promise(r => setTimeout(r, POLL_MS));
-  const st = await jsonOrThrow(await fetch(`${BASE}${STATUS_PATH}?uuid=${encodeURIComponent(uuid)}`, { headers }), 'status');
+  // Their web client polls this as a POST carrying modelIds; the documented developer
+  // surface takes a uuid on the query string. Try the POST, fall back to the GET.
+  let res = await fetch(BASE + STATUS_PATH, {
+    method: 'POST', headers, body: JSON.stringify({ modelIds: [uuid], modelSize: 2 }),
+  });
+  if (res.status === 404 || res.status === 405)
+    res = await fetch(`${BASE}${STATUS_PATH}?uuid=${encodeURIComponent(uuid)}`, { headers });
+  const st = await jsonOrThrow(res, 'status');
   const state = dig(st, /^(status|state)$/i) || '?';
-  const found = dig(st, /glb|modelUrl|model_url|downloadUrl|fileUrl/i);
+  let found = dig(st, /glb|modelUrl|model_url|downloadUrl|fileUrl/i);
+  // A finished job may only expose its file through the download route.
+  if (!found && /(succe|finish|done|complete)/i.test(state)) {
+    const dl = await fetch(BASE + DL_PATH, {
+      method: 'POST', headers, body: JSON.stringify({ modelIds: [uuid], modelSize: 2 }),
+    });
+    if (dl.ok) found = dig(await dl.json().catch(() => ({})), /glb|url/i);
+  }
   console.log(`  [${((Date.now() - started) / 1000).toFixed(0)}s] ${state}`);
   if (found && /^https?:\/\//.test(found)) url = found;
   else if (/fail|error|cancel/i.test(state)) { console.error('job failed:', JSON.stringify(st).slice(0, 600)); process.exit(1); }
