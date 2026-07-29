@@ -7,7 +7,12 @@
  * judged in one command instead of being discovered the slow way. Every check here
  * exists because the current free asset failed it and cost hours to diagnose.
  */
-import { NodeIO } from '@gltf-transform/core';
+// Prefer the real library; fall back to the built-in reader so a model can still be
+// graded where `npm install` cannot run (sandbox egress allowlists routinely exclude
+// registry.npmjs.org). Same checks, same numbers — see tools/glb-lite.mjs.
+let NodeIO;
+try { ({ NodeIO } = await import('@gltf-transform/core')); }
+catch { ({ NodeIO } = await import('./glb-lite.mjs')); console.error('note: @gltf-transform/core is not installed, using the built-in GLB reader'); }
 
 const file = process.argv[2];
 if (!file) { console.error('usage: node tools/adopt-model.mjs <model.glb>'); process.exit(1); }
