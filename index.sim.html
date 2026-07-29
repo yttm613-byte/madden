@@ -260,7 +260,7 @@
         userDef:null, ball:{active:false}, cam:0, msgT:0, deadT:0, spinCd:0, stamina:100, burst:0,
         snapTime:0, playT:0, sel:0, selLock:0, autoSnap:0, defCall:'balanced', fg:null,
         fx:[], shake:0, flash:0, trail:[], rec:[], replay:null, fumble:null, _td:false, _fg:false, _turn:false, _spot:0,
-        _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false };
+        _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false, clockStop:false };
     G._openingRecv='user'; startKickoff('user');
   }
   const other = o => o==='user'?'cpu':'user';
@@ -593,7 +593,7 @@
     let best=cands[0],bd=1e9; for(const b of cands){ const d=dist(b,G.carrier); if(d<bd){bd=d;best=b;} }
     G.ctrlBlocker=best; setMsg('CONTROLLING BLOCKER — run them over!',0.9);
   }
-  function snap(){ if(G.phase!=='presnap') return; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
+  function snap(){ if(G.phase!=='presnap') return; G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
     G.rec=[]; G._recT=0; stopReplay();   // fresh replay buffer each snap
     if((GOAL_X-G.los)/PPY<=22 || G.down>=3) crowdSwell(crowdBase+0.05,1.4);   // anticipation on tense downs / red zone
     if(G.playType==='run'&&G.runQB) G.handoff={t:0}; snapCall(); }
@@ -881,8 +881,10 @@
     if(G.phase==='fg'){ updateFG(dt); return; }
 
     if(G.phase==='live') G.clock-=dt;
-    else if(G.phase==='presnap') G.clock-=dt*0.3;
-    else if(G.phase==='dead') G.clock-=dt*1.0;
+    else if(!G.clockStop){                       // a stopped clock stays stopped until the snap
+      if(G.phase==='presnap') G.clock-=dt*0.3;
+      else if(G.phase==='dead') G.clock-=dt*1.0;
+    }
     if(G.clock<0) G.clock=0;
     if(G.clock<=0 && (G.phase==='presnap')){ if(endOfQuarter()) return; }
 
@@ -1272,10 +1274,16 @@
   }
   function endPlay(reason,spot,turnover){
     G.phase='dead'; G.deadT=1.1; G._td=false; G._fg=false; G._turn=!!turnover; G._safety=false;
+    // The clock used to run straight through every dead ball, so a losing team could
+    // never stop it and mount a comeback — the whole late-game layer of football was
+    // missing. It now stops on the things it really stops on: an incompletion, going
+    // out of bounds, and any change of possession. A runner tackled in bounds does
+    // not stop it, which is what makes killing the clock with runs work.
+    G.clockStop = !!turnover || /INCOMPLETE|OUT/.test(reason);
     if(spot>=GOAL_X) return scoreTD();
     if(G.conv){ // 2-point try stopped short
       setMsg(reason==='INCOMPLETE'?'NO GOOD':'STOPPED — NO GOOD',1.3); SFX.whistle();
-      G.conv=null; G.twoPt=false; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false; G.phase='dead'; G.deadT=1.1; return;
+      G.conv=null; G.twoPt=false; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false; G.phase='dead'; G.deadT=1.1; G.clockStop=true; return;
     }
     if(reason!=='INCOMPLETE' && !G._returning && spot<OWN_GOAL){ // downed in own end zone -> safety
       if(G.offense==='user') G.cpuScore+=2; else G.userScore+=2;
@@ -1301,6 +1309,7 @@
     else if(!turnover) setMsg(reason+'  '+(gain>=0?'+':'')+Math.round(gain)+' YD',1.0);
   }
   function scoreTD(){
+    G.clockStop=true;                       // a score stops it until the ensuing kickoff
     if(G.conv){ // 2-point conversion succeeded
       if(G.conv==='user') G.userScore+=2; else G.cpuScore+=2;
       setMsg(G.conv==='user'?'TWO-POINT — GOOD!':'CPU TWO-POINT — GOOD',1.5); SFX.roar(); G.shake=0.28; G.flash=0.4; spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',22,true);
@@ -1437,8 +1446,8 @@
         if(good){ if(cpu) G.cpuScore+=1; else G.userScore+=1; }   // credit whoever actually kicked it
         G._td=true; G._turn=false; G._fg=false;
         setMsg((cpu?'CPU ':'')+(good?'EXTRA POINT IS GOOD':'EXTRA POINT MISSED'),1.3); }
-      else if(good){ if(G.offense==='user') G.userScore+=3; else G.cpuScore+=3; G._fg=true; G._turn=false; setMsg(G.offense==='user'?'FIELD GOAL — GOOD!':'CPU FIELD GOAL — GOOD',1.4); }
-      else { G._fg=false; G._turn=true; G._spot=G.los; setMsg(G.offense==='user'?'FIELD GOAL — NO GOOD':'CPU FG — NO GOOD',1.4); }
+      else if(good){ if(G.offense==='user') G.userScore+=3; else G.cpuScore+=3; G._fg=true; G._turn=false; G.clockStop=true; setMsg(G.offense==='user'?'FIELD GOAL — GOOD!':'CPU FIELD GOAL — GOOD',1.4); }
+      else { G._fg=false; G._turn=true; G._spot=G.los; G.clockStop=true; setMsg(G.offense==='user'?'FIELD GOAL — NO GOOD':'CPU FG — NO GOOD',1.4); }
       if(good) SFX.roar();
     }
   }
