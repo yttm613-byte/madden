@@ -134,13 +134,13 @@ function smoothNormalsAcrossSeams(prim){
 // Two details that matter. Adjacency is built by POSITION, not by vertex index —
 // the mesh is split at every seam, so index-based neighbours stop at seam boundaries
 // and the tears would survive. And only the head moves; the body is already fine.
-function denoiseHead(prim, iters, lambda){
+function denoiseRegion(prim, iters, lambda, cutFrac){
   const pos = prim.getAttribute('POSITION'), idx = prim.getIndices();
   if (!pos || !idx) return 0;
   const n = pos.getCount(), v = [0,0,0];
   let maxY = -1e9, minY = 1e9;
   for (let i = 0; i < n; i++) { pos.getElement(i, v); if (v[1] > maxY) maxY = v[1]; if (v[1] < minY) minY = v[1]; }
-  const cut = maxY - (maxY - minY) * 0.17;          // head + a little neck
+  const cut = maxY - (maxY - minY) * cutFrac;
 
   // group vertex indices by position so seams are stitched for smoothing purposes
   const key = i => { pos.getElement(i, v); return `${v[0].toFixed(3)},${v[1].toFixed(3)},${v[2].toFixed(3)}`; };
@@ -179,13 +179,18 @@ function denoiseHead(prim, iters, lambda){
 }
 
 let smoothed = 0, denoised = 0;
-const HEAD_ITERS = +(process.env.HEAD_SMOOTH ?? 16);   // 16 measured best: -11% face shading noise for ~4% head shrink
+const BODY_ITERS = +(process.env.BODY_SMOOTH ?? 0);    // off: measured worse (see PAINT_ALL)
+const HEAD_ITERS = +(process.env.HEAD_SMOOTH ?? 16);   // 16 measured best on the face   // 16 measured best: -11% face shading noise for ~4% head shrink
 for (const mesh of doc.getRoot().listMeshes())
   for (const prim of mesh.listPrimitives())
     if ((prim.getMaterial() && prim.getMaterial().getName()) === 'Bodymat') {
       // the eyeballs are their own primitive and must not be dragged around
       const isEyes = (prim.getIndices() ? prim.getIndices().getCount()/3 : 0) < 4000;
-      if (!isEyes && HEAD_ITERS > 0) denoised += denoiseHead(prim, HEAD_ITERS, 0.55);
+      // The ARMS band the same way the face did, and it survives flattening every
+      // texture map — so it is the same split/torn geometry, not shading. Denoise the
+      // whole skin surface lightly, then the head harder where the tearing is worst.
+      if (!isEyes && BODY_ITERS > 0) denoised += denoiseRegion(prim, BODY_ITERS, 0.5, 1.01);
+      if (!isEyes && HEAD_ITERS > 0) denoised += denoiseRegion(prim, HEAD_ITERS, 0.55, 0.17);
       smoothed += smoothNormalsAcrossSeams(prim);
     }
 
@@ -295,6 +300,12 @@ const sharp = (await import('sharp')).default;
 // without guessing the UV layout: features get placed by where a texel actually sits on
 // the head (chin to crown, left to right, front to back), not by where it lands in the
 // atlas.
+// HEAD ONLY by default. Repainting the arms as well was tried and MEASURED WORSE:
+// mean skin noise over 3 players went 20.68 (head only) -> 22.88, and denoising the
+// body harder to compensate made it 27.10. Flattening the arm texture removes the
+// detail that was masking the mesh's facets, and no amount of smoothing puts it back.
+// The arms keep their original maps; only the head is repainted.
+const PAINT_ALL = process.env.PAINT_ALL === '1';
 async function paintFace(doc, sharp){
   let prim = null, mat = null;
   for (const mesh of doc.getRoot().listMeshes())
@@ -335,7 +346,7 @@ async function paintFace(doc, sharp){
   for (let t=0; t<idx.getCount(); t+=3) {
     const a=idx.getScalar(t), b=idx.getScalar(t+1), c=idx.getScalar(t+2);
     pos.getElement(a,P[0]); pos.getElement(b,P[1]); pos.getElement(c,P[2]);
-    if (P[0][1]<cut || P[1][1]<cut || P[2][1]<cut) continue;          // head triangles only
+    if (!PAINT_ALL && (P[0][1]<cut || P[1][1]<cut || P[2][1]<cut)) continue;   // head only, unless painting all skin
     uv.getElement(a,T[0]); uv.getElement(b,T[1]); uv.getElement(c,T[2]);
     const x0=T[0][0]*W, y0=T[0][1]*H, x1=T[1][0]*W, y1=T[1][1]*H, x2=T[2][0]*W, y2=T[2][1]*H;
     const den=(y1-y2)*(x0-x2)+(x2-x1)*(y0-y2); if (Math.abs(den)<1e-9) continue;
@@ -353,7 +364,11 @@ async function paintFace(doc, sharp){
       const fy=(wy-hy0)/hH;                    // 0 chin .. 1 crown
       const fx=(wx-cx)/halfW;                  // -1 .. 1 across
       const fz=(wz-cz)/halfD;                  // +1 = front of the face
-      const front=Math.max(0,fz);
+      // Facial features only make sense on the head. Everywhere else (arms, hands,
+      // legs) this paints plain clean skin, which is the point: those areas carried
+      // the same blotchy scan noise the face did.
+      const onHead = wy >= faceCut;
+      const front = onHead ? Math.max(0,fz) : 0;
 
       // Base skin, painted rather than photographed: warm, slightly deeper toward the
       // sides of the head so it turns without relying on the noisy source map.
