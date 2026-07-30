@@ -487,16 +487,27 @@
       let rbX=cx-yd(4.5), rbY=fieldMid, side=0;
       if(playId==='dive') rbX=cx-yd(3.3);
       else if(playId==='sweep'){ side=Math.random()<0.5?-1:1; rbY=fieldMid+side*yd(5); rbX=cx-yd(4.5); }
-      else if(playId==='draw') rbX=cx-yd(5.5);
+      else if(playId==='draw') rbX=cx-yd(4.0);   // was 5.5 — too deep to ever beat the front
       G.carrier={x:rbX,y:rbY,vx:0,vy:0,n:22,role:'rb'};
       if(playId==='sweep') G.blockers=[ mk(cx+yd(0.5),fieldMid+side*yd(3),70), mk(cx+yd(1),fieldMid+side*yd(6),76), mk(cx-yd(0.5),fieldMid+side*yd(1),65) ];
       else if(playId==='dive') G.blockers=[ mk(cx-yd(0.3),fieldMid-yd(2),70), mk(cx-yd(0.3),fieldMid,76), mk(cx-yd(0.3),fieldMid+yd(2),65) ];
-      else G.blockers=[ mk(cx-yd(0.5),fieldTop+PLAYH*0.38,70), mk(cx-yd(0.5),fieldMid,76), mk(cx-yd(0.5),fieldTop+PLAYH*0.62,65) ];
+      else G.blockers=[ mk(cx-yd(0.4),fieldMid-yd(2.6),70), mk(cx-yd(0.4),fieldMid,76), mk(cx-yd(0.4),fieldMid+yd(2.6),65) ];  // draw: interior wall, not spread wide
       { const qb=mk(cx-yd(1.4),fieldMid,12); qb.role='qb'; qb.noblock=true; G.blockers.push(qb); G.runQB=qb; }   // QB hands off to the RB
-      [0.20,0.40,0.60,0.80].forEach((p,i)=> G.defenders.push(def(cx+yd(0.8),fieldTop+PLAYH*p,0.14,90+i,'pursue',null)));
-      [0.28,0.52,0.72].forEach((p,i)=> G.defenders.push(def(cx+yd(5.5),fieldTop+PLAYH*p,0.07,50+i,'pursue',null)));
-      [0.34,0.66].forEach((p,i)=> G.defenders.push(def(cx+yd(13),fieldTop+PLAYH*p,0.0,20+i,'pursue',null)));
-      if(playId==='draw'){ for(const d of G.defenders){ if(d.homeY!==undefined && Math.abs(d.x-(cx+yd(0.8)))<1) d.draw=0.55; } } // front overcommits
+      // Run defence used to be FULLY DETERMINISTIC: fixed reaction delays and fixed
+      // alignment, so the same call produced the identical result every single time —
+      // measured dive 7 yards, sweep 3, draw 0, over and over. That is what made the
+      // run game feel pointless. Jitter the reactions and the gaps so a hole opens on
+      // one snap and closes on the next, which is where run variance actually comes
+      // from in football.
+      const jx=()=>(Math.random()-0.5)*yd(1.1), jy=()=>(Math.random()-0.5)*yd(2.2);
+      [0.20,0.40,0.60,0.80].forEach((p,i)=> G.defenders.push(def(cx+yd(0.8)+jx(),fieldTop+PLAYH*p+jy(),0.10+Math.random()*0.20,90+i,'pursue',null)));
+      [0.28,0.52,0.72].forEach((p,i)=> G.defenders.push(def(cx+yd(5.5)+jx(),fieldTop+PLAYH*p+jy(),0.04+Math.random()*0.16,50+i,'pursue',null)));
+      [0.34,0.66].forEach((p,i)=> G.defenders.push(def(cx+yd(13)+jx(),fieldTop+PLAYH*p+jy(),0.0+Math.random()*0.10,20+i,'pursue',null)));
+      // The draw's whole point is that the front commits upfield and the back slips
+      // through behind them. It was starting 5.5 yards deep — so far back that he ran
+      // into the front AFTER it had already turned around, netting exactly 0 every
+      // time. Shallower, and the front stays committed long enough to matter.
+      if(playId==='draw'){ for(const d of G.defenders){ if(d.homeY!==undefined && Math.abs(d.x-(cx+yd(5.5)))<yd(3)) d.draw=0.7+Math.random()*0.45; } }
     }
     fillFormation(cx, type);
     G.cam=clampCam(G.carrier.x); G.trail=[];
@@ -596,11 +607,18 @@
   function snap(){ if(G.phase!=='presnap') return; G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
     G.rec=[]; G._recT=0; stopReplay();   // fresh replay buffer each snap
     if((GOAL_X-G.los)/PPY<=22 || G.down>=3) crowdSwell(crowdBase+0.05,1.4);   // anticipation on tense downs / red zone
-    if(G.playType==='run'&&G.runQB) G.handoff={t:0}; snapCall(); }
+    if(G.playType==='run'&&G.runQB) G.handoff={t:0, draw:G.playId==='draw'}; snapCall(); }
   function spin(){
     if(G.phase!=='live'||G.spinCd>0) return;
     G.spinCd=2.2; G.burst=0.28;
-    for(const d of G.defenders){ if(dist(d,G.carrier)<S.spinR) d.whiff=0.65; }
+    // A spin beats the man you spin off, not everyone standing nearby. This used to
+    // whiff EVERY defender within 3 yards for 0.65s — and because the CPU rolls for it
+    // constantly, your defender went blind every couple of seconds even while touching
+    // the carrier. That is exactly "I made contact and he doesn't go down". Same fix
+    // the juke already got.
+    let near=null, nd=1e9;
+    for(const d of G.defenders){ const dd=dist(d,G.carrier); if(dd<nd){ nd=dd; near=d; } }
+    if(near && nd<S.spinR) near.whiff=0.55;
     if(G.offense==='user') document.getElementById('spinpip').textContent='SPIN!';
   }
   // Juke: a sharp sideways cut that leaves close defenders grabbing air.
@@ -953,7 +971,7 @@
       if(!human){
         if(mode==='run'){
           if(dist(d,c)<yd(2.6)){ const cs = dist(d,c)<yd(1.4)? S.defSprint*0.98 : S.def*1.0; aiPursue(d, c.x, c.y, dt, cs*ds); } // close out (no super-dive)
-          else if(d.draw>0){ d.draw-=dt; aiPursue(d, G.los+yd(3), d.homeY, dt, S.def*ds); } // overcommit upfield on the draw
+          else if(d.draw>0){ d.draw-=dt; aiPursue(d, G.los+yd(8), d.homeY, dt, S.cover*ds); } // draw: second level bails into coverage, vacating the box
           else if(d.deep){ // hold deep help, only commit once the ball reaches you
             const tx=Math.min(c.x+yd(9), GOAL_X-yd(2)), ty=fieldMid+(c.y-fieldMid)*0.6;
             if(c.x < tx-yd(3)) aiPursue(d,tx,ty,dt,S.def*0.92*ds);
@@ -961,8 +979,13 @@
           } else if(d.contain){ // outside leverage: force the run back inside
             const side=c.y>=fieldMid?1:-1;
             aiPursue(d, c.x+yd(1.6), c.y+side*yd(2.2), dt, S.def*ds);
-          } else { // pursuit angle: aim at an intercept point ahead of the carrier
-            aiPursue(d, c.x+c.vx*0.22, c.y+c.vy*0.22, dt, S.def*(d.blitz?1.12:1)*ds);
+          } else {
+            // Pursuit angle. A FIXED 0.22s lead is fine for a defender standing next to
+            // the ball and useless for one 20 yards away — which is why a back who broke
+            // the second level was never cut off and mean run length ran to 6.5+ yards
+            // against a median of 4. Lead by how long it will actually take to get there.
+            const lead=Math.max(0.22, Math.min(1.1, dist(d,c)/(S.def*ds||1)*0.85));
+            aiPursue(d, c.x+c.vx*lead, c.y+c.vy*lead, dt, S.def*(d.blitz?1.12:1)*ds);
           }
         }
         else if(mode==='air'){ // man defenders stay on their receiver (separation carries to the catch); zone/spy break on the ball
@@ -977,7 +1000,7 @@
       }
       // Once the ball is in the air the QB is no longer the play — he cannot be
       // tackled to end it. This was ending live passes as sacks.
-      if(mode!=='air' && d.whiff<=0 && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
+      if(mode!=='air' && (d.whiff<=0 || dist(d,c)<yd(0.8)) && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
         if(mode==='drop') return sackOrTackle();
         if(mode==='run' && tryFumble(c,d)) return null;   // big hit knocked it out
         return endPlay(G.offense==='user'?'TACKLED':'TACKLE!', c.x);
@@ -989,11 +1012,14 @@
   function cpuRunAI(c,dt){
     let hx=1,hy=0,near=null,nd=1e9;
     for(const d of G.defenders){ if(d.x>c.x-yd(1.5)){ const dd=dist(d,c); if(dd<nd){nd=dd;near=d;} } }
-    if(G._returning){
-      // On a kick/punt return the coverage is spread across the full width, so
-      // flinching away from the single nearest man just runs you into the next one.
-      // Look ahead and take the emptiest lane instead — this is the difference
-      // between a 3-yard return and a real one.
+    // Lane vision, on EVERY carry rather than only on returns. With the spin AoE bug
+    // gone the CPU back had nothing left but running straight into contact, and the
+    // CPU offence stopped scoring entirely. The answer is a smarter runner, not a
+    // dumber defence: read the gaps like the returner already does.
+    {
+      // On a return the coverage is spread across the full width, so flinching away
+      // from the single nearest man just runs you into the next one. Look ahead and
+      // take the emptiest lane — the difference between a 3-yard gain and a real one.
       let bestY=c.y, best=-1e9;
       for(let k=-4;k<=4;k++){
         const ty=c.y+k*yd(3.5);
@@ -1004,15 +1030,18 @@
         const score=clear-Math.abs(ty-c.y)*0.25;         // don't run sideways for nothing
         if(score>best){ best=score; bestY=ty; }
       }
-      hy=Math.max(-1.2,Math.min(1.2,(bestY-c.y)/yd(6)));
+      // A returner has the whole field; a back between the tackles does not, so scale
+      // the lateral freedom down on a normal carry.
+      const room = G._returning ? 1.2 : 0.75;
+      hy=Math.max(-room,Math.min(room,(bestY-c.y)/yd(6)));
+      if(!G._returning && near && nd<yd(4)){ const dy=c.y-near.y; hy += (dy>=0?1:-1)*(1-nd/yd(4))*0.8; }
     }
-    else if(near && nd<yd(12)){ const dy=c.y-near.y; hy += (dy>=0?1:-1)*(1-nd/yd(12))*1.7; }
     if(c.y<fieldTop+yd(7)) hy+=0.5; if(c.y>fieldBot-yd(7)) hy-=0.5;
     hy=Math.max(-1.0,Math.min(1.0,hy));
     const m=Math.hypot(hx,hy)||1; hx/=m; hy/=m;
     const speed = ((nd>yd(8))?S.cpuSprint:S.cpuRun)*G.diff.cpu;
     c.vx=hx*speed; c.vy=hy*speed; c.x+=c.vx*dt; c.y+=c.vy*dt;
-    if(near && nd<S.spinR*1.05 && G.spinCd<=0 && Math.random()<0.04) spin();
+    if(near && nd<S.spinR*1.05 && G.spinCd<=0 && Math.random()<0.5*dt) spin();   // ~0.5/s, not 0.04 PER FRAME (=2.4/s)
   }
 
   function updateDrop(dt,elapsed){
@@ -1160,10 +1189,14 @@
 
   function updateRun(dt){
     const c=G.carrier;
-    if(G.handoff){ G.handoff.t+=dt; if(G.handoff.t>0.45) G.handoff=null; }
+    if(G.handoff){ G.handoff.t+=dt; if(G.handoff.t>(G.handoff.draw?0.78:0.45)) G.handoff=null; }
     // During the mesh the back is still taking the handoff, so hold him to a slow
     // approach instead of letting him sprint away before he has the ball.
-    if(G.handoff && G.runQB && G.handoff.t<0.30){
+    // On a draw the back holds while the front sells out upfield — that delay IS the
+    // play. Releasing him immediately, as every run did, meant he arrived at the line
+    // exactly as the front turned back around, which is why draws netted ~0.
+    const meshT = (G.handoff && G.handoff.draw) ? 0.62 : 0.30;
+    if(G.handoff && G.runQB && G.handoff.t<meshT){
       const a=Math.atan2(G.runQB.y-c.y, G.runQB.x-c.x);
       c.vx=Math.cos(a)*S.carrier*0.42; c.vy=Math.sin(a)*S.carrier*0.42;
       c.x+=c.vx*dt; c.y+=c.vy*dt;
