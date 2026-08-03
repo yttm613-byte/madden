@@ -277,16 +277,20 @@
     G.los=yd(25); G.firstX=yd(35); G.down=1;
     const W=fieldBot-fieldTop;
     const kx=GOAL_X-yd(35);                                    // kicking team's own 35 = the tee
-    G.carrier={x:yd(9), y:fieldMid, vx:0, vy:0, n:Math.floor(Math.random()*30)+20, role:'kr'}; G._retStart=G.carrier.x;
+    // Every kickoff used to be identical — fixed coverage alignment, react 0, and the
+    // returner always on the same spot. Vary the depth and the hash he starts on.
+    G.carrier={x:yd(6+Math.random()*7), y:fieldMid+(Math.random()-0.5)*yd(9), vx:0, vy:0,
+               n:Math.floor(Math.random()*30)+20, role:'kr'}; G._retStart=G.carrier.x;
     // return unit: front wall, then a wedge in front of the returner
     G.blockers=[];
-    for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5);      G.blockers.push(mk(yd(34), yy, 60+i)); }
-    for(let i=0;i<4;i++){ const yy=fieldTop+W*((i+0.5)/4*0.7+0.15); G.blockers.push(mk(yd(21), yy, 70+i)); }
+    const kj=()=>(Math.random()-0.5)*yd(2.4);
+    for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5);      G.blockers.push(mk(yd(34)+kj(), yy+kj(), 60+i)); }
+    for(let i=0;i<4;i++){ const yy=fieldTop+W*((i+0.5)/4*0.7+0.15); G.blockers.push(mk(yd(21)+kj(), yy+kj(), 70+i)); }
     G.blockers.push(mk(yd(15), fieldMid-yd(3), 75)); G.blockers.push(mk(yd(15), fieldMid+yd(3), 76));
     // coverage team lined up ON the kick line, they sprint down under the ball
     G.defenders=[];
     for(let i=0;i<10;i++){ const yy=fieldTop+W*((i+0.5)/10);
-      G.defenders.push(def(kx-yd(1)-Math.abs(i-4.5)*yd(0.6), yy, 0, 30+i, 'pursue', null)); }
+      G.defenders.push(def(kx-yd(1)-Math.abs(i-4.5)*yd(0.6)+kj(), yy+kj(), Math.random()*0.22, 30+i, 'pursue', null)); }
     G.koKicker=def(kx+yd(6), fieldMid, 0, 5, 'pursue', null);   // kicker starts behind the tee
     G.defenders.push(G.koKicker);
     G.defenders[0].contain=true; G.defenders[9].contain=true;
@@ -334,15 +338,25 @@
     // ---- flight: high hang time, coverage sprinting down under it ----
     const b=G.ball; b.t+=dt; const p=Math.min(1,b.t/b.dur);
     if(G.koKickT>0) G.koKickT-=dt;
-    if(G.offense==='user') moveEntity(G.carrier, dt, S.carrier, S.sprint);
+    if(G.offense==='user'){
+      moveEntity(G.carrier, dt, S.carrier, S.sprint);
+      // You cannot start the return before you have the ball. You may camp under it or
+      // drift back for a deep one, but you do not get a running head start upfield
+      // while it is still in the air.
+      const cap=G._retStart||G.carrier.x;
+      if(G.carrier.x>cap){ G.carrier.x=cap; if(G.carrier.vx>0) G.carrier.vx=0; }
+    }
     else {
       // A returner settles UNDER the ball — he does not jog upfield into his own
       // coverage. The old code marched him forward for the whole hang time, which
       // burned ~7 yards of cushion and left him tackled on the catch every time.
-      // Track the ball laterally only, and set velocity (not just position) so the
-      // pose state machine animates him instead of sliding him in an idle stance.
-      const dy=b.ty-G.carrier.y, sp=Math.max(-S.cpuRun, Math.min(S.cpuRun, dy*2.2));
-      G.carrier.vx=0; G.carrier.vy=sp; G.carrier.y+=sp*dt;
+      // Now that the kick lands where it was struck rather than homing on him, he has
+      // to actually go and get it — on BOTH axes, or a kick with any air on it is
+      // muffed every time.
+      const dx=b.tx-G.carrier.x, dy=b.ty-G.carrier.y;
+      const sx=Math.max(-S.cpuRun, Math.min(S.cpuRun, dx*2.0));
+      const sy=Math.max(-S.cpuRun, Math.min(S.cpuRun, dy*2.2));
+      G.carrier.vx=sx; G.carrier.vy=sy; G.carrier.x+=sx*dt; G.carrier.y+=sy*dt;
     }
     // The return team blocks DURING the hang — that is when a real return is set up.
     // They used to stand frozen for the whole flight and only start blocking on the
@@ -362,8 +376,8 @@
     // exactly the hang time and tackled the returner on the catch — measured 0.6 yd
     // average return against an NFL average near 9. The hold plus the reduced sprint
     // stand in for the gunners being jammed.
-    const jam = b.punt ? 0.55 : 0;
-    const covSp = S.defSprint * (b.punt ? 0.78 : 0.92);
+    const jam = b.punt ? 0.75 : 0;
+    const covSp = S.defSprint * (b.punt ? 0.70 : 0.92);   // retuned after pursuit angles improved
     for(const d of G.defenders){
       if(d===G.koKicker && G.koKickT>0){ d.vx=0; d.vy=0; continue; }   // kicker holds his follow-through
       if(b.t<jam){ d.vx=0; d.vy=0; continue; }
@@ -993,7 +1007,9 @@
             // the ball and useless for one 20 yards away — which is why a back who broke
             // the second level was never cut off and mean run length ran to 6.5+ yards
             // against a median of 4. Lead by how long it will actually take to get there.
-            const lead=Math.max(0.22, Math.min(1.1, dist(d,c)/(S.def*ds||1)*0.85));
+            // capped at 0.8s: 1.1s of perfect prediction from 20 yards away is more than a
+            // defender should get, and it was flattening kick and punt returns
+            const lead=Math.max(0.22, Math.min(0.8, dist(d,c)/(S.def*ds||1)*0.85));
             aiPursue(d, c.x+c.vx*lead, c.y+c.vy*lead, dt, S.def*(d.blitz?1.12:1)*ds);
           }
         }
@@ -2472,7 +2488,7 @@
   cv.addEventListener('pointerdown',()=>{ audioInit(); document.getElementById('stage').focus(); });
 
   window.__sim={ get G(){return G;}, update, keys, choosePlay, action, snap, chooseDef,
-    startFG, startKick, fgLock, juke, spin, get ready(){return playersReady;}, get pool(){return pPool;} };
+    startFG, startKick, startKickoff, fgLock, juke, spin, get ready(){return playersReady;}, get pool(){return pPool;} };
   newGame(); G.phase='start';
   document.getElementById('playcall').classList.add('hidden'); document.getElementById('defcall').classList.add('hidden');
   init3D();
