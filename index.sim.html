@@ -432,7 +432,8 @@
     G.defCall=call; const ds=G.defenders;
     ds.forEach(d=>{ d.blitz=false; d.deep=false; });
     if(call==='blitz'){
-      [...ds].sort((a,b)=>dist(a,G.carrier)-dist(b,G.carrier)).slice(0,2).forEach(d=>{ d.blitz=true; if(d.job==='cover'||d.job==='spy') d.job='rush'; });
+      [...ds].sort((a,b)=>dist(a,G.carrier)-dist(b,G.carrier)).slice(0,2).forEach(d=>{ d.blitz=true; if(d.job==='cover'||d.job==='spy') d.job='rush';
+        d.winAt=Math.min(d.winAt, 2.1+Math.random()*1.9); });   // a blitz is how early pressure happens
     } else if(call==='cover'){
       [...ds].sort((a,b)=>b.x-a.x).slice(0,2).forEach(d=>{ d.deep=true; if(d.job==='rush') d.job='spy'; });
     }
@@ -534,7 +535,15 @@
   // a man assigned, that meant literally zero sacks. Only a minority of rushers win
   // their matchup, and it takes them a beat — winAt is Infinity for the rest.
   function def(x,y,delay,n,job,assign){ return {x,y,vx:0,vy:0,n,react:delay,whiff:0,blocked:0,homeY:y,job,assign,_takenBy:null,
-    engT:0, shed:false, winAt: Math.random()<SHED_P ? 0.85+Math.random()*1.35 : Infinity }; }
+    engT:0, shed:false,
+    // Pass rushers ALWAYS beat their block eventually — protection breaks down, and
+    // that is what makes holding the ball risky. With the old lottery only 6% could
+    // ever win, so every sack landed in a 1.8-2.5s window and a quarterback who
+    // survived it was safe forever however long he held it. Tuned so a 2.5s release is
+    // nearly always clean and holding past 4s is where it hurts. Run defenders keep
+    // the lottery — a run is over long before protection matters.
+    winAt: job==='rush' ? 2.6+Math.random()*5.6
+                        : (Math.random()<SHED_P ? 0.85+Math.random()*1.35 : Infinity) }; }
   // Pad both sides to a full, real-looking 11: a tight offensive line, receivers
   // split out wide, corners pressed over them, linebackers in the box, and deep
   // safeties. Filler defenders play run defense but don't blanket the pass.
