@@ -919,6 +919,7 @@
     // direction — they appeared to slide around the field instead of running.
     if(d.react>0){ d.react-=dt; const dy=(d.homeY-d.y)*Math.min(1,dt*2); d.y+=dy;
       d.vx=0; d.vy=dt>0?dy/dt:0; return; }
+    if(d.catchT>0) d.catchT-=dt;
     let speed=base; if(d.whiff>0){ d.whiff-=dt; speed*=0.35; } if(d.blocked>0){ d.blocked-=dt; speed=Math.min(speed,S.defBlocked); }
     const a=Math.atan2(ty-d.y,tx-d.x);
     d.vx=Math.cos(a)*speed; d.vy=Math.sin(a)*speed;
@@ -1052,7 +1053,7 @@
       }
       // Once the ball is in the air the QB is no longer the play — he cannot be
       // tackled to end it. This was ending live passes as sacks.
-      if(mode!=='air' && (d.whiff<=0 || dist(d,c)<yd(0.8)) && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
+      if(mode!=='air' && (d.catchT||0)<=0 && (d.whiff<=0 || dist(d,c)<yd(0.8)) && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
         if(mode==='drop') return sackOrTackle();
         if(mode==='run' && tryFumble(c,d)) return null;   // big hit knocked it out
         return endPlay(G.offense==='user'?'TACKLED':'TACKLE!', c.x);
@@ -1203,7 +1204,14 @@
       G.carrier={x:r.x,y:r.y,vx:r.vx*0.4,vy:r.vy*0.4,n:r.n,role:'wr'};
       const others=G.receivers.filter(x=>x!==r); G.receivers=[];
       for(const o of others){ o.target=null; o._takenBy=null; G.blockers.push(o); }
-      for(const d of G.defenders) d.job='pursue';
+      // Everyone needs a beat to react to the ball arriving. Without it the trailing
+      // corner — 2 yards away by design — wrapped up on the instant of the catch and
+      // half of all completions gained nothing after it.
+      // NB: this must NOT use `react`, which freezes a defender in place entirely. They
+      // lost ground they could never recover and YAC went from 0 to 12 yards. They keep
+      // closing; they just cannot make the tackle for a moment.
+      for(const d of G.defenders){ d.job='pursue';
+        d.catchT=0.22+Math.random()*0.22; }
       if(G.offense==='cpu') G.userDef=nearestDefToBall();
       G.passState='caught'; setMsg(G.offense==='user'?'CAUGHT!':'CPU CATCH',0.7); SFX.catch();
     } else { setMsg(sepY<1.2?'BROKEN UP':'INCOMPLETE',1.0); endPlay('INCOMPLETE', G.los); }
