@@ -855,10 +855,15 @@
       if(force) crowdSwell(scream?0.26:0.17, scream?4:3);
     }
   }
+  // Time left in the WHOLE game, not just this quarter. Both late-game checks below
+  // were written against a single 300-second clock and compared G.clock directly. Once
+  // the game became four 75-second quarters, G.clock never exceeds 75, so every one of
+  // them was permanently true — the CPU spent entire games in two-point mode.
+  function gameLeft(){ return (4-(G.qtr||1))*QTR_SECS + G.clock; }
   function snapCall(){
     if(!G) { say(pick(["Here's the snap!","And the ball is snapped."])); return; }
     const toGo=Math.max(1,Math.round((G.firstX-G.los)/PPY));
-    const toGoal=(GOAL_X-G.los)/PPY, late=G.clock<120;
+    const toGoal=(GOAL_X-G.los)/PPY, late=gameLeft()<120;
     let pool;
     if(toGoal<=5) pool=["Goal to go — can they punch it in?!","Right on the doorstep — here we go!","They smell the end zone!"];
     else if(toGoal<=20) pool=["In the red zone now — points on the table.","Inside the twenty, big moment here.","Red zone — defense has to bow up."];
@@ -1409,7 +1414,7 @@
   function startConversion(team){
     G.conv=team; G.twoPt=false; G.los=GOAL_X-yd(2.5); G.firstX=GOAL_X; G.down=1;
     if(team==='user'){ enterConvChoice(); return; }
-    const lead=G.cpuScore-G.userScore, late=(G.clock<90);
+    const lead=G.cpuScore-G.userScore, late=(gameLeft()<90);
     const go2 = Math.random() < (late ? ([-2,-1,1,2,5].includes(lead)?0.62:0.2) : 0.16);
     if(go2){ G.twoPt=true; const pool=Math.random()<0.5?RUN_PLAYS:PASS_PLAYS; const id=pool[Math.floor(Math.random()*pool.length)];
       setupPlay(id); G.phase='presnap'; G.defCall='balanced'; G.autoSnap=2.6; document.getElementById('defcall').classList.remove('hidden'); setMsg('CPU GOES FOR 2 — pick your D',1.2); }
