@@ -1228,7 +1228,10 @@
     if(!G.rec || G.rec.length<8) return false;
     const endT=G.rec[G.rec.length-1].t, span=endT-G.rec[0].t;
     if(span<0.4) return false;
-    G.replay={ t:Math.max(G.rec[0].t, endT-REPLAY_SECS), end:endT, spd:REPLAY_SPD };
+    // Pick a camera for this replay. It used to be one fixed low sideline shot every
+    // single time, which is what makes a replay feel like a bug rather than a replay.
+    G.replay={ t:Math.max(G.rec[0].t, endT-REPLAY_SECS), end:endT, spd:REPLAY_SPD,
+               cam:(Math.random()*4)|0, side:Math.random()<0.5?-1:1 };
     const el=document.getElementById('replay'); if(el) el.classList.add('show');
     return true;
   }
@@ -2345,7 +2348,22 @@
               const side=(nearD.y>=e.y)?'Right':'Left';
               setBone(u.B[side+'Arm'],_axX,-1.45); setBone(u.B[side+'ForeArm'],_axX,-0.05); } }
           else if(o.kind==='block' && !e.noblock && (G.phase==='live')){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
-            if(nd<yd(1.7)){ setBone(u.B.Spine2,_axX,0.5); setBone(u.B.LeftArm,_axX,-1.15); setBone(u.B.RightArm,_axX,-1.15); setBone(u.B.LeftForeArm,_axX,-0.5); setBone(u.B.RightForeArm,_axX,-0.5); } } // engaged block
+            if(nd<yd(1.7)){
+              // A block is a struggle, not a statue. The pose was frozen, so the whole
+              // line of scrimmage — which is in almost every frame — stood dead still.
+              u.shove=(u.shove||Math.random()*6)+lastDt*7.5;
+              const sh=Math.sin(u.shove)*0.10;
+              setBone(u.B.Spine2,_axX,0.5+sh*0.6);
+              setBone(u.B.LeftArm,_axX,-1.15-sh); setBone(u.B.RightArm,_axX,-1.15+sh);
+              setBone(u.B.LeftForeArm,_axX,-0.5-sh*0.5); setBone(u.B.RightForeArm,_axX,-0.5+sh*0.5); } }
+          else if(o.def && (e.blocked||0)>0 && G.phase==='live'){
+            // The man BEING blocked had no engaged pose at all — he ran on the spot
+            // against a blocker. Give him the other half of the same struggle.
+            u.shove=(u.shove||Math.random()*6)+lastDt*7.5;
+            const sh=Math.sin(u.shove+Math.PI)*0.10;
+            setBone(u.B.Spine2,_axX,-0.30+sh*0.6);
+            setBone(u.B.LeftArm,_axX,-1.02+sh); setBone(u.B.RightArm,_axX,-1.02-sh);
+            setBone(u.B.LeftForeArm,_axX,-0.62); setBone(u.B.RightForeArm,_axX,-0.62); }
         }
         // vertical stride bounce while running, dip into hard cuts, plus any spin dip
         g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.05, 0.01+spy*0.005) : 0) + bob - Math.abs(u.bank)*0.22 - (u.fall||0);
@@ -2423,11 +2441,21 @@
       camPos.lerp(new THREE.Vector3(bx-17,6.5,WZ(fieldMid)+(bz-WZ(fieldMid))*0.4),0.14);
       camLook.lerp(new THREE.Vector3(119.5,4.5,WZ(fieldMid)),0.14);
       camera.position.copy(camPos); camera.lookAt(camLook); }
-    else if(repFrame){ // replay: low, tight sideline angle tracking the ball carrier
+    else if(repFrame){ // replay: four broadcast angles, chosen per replay
       let rc=null; for(const it of repFrame.e) if(it.k==='carry') rc=it;
       if(rc){ const cx=WX(rc.x), cz=WZ(rc.y);
-        camPos.lerp(new THREE.Vector3(cx-7.5, 3.0, cz-9.5), 0.12);
-        camLook.lerp(new THREE.Vector3(cx+2.5, 1.3, cz), 0.16);
+        const R=G.replay||{cam:0,side:-1}, sd=R.side||-1;
+        let pos, look;
+        if(R.cam===1){        // end zone, looking back up the field
+          pos=new THREE.Vector3(cx+13, 3.4, cz+1.5);  look=new THREE.Vector3(cx-3, 1.3, cz);
+        } else if(R.cam===2){ // high and tight, over the shoulder
+          pos=new THREE.Vector3(cx-8, 7.5, cz+sd*5);  look=new THREE.Vector3(cx+3, 1.1, cz);
+        } else if(R.cam===3){ // low and close, from the far side
+          pos=new THREE.Vector3(cx-2.5, 1.5, cz-sd*7.5); look=new THREE.Vector3(cx+4, 1.2, cz);
+        } else {              // the original tracking sideline
+          pos=new THREE.Vector3(cx-7.5, 3.0, cz+sd*9.5); look=new THREE.Vector3(cx+2.5, 1.3, cz);
+        }
+        camPos.lerp(pos, 0.12); camLook.lerp(look, 0.16);
         camera.position.copy(camPos); camera.lookAt(camLook); } }
     else if(G._koFlight && G.carrier){
       // wide sideline shot that frames BOTH units — the kicking team and the return unit
