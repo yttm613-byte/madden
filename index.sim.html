@@ -1301,6 +1301,14 @@
       for(const d of G.defenders){ d.job='pursue';
         d.catchT=0.22+Math.random()*0.22; }
       if(G.offense==='cpu') G.userDef=nearestDefToBall();
+      // ...but a much shorter one on the defender YOU are steering. Measured by planting
+      // him on the receiver at the catch: the whistle came 15-28 frames later, and the
+      // only thing holding it was this timer. A third of a second of pressing the button
+      // and nothing happening is exactly the "I made contact and he doesn't go down"
+      // complaint. Removing it entirely went too far the other way — every CPU catch
+      // came back 0.1 yards. Seven frames is under the threshold where a player feels
+      // ignored, and still stops a wrap-up on the literal instant of the catch.
+      if(G.offense==='cpu' && G.userDef) G.userDef.catchT=0.12;
       G.passState='caught'; setMsg(G.offense==='user'?'CAUGHT!':'CPU CATCH',0.7); SFX.catch();
     } else { setMsg(sepY<1.2?'BROKEN UP':'INCOMPLETE',1.0); endPlay('INCOMPLETE', G.los); }
   }
