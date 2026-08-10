@@ -204,7 +204,7 @@
   const MARGIN=26, FIELD_YDS=53.3, PLAYH=CH-MARGIN*2, PPY=PLAYH/FIELD_YDS;
   const WORLD_W=120*PPY, fieldTop=MARGIN, fieldBot=CH-MARGIN, fieldMid=fieldTop+PLAYH/2;
   const yd=y=>y*PPY, GOAL_X=yd(110), OWN_GOAL=yd(10);
-  const S={ carrier:8.1*PPY, sprint:11.3*PPY, blocker:7.2*PPY, def:7.55*PPY, defSprint:9.2*PPY, defBlocked:1.5*PPY,
+  const S={ carrier:8.1*PPY, sprint:10.7*PPY, blocker:7.2*PPY, def:7.55*PPY, defSprint:9.2*PPY, defBlocked:1.5*PPY,
     rec:7.7*PPY, cover:7.45*PPY, rush:7.5*PPY, throwSpd:34*PPY, cpuRun:7.55*PPY, cpuSprint:9.4*PPY,
     tackleR:1.5*PPY, spinR:3.0*PPY, blockR:1.8*PPY, shedR:2.4*PPY, catchR:2.0*PPY, contestR:1.5*PPY, intR:0.9*PPY };
   // Fraction of defenders who will eventually beat their block. Tuned against the
@@ -279,6 +279,7 @@
     const kx=GOAL_X-yd(35);                                    // kicking team's own 35 = the tee
     // Every kickoff used to be identical — fixed coverage alignment, react 0, and the
     // returner always on the same spot. Vary the depth and the hash he starts on.
+    G.handoff=null; G.runQB=null; G.ctrlBlocker=null;      // same stale-handoff hole as punts
     G.carrier={x:yd(6+Math.random()*7), y:fieldMid+(Math.random()-0.5)*yd(9), vx:0, vy:0,
                n:Math.floor(Math.random()*30)+20, role:'kr'}; G._retStart=G.carrier.x;
     // return unit: front wall, then a wedge in front of the returner
@@ -503,6 +504,7 @@
       else if(playId==='sweep'){ side=Math.random()<0.5?-1:1; rbY=fieldMid+side*yd(5); rbX=cx-yd(4.5); }
       else if(playId==='draw') rbX=cx-yd(4.0);   // was 5.5 — too deep to ever beat the front
       G.carrier={x:rbX,y:rbY,vx:0,vy:0,n:22,role:'rb'};
+      G.mesh={x:rbX+yd(1.2), y:rbY};    // where the back takes it — a penetrator's target
       if(playId==='sweep') G.blockers=[ mk(cx+yd(0.5),fieldMid+side*yd(3),70), mk(cx+yd(1),fieldMid+side*yd(6),76), mk(cx-yd(0.5),fieldMid+side*yd(1),65) ];
       else if(playId==='dive') G.blockers=[ mk(cx-yd(0.3),fieldMid-yd(2),70), mk(cx-yd(0.3),fieldMid,76), mk(cx-yd(0.3),fieldMid+yd(2),65) ];
       else G.blockers=[ mk(cx-yd(0.4),fieldMid-yd(2.6),70), mk(cx-yd(0.4),fieldMid,76), mk(cx-yd(0.4),fieldMid+yd(2.6),65) ];  // draw: interior wall, not spread wide
@@ -514,9 +516,15 @@
       // one snap and closes on the next, which is where run variance actually comes
       // from in football.
       const jx=()=>(Math.random()-0.5)*yd(1.1), jy=()=>(Math.random()-0.5)*yd(2.2);
-      [0.20,0.40,0.60,0.80].forEach((p,i)=> G.defenders.push(def(cx+yd(0.8)+jx(),fieldTop+PLAYH*p+jy(),0.10+Math.random()*0.20,90+i,'pursue',null)));
-      [0.28,0.52,0.72].forEach((p,i)=> G.defenders.push(def(cx+yd(5.5)+jx(),fieldTop+PLAYH*p+jy(),0.04+Math.random()*0.16,50+i,'pursue',null)));
-      [0.34,0.66].forEach((p,i)=> G.defenders.push(def(cx+yd(13)+jx(),fieldTop+PLAYH*p+jy(),0.0+Math.random()*0.10,20+i,'pursue',null)));
+      // A quarter of the front wins its gap immediately (see def().pen) — that is where
+      // tackles for loss come from, and without it the run game had no bad outcome at
+      // all: 75 carries with a minimum gain of +1.
+      [0.20,0.40,0.60,0.80].forEach((p,i)=>{ const d=def(cx+yd(0.8)+jx(),fieldTop+PLAYH*p+jy(),0.10+Math.random()*0.20,90+i,'pursue',null);
+        d.pen=Math.random()<0.30; G.defenders.push(d); });
+      [0.28,0.52,0.72].forEach((p,i)=>{ const d=def(cx+yd(5.5)+jx(),fieldTop+PLAYH*p+jy(),0.04+Math.random()*0.16,50+i,'pursue',null);
+        d.pen=Math.random()<0.12; G.defenders.push(d); });   // a linebacker shooting the gap
+      [0.34,0.66].forEach((p,i)=>{ const d=def(cx+yd(13)+jx(),fieldTop+PLAYH*p+jy(),0.0+Math.random()*0.10,20+i,'pursue',null);
+        d.bite=Math.random()<0.45 ? 0.85+Math.random()*0.75 : 0; G.defenders.push(d); });
       // The draw's whole point is that the front commits upfield and the back slips
       // through behind them. It was starting 5.5 yards deep — so far back that he ran
       // into the front AFTER it had already turned around, netting exactly 0 every
@@ -555,6 +563,15 @@
     // survived it was safe forever however long he held it. Tuned so a 2.5s release is
     // nearly always clean and holding past 4s is where it hurts. Run defenders keep
     // the lottery — a run is over long before protection matters.
+    // A run is blown up when a lineman wins his gap NOW. winAt is 2.6s at the earliest,
+    // but a carry is over by ~1.5s, so before this no run was ever stuffed behind the
+    // line by penetration — measured min gain +1 across 75 carries. Set per-defender by
+    // the run formation below (run defenders are job 'pursue', not 'rush'), on a
+    // separate clock and gated to run plays, so pass protection is untouched.
+    pen:false, penAt: 0.10+Math.random()*0.42,
+    // Individual speed and pursuit angle. Identical values on all eleven is what made
+    // every run resolve the same way — see the angle-error note in stepDefenders.
+    spd: 0.91+Math.random()*0.17, ang: (Math.random()*2-1),
     winAt: job==='rush' ? 2.6+Math.random()*5.6
                         : (Math.random()<SHED_P ? 0.85+Math.random()*1.35 : Infinity) }; }
   // Pad both sides to a full, real-looking 11: a tight offensive line, receivers
@@ -902,7 +919,10 @@
         // contact. Counting contact frames only, the average shed landed at 4.7s —
         // long after the ball was gone, which is why sacks sat near zero.
         best.engT+=dt;
-        if(best.engT>best.winAt){ best.shed=true; best._takenBy=null; b.target=null; }
+        // On a run (but not a return, where these are coverage men sprinting downfield)
+        // a penetrating lineman is on his own much faster clock — see def().
+        const wa = (best.pen && G.playType==='run' && !G._returning) ? best.penAt : best.winAt;
+        if(best.engT>wa){ best.shed=true; best._takenBy=null; b.target=null; }
         const gx=best.x*0.62+G.carrier.x*0.38, gy=best.y*0.62+G.carrier.y*0.38, a=Math.atan2(gy-b.y,gx-b.x);
         b.vx=Math.cos(a)*S.blocker; b.vy=Math.sin(a)*S.blocker;      // needed so blockers animate/face correctly
         b.x+=b.vx*dt; b.y+=b.vy*dt;
@@ -920,7 +940,7 @@
     // Timers are ticked centrally in stepDefenders, NOT here — see the note there.
     if(d.react>0){ const dy=(d.homeY-d.y)*Math.min(1,dt*2); d.y+=dy;
       d.vx=0; d.vy=dt>0?dy/dt:0; return; }
-    let speed=base; if(d.whiff>0) speed*=0.35; if(d.blocked>0) speed=Math.min(speed,S.defBlocked);
+    let speed=base*(d.spd||1); if(d.whiff>0) speed*=0.35; if(d.blocked>0) speed=Math.min(speed,S.defBlocked);
     const a=Math.atan2(ty-d.y,tx-d.x);
     d.vx=Math.cos(a)*speed; d.vy=Math.sin(a)*speed;
     d.x+=d.vx*dt; d.y+=d.vy*dt;
@@ -1014,9 +1034,32 @@
     if((d.diveT||0)>0) reach += yd(1.15);          // committed dive: real extra reach
     return dist(d,c)<reach;
   }
+  // Real defenders miss. Roughly one tackle attempt in six is broken, shrugged off or
+  // arm-tackled, and that is where BOTH tails of the gain distribution come from.
+  // Without it every carry resolved in the same narrow band — measured across 75 runs:
+  // min +1, max +30, exactly ONE carry over 10 yards. The NFL runs ~17% at or behind
+  // the line and ~11% for 10+. A deterministic tackle radius cannot produce either.
+  function tackleBreak(d,c){
+    if(c.brk===undefined){ c.brk=Math.random(); c.brkN=0; c.brkCd=0; }
+    if(c.brkCd>0 || c.brkN>=3) return false;        // not five in a row, and never a cartoon
+    const cs=Math.hypot(c.vx||0,c.vy||0)/PPY, dsp=Math.hypot(d.vx||0,d.vy||0)/PPY;
+    let p = 0.07 + c.brk*0.15;                      // this carrier's elusiveness, this play
+    p += Math.max(0, Math.min(4, cs-dsp))*0.030;    // he is running away from the angle
+    if((d.diveT||0)>0) p += 0.10;                   // a dive is all-or-nothing
+    if(dsp>7.2) p -= 0.07;                          // a full-speed square hit sticks
+    if((d.blocked||0)>0) p += 0.10;                 // still shedding a blocker as he arrives
+    if(Math.random() >= Math.max(0.02,Math.min(0.34,p))) return false;
+    c.brkN++; c.brkCd=0.7;
+    d.whiff=0.75; d.blocked=0;                      // he is beaten, and has to recover
+    SFX.tackle(); G.shake=Math.max(G.shake||0,0.09);
+    setMsg(G.offense==='user'?'BROKE THE TACKLE!':'HE BREAKS FREE!',0.75);
+    if(G.offense==='user') crowdSwell(crowdBase+0.16,1.3);
+    return true;
+  }
   function stepDefenders(dt,mode,elapsed){
     const c=G.carrier;
     const ds = (G.offense==='user'?G.diff.cpu:G.diff.you);  // whose defenders these are
+    if(c && c.brkCd>0) c.brkCd=Math.max(0,c.brkCd-dt);
     for(const d of G.defenders){
       // Tick the per-defender timers here, for everyone. They used to be decremented
       // inside aiPursue — which is deliberately NOT called for the defender the player
@@ -1033,6 +1076,18 @@
         if(mode==='run'){
           if(dist(d,c)<yd(2.6)){ const cs = dist(d,c)<yd(1.4)? S.defSprint*0.98 : S.def*1.0; aiPursue(d, c.x, c.y, dt, cs*ds); } // close out (no super-dive)
           else if(d.draw>0){ d.draw-=dt; aiPursue(d, G.los+yd(8), d.homeY, dt, S.cover*ds); } // draw: second level bails into coverage, vacating the box
+          // A penetrating lineman attacks the MESH POINT, not the ball carrier. Trailing
+          // the carrier he can never catch him — the runner is the faster man — so
+          // penetration produced no tackles for loss at all. Aiming at the handoff spot
+          // puts him in the backfield where the back still has to come to him.
+          else if(d.pen && d.shed && !G._returning && G.mesh && c.x<G.los+yd(0.5)){
+            aiPursue(d, G.mesh.x, G.mesh.y, dt, S.defSprint*0.95*ds);
+          }
+          // A safety who bites and commits downhill is how a back who bounces outside
+          // gets to the third level, and it is the only source of explosive runs:
+          // without it the deep pair cut off every carry and 60 CPU rushes produced a
+          // maximum gain of 7.8 yards, with nothing over 10 in 168 measured carries.
+          else if(d.bite>0){ d.bite-=dt; aiPursue(d, G.los+yd(2), d.homeY, dt, S.def*1.0*ds); }
           else if(d.deep){ // hold deep help, only commit once the ball reaches you
             const tx=Math.min(c.x+yd(9), GOAL_X-yd(2)), ty=fieldMid+(c.y-fieldMid)*0.6;
             if(c.x < tx-yd(3)) aiPursue(d,tx,ty,dt,S.def*0.92*ds);
@@ -1048,7 +1103,14 @@
             // capped at 0.8s: 1.1s of perfect prediction from 20 yards away is more than a
             // defender should get, and it was flattening kick and punt returns
             const lead=Math.max(0.22, Math.min(0.8, dist(d,c)/(S.def*ds||1)*0.85));
-            aiPursue(d, c.x+c.vx*lead, c.y+c.vy*lead, dt, S.def*(d.blitz?1.12:1)*ds);
+            // Pursuit ANGLE ERROR. Every defender taking a perfect intercept angle at an
+            // identical speed meant they arrived as one wall at the same instant: measured
+            // 64% of all carries landing in the same 4-9 yard band, against 40% in the NFL,
+            // with only 1% going 10+ and 4% stuffed (NFL: 11% and 17%). Real pursuit is
+            // over- and under-run. The error is rolled once per defender per play and
+            // shrinks as he closes, because you do correct your angle on the way.
+            const ae = (d.ang||0)*yd(3.0)*Math.min(1, dist(d,c)/yd(15));
+            aiPursue(d, c.x+c.vx*lead, c.y+c.vy*lead+ae, dt, S.def*(d.blitz?1.12:1)*ds);
           }
         }
         else if(mode==='air'){ // man defenders stay on their receiver (separation carries to the catch); zone/spy break on the ball
@@ -1065,6 +1127,7 @@
       // tackled to end it. This was ending live passes as sacks.
       if(mode!=='air' && (d.catchT||0)<=0 && (d.whiff<=0 || dist(d,c)<yd(0.8)) && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
         if(mode==='drop') return sackOrTackle();
+        if(mode==='run' && tackleBreak(d,c)) continue;    // he shook him off — play lives
         if(mode==='run' && tryFumble(c,d)) return null;   // big hit knocked it out
         return endPlay(G.offense==='user'?'TACKLED':'TACKLE!', c.x);
       }
@@ -1095,7 +1158,11 @@
       }
       // A returner has the whole field; a back between the tackles does not, so scale
       // the lateral freedom down on a normal carry.
-      const room = G._returning ? 1.2 : 0.75;
+      // Lateral room is capped against a forward component of 1.0, so 1.2 let 77% of a
+      // returner's speed go SIDEWAYS — he had 15 yards of cushion and 2.8 seconds and
+      // still netted 2.6, because he spent them running across the field rather than up
+      // it. Forward has to stay dominant while still letting him pick a lane.
+      const room = G._returning ? 0.8 : 0.75;
       hy=Math.max(-room,Math.min(room,(bestY-c.y)/yd(6)));
       if(!G._returning && near && nd<yd(4)){ const dy=c.y-near.y; hy += (dy>=0?1:-1)*(1-nd/yd(4))*0.8; }
     }
@@ -1451,6 +1518,11 @@
     G._returning=true; G._retKind='punt'; G._turn=false; G._td=false; G._fg=false; G._safety=false; G.conv=null;
     G.los=yd(25); G.firstX=yd(35); G.down=1;
     const W=fieldBot-fieldTop;
+    // Clear the handoff state. startPunt never did, so a punt following a run play
+    // inherited a live G.handoff/G.runQB — and updateRun returns EARLY while a handoff
+    // is in progress, which meant the returner crawled toward a stale quarterback
+    // instead of returning the ball.
+    G.handoff=null; G.runQB=null; G.ctrlBlocker=null;
     G.carrier={x:retX, y:fieldMid, vx:0,vy:0, n:Math.floor(Math.random()*30)+20, role:'pr'}; G._retStart=retX;
     G.blockers=[];
     for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5); G.blockers.push(mk(retX+yd(9), yy, 60+i)); }
