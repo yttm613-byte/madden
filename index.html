@@ -917,10 +917,10 @@
     // NOTE: this must record vx/vy. It used to move x/y directly and leave velocity at
     // zero, so every pursuing defender rendered as a motionless idle pose facing a fixed
     // direction — they appeared to slide around the field instead of running.
-    if(d.react>0){ d.react-=dt; const dy=(d.homeY-d.y)*Math.min(1,dt*2); d.y+=dy;
+    // Timers are ticked centrally in stepDefenders, NOT here — see the note there.
+    if(d.react>0){ const dy=(d.homeY-d.y)*Math.min(1,dt*2); d.y+=dy;
       d.vx=0; d.vy=dt>0?dy/dt:0; return; }
-    if(d.catchT>0) d.catchT-=dt;
-    let speed=base; if(d.whiff>0){ d.whiff-=dt; speed*=0.35; } if(d.blocked>0){ d.blocked-=dt; speed=Math.min(speed,S.defBlocked); }
+    let speed=base; if(d.whiff>0) speed*=0.35; if(d.blocked>0) speed=Math.min(speed,S.defBlocked);
     const a=Math.atan2(ty-d.y,tx-d.x);
     d.vx=Math.cos(a)*speed; d.vy=Math.sin(a)*speed;
     d.x+=d.vx*dt; d.y+=d.vy*dt;
@@ -1018,6 +1018,16 @@
     const c=G.carrier;
     const ds = (G.offense==='user'?G.diff.cpu:G.diff.you);  // whose defenders these are
     for(const d of G.defenders){
+      // Tick the per-defender timers here, for everyone. They used to be decremented
+      // inside aiPursue — which is deliberately NOT called for the defender the player
+      // controls. So on YOUR defender none of them ever expired: whiffed by a spin meant
+      // whiffed for the rest of the play, one block meant blocked for the rest of the
+      // play, and a completion meant unable to tackle for the rest of the play.
+      // Measured: stamped at 0.50 and still 0.50 a full second later.
+      if(d.react>0)  d.react  = Math.max(0, d.react  - dt);
+      if(d.whiff>0)  d.whiff  = Math.max(0, d.whiff  - dt);
+      if(d.blocked>0)d.blocked= Math.max(0, d.blocked- dt);
+      if(d.catchT>0) d.catchT = Math.max(0, d.catchT - dt);
       const human = (G.offense==='cpu' && d===G.userDef);
       if(!human){
         if(mode==='run'){
