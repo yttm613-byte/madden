@@ -497,10 +497,10 @@
       if(play.screen){
         const side=Math.random()<0.5?-1:1;
         // screen back behind the line to one side
-        G.receivers.push({x:cx-yd(1.5),y:fieldMid+side*yd(5),vx:0,vy:0,n:22,route:{breakT:0.45,d1:{x:-0.2,y:side*0.7},d2:{x:1,y:side*0.15}},screen:true});
+        G.receivers.push({x:cx-yd(1.5),y:fieldMid+side*yd(5),vx:0,vy:0,n:22,route:{breakT:0.45,d1:{x:-0.2,y:side*0.7},d2:{x:1,y:side*0.15},depth:2},screen:true});
         // two clear-out verticals
-        G.receivers.push({x:cx-yd(0.3),y:fieldTop+PLAYH*0.16,vx:0,vy:0,n:80,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0}}});
-        G.receivers.push({x:cx-yd(0.3),y:fieldTop+PLAYH*0.84,vx:0,vy:0,n:84,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0}}});
+        G.receivers.push({x:cx-yd(0.3),y:fieldTop+PLAYH*0.16,vx:0,vy:0,n:80,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0},depth:99}});
+        G.receivers.push({x:cx-yd(0.3),y:fieldTop+PLAYH*0.84,vx:0,vy:0,n:84,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0},depth:99}});
         // blockers release to the screen side
         G.blockers=[ mk(cx,fieldMid+side*yd(7),70), mk(cx+yd(1),fieldMid+side*yd(4),76), mk(cx-yd(1),fieldMid,65) ];
       } else {
@@ -558,11 +558,23 @@
     } else { G.userDef=nearestDefToBall(); }
   }
   function nearestDefToBall(){ let best=null,bd=1e9; for(const d of G.defenders){ const dd=dist(d,G.carrier); if(dd<bd){bd=dd;best=d;} } return best; }
+  // depth: how far past the line the route actually goes before the receiver settles.
+  // Without it every route was a sprint with no end, so the longer the quarterback
+  // held the ball the deeper the whole field ran — measured over 220 throws, the
+  // SHORTEST pass in the game was 11 yards downfield and there was no short game at
+  // all. Half of NFL throws are inside 10.
   function makeRoute(kind,toC){
-    if(kind==='go')    return {breakT:99, d1:{x:1,y:0}, d2:{x:1,y:0}};
-    if(kind==='slant') return {breakT:0.55,d1:{x:1,y:0},d2:norm(0.75,0.7*toC)};
-    if(kind==='out')   return {breakT:1.0, d1:{x:1,y:0},d2:norm(0.5,-0.85*toC)};
-    return {breakT:1.2,d1:{x:1,y:0},d2:norm(0.9,0.45*toC)};
+    if(kind==='go')    return {breakT:99, d1:{x:1,y:0}, d2:{x:1,y:0}, depth:99};
+    if(kind==='slant') return {breakT:0.55,d1:{x:1,y:0},d2:norm(0.75,0.7*toC), depth:7};
+    if(kind==='out')   return {breakT:1.0, d1:{x:1,y:0},d2:norm(0.5,-0.85*toC), depth:11};
+    return {breakT:1.2,d1:{x:1,y:0},d2:norm(0.9,0.45*toC), depth:16};   // post
+  }
+  // Speed for a receiver at his current depth: full until he reaches the route's
+  // depth, then decaying hard so he sits down in the zone rather than running away.
+  function routeSpeed(r){
+    const d=r.route && r.route.depth; if(!d || d>=99) return S.rec;
+    const past=(r.x-G.los)/PPY - d;
+    return past<=0 ? S.rec : S.rec*Math.max(0.14, 1-past*0.55);
   }
   function norm(x,y){ const m=Math.hypot(x,y)||1; return {x:x/m,y:y/m}; }
   function mk(x,y,n){ return {x,y,vx:0,vy:0,n,target:null}; }
@@ -1204,7 +1216,8 @@
     else cpuDropAI(c,dt,elapsed);
 
     if(c.x>G.los+yd(0.3)){ G.passState='scramble'; setMsg('SCRAMBLE!',0.8); }
-    for(const r of G.receivers){ const h=elapsed<r.route.breakT?r.route.d1:r.route.d2; r.vx=h.x*S.rec; r.vy=h.y*S.rec; r.x+=r.vx*dt; r.y+=r.vy*dt; r.y=Math.max(fieldTop,Math.min(fieldBot,r.y)); }
+    for(const r of G.receivers){ const h=elapsed<r.route.breakT?r.route.d1:r.route.d2; const sp=routeSpeed(r);
+      r.vx=h.x*sp; r.vy=h.y*sp; r.x+=r.vx*dt; r.y+=r.vy*dt; r.y=Math.max(fieldTop,Math.min(fieldBot,r.y)); }
 
     blockNearest(dt, G.defenders.filter(d=>d.job==='rush'));
     if(stepDefenders(dt,'drop',elapsed)) return;
@@ -1285,11 +1298,16 @@
     const sepY=nd/PPY, rd=dist(r,pt), overthrown = rd>S.catchR*1.7; G.ball.active=false;
     // realistic outcome odds by how open the receiver is (normal completion & INT rates)
     let pCatch,pInt;
+    // Pick odds halved when routes got real depths: a receiver who SETTLES has less
+    // separation than one sprinting away, so the same throws started landing in the
+    // tight-coverage buckets and interceptions doubled to 5.0% of attempts against an
+    // NFL 2.3%. The separation thresholds are still right; the odds attached to them
+    // were calibrated against receivers who never stopped running.
     if(overthrown){ pCatch=0.04; pInt=0.0; }
-    else if(sepY>2.2){ pCatch=0.95; pInt=0.005; }
-    else if(sepY>1.3){ pCatch=0.82; pInt=0.02; }
-    else if(sepY>0.8){ pCatch=0.60; pInt=0.055; }
-    else            { pCatch=0.38; pInt=0.11; }
+    else if(sepY>2.2){ pCatch=0.95; pInt=0.0045; }
+    else if(sepY>1.3){ pCatch=0.82; pInt=0.014; }
+    else if(sepY>0.8){ pCatch=0.60; pInt=0.038; }
+    else            { pCatch=0.38; pInt=0.075; }
     // ...and by how far it was thrown, which this used to ignore completely. Measured
     // over 220 throws: 85% caught at 30+ air yards, the same as everything else,
     // against an NFL rate of 33%. That single number is most of why games finished
