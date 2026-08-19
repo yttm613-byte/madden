@@ -260,19 +260,21 @@
         userDef:null, ball:{active:false}, cam:0, msgT:0, deadT:0, spinCd:0, stamina:100, burst:0,
         snapTime:0, playT:0, sel:0, selLock:0, autoSnap:0, defCall:'balanced', fg:null,
         fx:[], shake:0, flash:0, trail:[], rec:[], replay:null, fumble:null, _td:false, _fg:false, _turn:false, _spot:0,
-        _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false, clockStop:false };
+        _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false, clockStop:false, flag:null };
     G._openingRecv='user'; startKickoff('user');
   }
   const other = o => o==='user'?'cpu':'user';
   function flipLos(spot){ return Math.max(yd(11), Math.min(yd(92), WORLD_W-spot)); }
 
   function startPossession(off, losX){
+    G.flag=null;
     G.offense=off; G.los=losX; G.firstX=Math.min(losX+yd(10),GOAL_X); G.down=1;
     G._returning=false; G._retKind=null; G.playType='run'; G.passState=null;
     routeOffense();
   }
   function startKickoff(recv){
     G.offense=recv; G.playType='run'; G.passState='caught';
+    G.flag=null;
     G._returning=true; G._retKind='kick'; G._turn=false; G._td=false; G._fg=false; G._safety=false; G.conv=null;
     G.los=yd(25); G.firstX=yd(35); G.down=1;
     const W=fieldBot-fieldTop;
@@ -670,7 +672,14 @@
     let best=cands[0],bd=1e9; for(const b of cands){ const d=dist(b,G.carrier); if(d<bd){bd=d;best=b;} }
     G.ctrlBlocker=best; setMsg('CONTROLLING BLOCKER — run them over!',0.9);
   }
-  function snap(){ if(G.phase!=='presnap') return; G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
+  function snap(){ if(G.phase!=='presnap') return;
+    // Dead-ball fouls happen BEFORE the snap, so they are rolled here and kill the
+    // play outright rather than being discovered when it ends.
+    if(canFoul()){
+      if(Math.random()<0.025){ return deadBallFoul('falseStart'); }
+      if(Math.random()<0.018){ return deadBallFoul('offside'); }
+    }
+    G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
     G.rec=[]; G._recT=0; stopReplay();   // fresh replay buffer each snap
     if((GOAL_X-G.los)/PPY<=22 || G.down>=3) crowdSwell(crowdBase+0.05,1.4);   // anticipation on tense downs / red zone
     if(G.playType==='run'&&G.runQB) G.handoff={t:0, draw:G.playId==='draw'}; snapCall(); }
@@ -1245,7 +1254,12 @@
       G.sel=bi; throwBall();
     }
   }
-  function sackOrTackle(){ endPlay(G.offense==='user'?'SACKED':'SACK!', G.carrier.x); }
+  function sackOrTackle(){
+    // A hit on the quarterback is where roughing comes from, so it is rolled here
+    // rather than in the generic live-ball block.
+    if(canFoul() && Math.random()<0.055) throwFlag('roughing', G.los);
+    endPlay(G.offense==='user'?'SACKED':'SACK!', G.carrier.x);
+  }
 
   function throwBall(){
     if(G.passState!=='drop') return;
@@ -1343,7 +1357,12 @@
       // ignored, and still stops a wrap-up on the literal instant of the catch.
       if(G.offense==='cpu' && G.userDef) G.userDef.catchT=0.12;
       G.passState='caught'; setMsg(G.offense==='user'?'CAUGHT!':'CPU CATCH',0.7); SFX.catch();
-    } else { setMsg(sepY<1.2?'BROKEN UP':'INCOMPLETE',1.0); endPlay('INCOMPLETE', G.los); }
+    } else {
+      // Interference is only ever called when a defender is genuinely on the
+      // receiver, so it keys off the same separation the catch odds already use.
+      if(sepY<1.0 && !overthrown && canFoul() && Math.random()<0.16) throwFlag('pi', r.x);
+      setMsg(sepY<1.2?'BROKEN UP':'INCOMPLETE',1.0); endPlay('INCOMPLETE', G.los);
+    }
   }
 
   // ---- instant replay: snapshot every live frame, play the tail back in slow motion ----
@@ -1497,6 +1516,72 @@
       G.phase='dead'; G.deadT=1.2; G._td=false; G._fg=false; G._safety=false; G._turn=false; G._spot=spot;
     }
   }
+  // ---- penalties ------------------------------------------------------------------
+  // The NFL runs about 13 accepted penalties a game across ~125 plays: roughly one
+  // play in ten. This game plays ~40 snaps, so using the same PER-PLAY rate gives
+  // about four a game, which is what the numbers below add up to.
+  //
+  // Deliberate omission: a foul is never rolled on a play that scored. Holding wiping
+  // out a touchdown is real football and it is also the single most enraging thing
+  // that happens in it. Not worth the realism here.
+  const PENALTY = {
+    falseStart: {name:'FALSE START',                 on:'off', yards:5,  dead:true},
+    offside:    {name:'OFFSIDE, DEFENSE',            on:'def', yards:5,  dead:true},
+    holding:    {name:'HOLDING, OFFENSE',            on:'off', yards:10},
+    facemask:   {name:'FACE MASK, DEFENSE',          on:'def', yards:15, auto1st:true},
+    roughing:   {name:'ROUGHING THE PASSER',         on:'def', yards:15, auto1st:true},
+    pi:         {name:'PASS INTERFERENCE, DEFENSE',  on:'def', spotFoul:true, auto1st:true},
+  };
+  // Fouls only happen on a normal scrimmage down — not on returns, kicks or
+  // conversions, where the down-and-distance bookkeeping below does not apply.
+  function canFoul(){ return !G.flag && !G._returning && !G._koFlight && !G._fgFlight && !G.conv && !G.twoPt; }
+  function throwFlag(key, spot){
+    if(!canFoul()) return false;
+    const p=PENALTY[key]; if(!p) return false;
+    G.flag=Object.assign({key, spot:(spot==null?G.los:spot)}, p);
+    SFX.whistle(); spawnBurst(G.flag.spot, fieldMid, '#ffd24a', 14, true);
+    return true;
+  }
+  // A dead-ball foul kills the snap before it happens.
+  function deadBallFoul(key){
+    if(!throwFlag(key)) return false;
+    G.phase='dead'; G.deadT=1.5; G.clockStop=true;
+    G._td=false; G._fg=false; G._turn=false; G._safety=false; G._spot=G.los;
+    setMsg('FLAG — '+PENALTY[key].name, 1.5);
+    return true;
+  }
+  // Applied when the dead phase ends, in place of the normal down logic.
+  // Returns true if it handled the down.
+  function applyFlag(){
+    const f=G.flag; G.flag=null; if(!f) return false;
+    const playSpot=G._spot, hadFirst=(playSpot>=G.firstX);
+    let spot, down=G.down, autoFirst=false;
+    if(f.on==='off'){
+      // half the distance to the goal when the full walk-off would cross it
+      const back=Math.min(yd(f.yards), Math.max(yd(1), (G.los-OWN_GOAL)/2));
+      spot=Math.max(OWN_GOAL+yd(1), G.los-back);
+    } else {
+      const base=f.spotFoul ? f.spot : G.los+yd(f.yards);
+      const half=G.los+Math.max(yd(1),(GOAL_X-G.los)/2);
+      spot=Math.min(GOAL_X-yd(1), Math.min(base, half));
+      autoFirst=!!f.auto1st || spot>=G.firstX;
+    }
+    // Decline when the play was already better for the offended team. A defensive
+    // foul is the offence's choice; an offensive foul is the defence's.
+    const decline = f.on==='def'
+      ? (!autoFirst && (hadFirst || playSpot>spot))
+      : (playSpot<spot && !hadFirst && G.down>=4);
+    if(decline){ setMsg('PENALTY DECLINED',1.1); return false; }
+    G.los=spot;
+    if(f.on==='def' && autoFirst){ G.down=1; G.firstX=Math.min(spot+yd(10),GOAL_X); }
+    else { G.down=down; if(f.on==='off' && !f.dead) G.down=down; }   // replay the down
+    if(G.firstX<G.los) G.firstX=Math.min(G.los+yd(10),GOAL_X);
+    const sign=f.on==='off'?'-':'+';
+    const amt=f.spotFoul ? Math.round(Math.abs(spot-playSpot)/PPY) : f.yards;
+    setMsg(f.name+'  '+sign+amt+(f.on==='def'&&autoFirst?'  — AUTOMATIC FIRST DOWN':'  — REPLAY '+ordinal(G.down)+' DOWN'), 1.8);
+    routeOffense(); return true;
+  }
+
   function endPlay(reason,spot,turnover){
     G.phase='dead'; G.deadT=1.1; G._td=false; G._fg=false; G._turn=!!turnover; G._safety=false;
     // The clock used to run straight through every dead ball, so a losing team could
@@ -1516,6 +1601,14 @@
     }
     if(spot<OWN_GOAL) spot=OWN_GOAL;
     G._spot=spot;
+    // Live-ball fouls. Holding is called against whoever was blocking, so it scales
+    // with how long blockers were actually engaged; a face mask needs a tackle to
+    // have happened at all.
+    if(canFoul() && !turnover){
+      const held=(G.blockers||[]).filter(b=>b.target).length;
+      if(Math.random() < 0.030*Math.min(1.6, 0.5+held*0.22)) throwFlag('holding', G.los);
+      else if(reason!=='INCOMPLETE' && Math.random()<0.008) throwFlag('facemask', spot);
+    }
     if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT'){
       // hit impact scales with how fast he was going when he got hit
       const hitSp=Math.hypot(G.carrier.vx||0,G.carrier.vy||0)/PPY;
@@ -1567,6 +1660,7 @@
     const retX=flipLos(landing);
     const kickX=Math.min(WORLD_W-yd(5), Math.max(retX+yd(22), flipLos(G.los)));
     G.offense=recv; G.playType='run'; G.passState='caught';
+    G.flag=null;
     G._returning=true; G._retKind='punt'; G._turn=false; G._td=false; G._fg=false; G._safety=false; G.conv=null;
     G.los=yd(25); G.firstX=yd(35); G.down=1;
     const W=fieldBot-fieldTop;
@@ -1606,6 +1700,7 @@
     if(G._safety){ G._safety=false; startKickoff(other(G.offense)); return; }
     if(G._turn){ startPossession(other(G.offense), flipLos(G._spot)); return; }
     if(wasReturn){ startPossession(G.offense, Math.max(yd(2),Math.min(GOAL_X-yd(2),G._spot))); return; }
+    if(G.flag && applyFlag()) return;            // penalty enforced; down already set
     const spot=G._spot; G.los=spot;
     if(spot>=G.firstX){ G.down=1; G.firstX=Math.min(spot+yd(10),GOAL_X); routeOffense(); setMsg(G.offense==='user'?'FIRST DOWN!':'CPU 1ST DOWN',0.9); if(G.offense==='user') crowdSwell(0.14,1.6); }
     else { G.down++; if(G.down>4){ setMsg('TURNOVER ON DOWNS',1.2); startPossession(other(G.offense), flipLos(spot)); } else routeOffense(); }
