@@ -41,8 +41,12 @@ s = s.replace(/<!DOCTYPE html>\s*/i, '')
      .replace(/<link[^>]*>\s*/gi, '');
 
 // ---- 2. fonts, embedded (the stylesheet link would be blocked) -------------------
-let fontCss = '';
-try { fontCss = fs.readFileSync('/tmp/gf_latin.css', 'utf8'); } catch (e) {}
+// Vendored, not fetched. This read used to point at a file in /tmp, and when /tmp was
+// cleared the build silently produced a bundle with NO fonts and said "fonts 0.00MB"
+// in a line nobody reads. A missing font is invisible in a diff and obvious on screen.
+const FONTS = 'vendor/fonts.css';
+if (!fs.existsSync(FONTS)) { console.error('missing ' + FONTS + ' — the bundle needs it'); process.exit(1); }
+const fontCss = fs.readFileSync(FONTS, 'utf8');
 s = s.replace('<style>', '<style>\n' + fontCss + '\n');
 
 // ---- 3. the model and the HDR environment as data URIs ---------------------------
