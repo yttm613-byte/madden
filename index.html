@@ -254,6 +254,44 @@
   let pendingDiff='pro';
 
   let G;
+  // ---- rosters ---------------------------------------------------------------------
+  // Jersey numbers were already being assigned by role, and they follow the real NFL
+  // numbering rules by accident: 1-19 quarterbacks and kickers, 20-49 backs and defensive
+  // backs, 50-59 linebackers, 60-79 linemen, 80-89 receivers, 90-99 defensive line. So a
+  // number is enough to know what a man plays, and every player on the field can be given
+  // a name and a position without touching a single formation.
+  const SURNAMES = ['HALL','OKAFOR','REYES','BRANCH','MALONE','DIXON','TATUM','VOSS','KEENAN','ARCHER',
+    'BOONE','SILVA','MERCER','FONTAINE','WADE','KOVAC','ELLIS','NGATA','PRYOR','SANTOS','BAINES','CRUZ',
+    'HOLLIS','DRAKE','ABARA','LOMAX','QUINN','STARK','REDDING','VANCE','MOSS','GARZA','WHITLOCK','ODOM',
+    'PALMER','SHAW','TREVINO','BURKE','NASH','IKE','CALLOWAY','DEMPSEY','RUIZ','STROUD','YATES'];
+  const INITIALS = 'ABCDEJKLMRSTW';
+  function posFor(n){
+    if(n<=19) return n<=9?'K':'QB';
+    if(n<=29) return 'DB';
+    if(n<=39) return n===22?'RB':'CB';
+    if(n<=49) return 'S';
+    if(n<=59) return 'LB';
+    if(n<=79) return 'OL';
+    if(n<=89) return 'WR';
+    return 'DL';
+  }
+  // One roster per team, built once a game and keyed by jersey number, so the same
+  // number is the same man on every snap instead of a fresh stranger each play.
+  function makeRoster(){
+    const r={}, used=new Set();
+    for(let n=1;n<=99;n++){
+      let nm; do{ nm=SURNAMES[(Math.random()*SURNAMES.length)|0]; }while(used.has(nm)&&used.size<SURNAMES.length);
+      used.add(nm);
+      r[n]={ n, name:nm, initial:INITIALS[(Math.random()*INITIALS.length)|0], pos:posFor(n),
+             ovr: 62+Math.floor(Math.random()*36) };
+    }
+    return r;
+  }
+  // Who is this? Defenders belong to whoever is NOT on offence.
+  function manOn(team, n){ const r=G.rosters&&G.rosters[team]; return (r&&r[n])||null; }
+  function tag(team, n){ const m=manOn(team,n); return m? ('#'+n+' '+m.initial+'. '+m.name) : ('#'+n); }
+  function defenderTag(n){ return tag(other(G.offense), n); }
+
   function newGame(){
     G={ phase:'start', diff:DIFF[pendingDiff]||DIFF.pro, userScore:0, cpuScore:0, clock:QTR_SECS, qtr:1, longest:0, down:1, los:0, firstX:0,
         offense:'user', playType:'run', passState:null, carrier:null, blockers:[], receivers:[], defenders:[],
@@ -261,6 +299,7 @@
         snapTime:0, playT:0, sel:0, selLock:0, autoSnap:0, defCall:'balanced', fg:null,
         fx:[], shake:0, flash:0, trail:[], rec:[], replay:null, fumble:null, _td:false, _fg:false, _turn:false, _spot:0,
         _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false, clockStop:false, flag:null };
+    G.rosters={ user:makeRoster(), cpu:makeRoster() };
     G._openingRecv='user'; startKickoff('user');
   }
   const other = o => o==='user'?'cpu':'user';
@@ -1162,6 +1201,7 @@
       // Once the ball is in the air the QB is no longer the play — he cannot be
       // tackled to end it. This was ending live passes as sacks.
       if(mode!=='air' && (d.catchT||0)<=0 && (d.whiff<=0 || dist(d,c)<yd(0.8)) && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
+        G.lastTackler=d;                                  // so the result can name him
         if(mode==='drop') return sackOrTackle();
         if(mode==='run' && tackleBreak(d,c)) continue;    // he shook him off — play lives
         if(mode==='run' && tryFumble(c,d)) return null;   // big hit knocked it out
@@ -1258,7 +1298,8 @@
     // A hit on the quarterback is where roughing comes from, so it is rolled here
     // rather than in the generic live-ball block.
     if(canFoul() && Math.random()<0.055) throwFlag('roughing', G.los);
-    endPlay(G.offense==='user'?'SACKED':'SACK!', G.carrier.x);
+    const by=G.lastTackler? ' — '+defenderTag(G.lastTackler.n) : '';
+    endPlay((G.offense==='user'?'SACKED':'SACK!')+by, G.carrier.x);
   }
 
   function throwBall(){
@@ -1303,7 +1344,7 @@
     const srt=[...G.defenders].sort((a,b)=>a.homeY-b.homeY); if(srt[0])srt[0].contain=true; if(srt[srt.length-1])srt[srt.length-1].contain=true;
     G.userDef = (G.offense==='cpu')?nearestDefToBall():null;
     G._returning=true; G._retKind='int'; G._retStart=G.carrier.x; G._turn=false;
-    setMsg('INTERCEPTED!',1.5); SFX.tackle(); spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',16,true); G.shake=0.18;
+    setMsg('INTERCEPTED — '+tag(newOff,pick.n)+'!',1.6); SFX.tackle(); spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',16,true); G.shake=0.18;
   }
   function resolveCatch(){
     const b=G.ball, r=b.rec, pt={x:b.tx,y:b.ty};
@@ -1356,7 +1397,7 @@
       // came back 0.1 yards. Seven frames is under the threshold where a player feels
       // ignored, and still stops a wrap-up on the literal instant of the catch.
       if(G.offense==='cpu' && G.userDef) G.userDef.catchT=0.12;
-      G.passState='caught'; setMsg(G.offense==='user'?'CAUGHT!':'CPU CATCH',0.7); SFX.catch();
+      G.passState='caught'; setMsg((G.offense==='user'?'CAUGHT — ':'CPU CATCH — ')+tag(G.offense,r.n),0.9); SFX.catch();
     } else {
       // Interference is only ever called when a defender is genuinely on the
       // receiver, so it keys off the same separation the catch odds already use.
@@ -1624,7 +1665,13 @@
     if(reason==='INCOMPLETE') setMsg('INCOMPLETE',1.0);
     else if(G._returning){ const ry=Math.max(0,Math.round((spot-(G._retStart||G.los))/PPY));
       setMsg(G._retKind==='int'?('INTERCEPTION — '+ry+' YD RETURN'):(G._retKind==='punt'?('PUNT RETURN — '+ry+' YDS'):('KICK RETURN — '+ry+' YDS')),1.3); }
-    else if(!turnover) setMsg(reason+'  '+(gain>=0?'+':'')+Math.round(gain)+' YD',1.0);
+    else if(!turnover){
+      // "TACKLED +4 YD" is a stat line; "HALL, +4 YD" is a football game. The same
+      // number is the same man all game, so the names accumulate into people you
+      // recognise rather than decoration.
+      const by=(G.lastTackler&&/TACKL/.test(reason))? ' — '+defenderTag(G.lastTackler.n) : '';
+      setMsg(reason+'  '+(gain>=0?'+':'')+Math.round(gain)+' YD'+by,1.2);
+    }
   }
   function scoreTD(){
     G.clockStop=true;                       // a score stops it until the ensuing kickoff
