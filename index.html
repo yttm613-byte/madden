@@ -2076,9 +2076,45 @@
     }catch(e){ /* keep the original */ }
     _normCache.set(tex,out); return out;
   }
+  // Collapse a clone's ten Skeletons into one.
+  //
+  // The source GLB splits the body across 10 skins that all reference the SAME 74
+  // joints in the same order. Their inverse bind matrices differ, but only by a
+  // constant per-mesh transform: measured, boneInverses_m[i] === boneInverses_0[i] * C_m
+  // holds for every joint i to within 5e-7 (float32 noise), C_m being a uniform scale
+  // plus a translation — an artefact of the parts having been merged from separate OBJs.
+  //
+  // SkeletonUtils.clone still hands every skinned mesh its own Skeleton, so each player
+  // cost ten 74-bone updates and ten bone-texture uploads per frame where one would do.
+  //
+  // three skins a vertex as (see SkinnedMesh.boneTransform / skinning_vertex.glsl):
+  //     meshWorld * bindMatrixInverse * SUM_i( w_i * boneWorld_i * boneInverse_i ) * bindMatrix * v
+  // Substituting boneInverse_m = boneInverse_0 * C_m factors C_m out to the right of the
+  // sum, so folding it into bindMatrix — and deliberately NOT touching bindMatrixInverse,
+  // which is applied after the sum and must stay as it was — reproduces the original
+  // result exactly. B' = C_m * B, B'inv = Binv.
+  function shareSkeleton(root){
+    let ref=null;
+    root.traverse(o=>{ if(!ref && o.isSkinnedMesh && o.skeleton && o.skeleton.boneInverses.length) ref=o.skeleton; });
+    if(!ref) return 0;
+    const refInv0=new THREE.Matrix4().copy(ref.boneInverses[0]).invert(), C=new THREE.Matrix4();
+    let shared=0;
+    root.traverse(o=>{
+      if(!o.isSkinnedMesh || !o.skeleton || o.skeleton===ref) return;
+      if(o.skeleton.bones.length!==ref.bones.length) return;          // not the same rig — leave it alone
+      C.multiplyMatrices(refInv0, o.skeleton.boneInverses[0]);
+      o.bindMatrix.premultiply(C);                                    // B' = C * B
+      const old=o.skeleton;
+      o.skeleton=ref;
+      if(old.boneTexture && old.dispose) old.dispose();               // never rendered, but don't leak if it was
+      shared++;
+    });
+    return shared;
+  }
   function makePlayer(){
     const grp=new THREE.Group();
     const model=THREE.SkeletonUtils.clone(playerProto.scene);
+    shareSkeleton(model);
     const box=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); box.getSize(sz);
     // scale to ~2 yards tall, with per-player size variants
     const vh=0.96+Math.random()*0.12, vg=1.04-(vh-0.96)*0.8;   // taller players a touch leaner
