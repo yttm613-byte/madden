@@ -2532,6 +2532,21 @@
   // at exactly the same resolution as ULTRA and the tier's `pr` field was dead. On a 2x
   // display that made the toggle's single biggest lever a no-op.
   function resize3D(){ if(!renderer) return; const st=document.getElementById('stage'); const w=st.clientWidth||760,h=st.clientHeight||560; renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, Q().pr)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  // Frame-rate-correct camera damping.
+  //
+  // Every rig used to call lerp(target, k) with a fixed per-frame k, so the camera
+  // converged twice as fast at 120fps as at 30 and its feel was tied to whatever the
+  // machine could render. Integrate against real dt instead:
+  //     alpha = 1 - e^(-lambda*dt),  lambda = -60*ln(1-k)
+  // lambda is derived from the k each rig was authored with at 60fps, so at exactly
+  // 60fps this returns k and the motion is unchanged; everywhere else it is now
+  // correct rather than frame-rate dependent. Callers keep their familiar constants.
+  const _dampRate=new Map();
+  function damp(k, dt){
+    let lam=_dampRate.get(k);
+    if(lam===undefined){ lam=-60*Math.log(1-k); _dampRate.set(k,lam); }
+    return 1-Math.exp(-lam*dt);
+  }
   function render3D(){
     if(!renderer) return;
     // broadcast scrimmage/first-down lines (only during normal downs)
@@ -2778,8 +2793,8 @@
     else ballMesh.visible=false;
     if(G._fgFlight && G.ball && G.ball.active){ const bx=WX(G.ball.x), bz=WZ(G.ball.y);
       // sit low behind the kick and frame the uprights up the field
-      camPos.lerp(new THREE.Vector3(bx-17,6.5,WZ(fieldMid)+(bz-WZ(fieldMid))*0.4),0.14);
-      camLook.lerp(new THREE.Vector3(119.5,4.5,WZ(fieldMid)),0.14);
+      camPos.lerp(new THREE.Vector3(bx-17,6.5,WZ(fieldMid)+(bz-WZ(fieldMid))*0.4),damp(0.14,lastDt));
+      camLook.lerp(new THREE.Vector3(119.5,4.5,WZ(fieldMid)),damp(0.14,lastDt));
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(repFrame){ // replay: four broadcast angles, chosen per replay
       let rc=null; for(const it of repFrame.e) if(it.k==='carry') rc=it;
@@ -2795,7 +2810,7 @@
         } else {              // the original tracking sideline
           pos=new THREE.Vector3(cx-7.5, 3.0, cz+sd*9.5); look=new THREE.Vector3(cx+2.5, 1.3, cz);
         }
-        camPos.lerp(pos, 0.12); camLook.lerp(look, 0.16);
+        camPos.lerp(pos, damp(0.12,lastDt)); camLook.lerp(look, damp(0.16,lastDt));
         camera.position.copy(camPos); camera.lookAt(camLook); } }
     else if(G._koFlight && G.carrier){
       // wide sideline shot that frames BOTH units — the kicking team and the return unit
@@ -2803,13 +2818,13 @@
       const focusX = (G.ball&&G.ball.active) ? WX(G.ball.x) : WX(tee.x);
       const midX = (focusX + WX(G.carrier.x))*0.5;
       const highBall = (G.ball&&G.ball.active)?7:3;
-      camPos.lerp(new THREE.Vector3(midX+2, 30, WZ(fieldMid)-60), 0.07);
-      camLook.lerp(new THREE.Vector3((focusX+midX)*0.5, highBall, WZ(fieldMid)), 0.10);
+      camPos.lerp(new THREE.Vector3(midX+2, 30, WZ(fieldMid)-60), damp(0.07,lastDt));
+      camLook.lerp(new THREE.Vector3((focusX+midX)*0.5, highBall, WZ(fieldMid)), damp(0.10,lastDt));
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(G._td && G.phase==='dead' && G.carrier){ // touchdown: slow orbit around the celebration
       const cx=WX(G.carrier.x), cz=WZ(G.carrier.y), a=performance.now()*0.0011;
-      camPos.lerp(new THREE.Vector3(cx+Math.cos(a)*7, 3.2, cz+Math.sin(a)*7), 0.10);
-      camLook.lerp(new THREE.Vector3(cx, 1.4, cz), 0.18);
+      camPos.lerp(new THREE.Vector3(cx+Math.cos(a)*7, 3.2, cz+Math.sin(a)*7), damp(0.10,lastDt));
+      camLook.lerp(new THREE.Vector3(cx, 1.4, cz), damp(0.18,lastDt));
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(G.carrier){ const cx=WX(G.carrier.x), cz=WZ(G.carrier.y);
       // Broadcast chase. The old rig sat 18 back / 13 high and looked 12 AHEAD of the
@@ -2820,8 +2835,8 @@
       // dropback so the routes still fit.
       const wide=(G.passState==='drop'||G.passState==='air')?1.22:1.0;
       const cmid=cz+(WZ(fieldMid)-cz)*0.20;
-      camPos.lerp(new THREE.Vector3(cx-13*wide,8.2*wide,cmid),0.10);
-      camLook.lerp(new THREE.Vector3(cx+6*wide,1.5,cz),0.13);
+      camPos.lerp(new THREE.Vector3(cx-13*wide,8.2*wide,cmid),damp(0.10,lastDt));
+      camLook.lerp(new THREE.Vector3(cx+6*wide,1.5,cz),damp(0.13,lastDt));
       const s=G.shake>0?Math.min(0.45,G.shake*2.4):0;
       camera.position.set(camPos.x+(Math.random()-0.5)*s, camPos.y+(Math.random()-0.5)*s, camPos.z+(Math.random()-0.5)*s);
       camera.lookAt(camLook); }
