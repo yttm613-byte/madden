@@ -1843,10 +1843,21 @@
   const BALL_LIVE=[0.382,0.232,0.232], BALL_FLY=[0.50,0.30,0.30];
   let sunLight=null;
   // ---- graphics quality tiers (default Ultra; drop a tier if the GPU struggles) ----
+  // shadowDist / poseDist are compared against |WX(entity.x) - camera.position.x|.
+  // MEASURED over 129,293 player-frames across 13 full downs (tools/lodspread.mjs),
+  // that distance is distributed:
+  //     p25 13.0   median 18.9   p75 25.4   p90 35.8   p99 51.9   max 65.4
+  // and the share of players past a given threshold at any instant is:
+  //     18yd 56%   22yd 35%   26yd 24%   30yd 17%   34yd 12%   40yd 4%   52yd 1%
+  // The old Ultra values (34 / 52) therefore reached ~12% and ~1% of players — on a
+  // run play, where everyone is bunched near the line, they reached nobody at all, so
+  // the LOD that was written to buy headroom never fired on the most common down.
+  // These are pulled in to where they actually engage while staying well outside the
+  // ~34yd window the chase camera frames.
   const QUALITY={
-    ultra:{ label:'ULTRA', pr:2.0, shadow:4096, shadowDist:34, poseDist:52 },
-    high: { label:'HIGH',  pr:1.5, shadow:2048, shadowDist:22, poseDist:42 },
-    fast: { label:'FAST',  pr:1.0, shadow:1024, shadowDist:12, poseDist:30 },
+    ultra:{ label:'ULTRA', pr:2.0, shadow:4096, shadowDist:28, poseDist:36 },
+    high: { label:'HIGH',  pr:1.5, shadow:2048, shadowDist:20, poseDist:28 },
+    fast: { label:'FAST',  pr:1.0, shadow:1024, shadowDist:12, poseDist:20 },
   };
   const QORDER=['ultra','high','fast'];
   let qKey='ultra'; try{ const s=localStorage.getItem('gb_quality'); if(s&&QUALITY[s]) qKey=s; }catch(e){}
