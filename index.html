@@ -259,7 +259,7 @@
         offense:'user', playType:'run', passState:null, carrier:null, blockers:[], receivers:[], defenders:[],
         userDef:null, ball:{active:false}, cam:0, msgT:0, deadT:0, spinCd:0, stamina:100, burst:0,
         snapTime:0, playT:0, sel:0, selLock:0, autoSnap:0, defCall:'balanced', fg:null,
-        fx:[], shake:0, flash:0, trail:[], rec:[], replay:null, fumble:null, _td:false, _fg:false, _turn:false, _spot:0,
+        shake:0, flash:0, trail:[], rec:[], replay:null, fumble:null, _td:false, _fg:false, _turn:false, _spot:0,
         _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false, clockStop:false, flag:null };
     G._openingRecv='user'; startKickoff('user');
   }
@@ -717,7 +717,7 @@
       if(Math.random() < 0.32+0.30*setup){
         d.blocked=0; d.shed=true; d.shedT=1.5; d.burst=0.3;
         if(d._takenBy){ d._takenBy.target=null; d._takenBy=null; }
-        SFX.dive(); spawnBurst(d.x,d.y,'#ffd24a',6);
+        SFX.dive();
         document.getElementById('spinpip').textContent='SHED!';
       } else {
         d.whiff=0.35;
@@ -729,7 +729,7 @@
     const c=G.carrier;
     if(c){ const a=Math.atan2(c.y-d.y,c.x-d.x); d.vx=Math.cos(a)*S.defSprint*1.5; d.vy=Math.sin(a)*S.defSprint*1.5; }
     // it has to FEEL like you committed to something
-    SFX.dive(); spawnBurst(d.x,d.y,'#9fe8ff',7);
+    SFX.dive();
     document.getElementById('spinpip').textContent='DIVE!';
   }
   function juke(dir){
@@ -988,15 +988,11 @@
     if(G&&G.phase!=='start'){ update(dt); if(G.phase==='live'&&G.rec) recordFrame(); }
     render3D(); requestAnimationFrame(loop); }
 
-  function spawnBurst(x,y,color,n,big){
-    G.fx.push({ring:true,x,y,r:big?8:4,max:big?70:38,life:big?0.55:0.36,t:0,color});
-    for(let i=0;i<(n||10);i++){ const a=Math.random()*Math.PI*2, s=(40+Math.random()*130)*(big?1.6:1); G.fx.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.3+Math.random()*0.35,t:0,color}); }
-  }
+  // Also used to step a particle list that nothing has rendered since the 2D build:
+  // bursts pushed rings and sparks onto it, this integrated them every frame, and
+  // render3D never read one. Only the screen-shake decay was doing any work.
   function updateFx(dt){
     if(G.shake>0) G.shake-=dt; if(G.flash>0) G.flash-=dt;
-    for(let i=G.fx.length-1;i>=0;i--){ const f=G.fx[i]; f.t+=dt;
-      if(f.ring){ f.r+=(f.max-f.r)*Math.min(1,dt*9); } else { f.x+=f.vx*dt; f.y+=f.vy*dt; f.vx*=0.9; f.vy*=0.9; }
-      if(f.t>=f.life) G.fx.splice(i,1); }
   }
 
   function update(dt){
@@ -1303,7 +1299,7 @@
     const srt=[...G.defenders].sort((a,b)=>a.homeY-b.homeY); if(srt[0])srt[0].contain=true; if(srt[srt.length-1])srt[srt.length-1].contain=true;
     G.userDef = (G.offense==='cpu')?nearestDefToBall():null;
     G._returning=true; G._retKind='int'; G._retStart=G.carrier.x; G._turn=false;
-    setMsg('INTERCEPTED!',1.5); SFX.tackle(); spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',16,true); G.shake=0.18;
+    setMsg('INTERCEPTED!',1.5); SFX.tackle(); G.shake=0.18;
   }
   function resolveCatch(){
     const b=G.ball, r=b.rec, pt={x:b.tx,y:b.ty};
@@ -1476,7 +1472,7 @@
     G.fumble={ x:c.x, y:c.y, vx:Math.cos(a)*yd(13), vy:Math.sin(a)*yd(13), t:0, dur:1.5,
                by:G.offense, spot:c.x };
     G.phase='live'; G.shake=0.34; G.flash=0.25;
-    spawnBurst(c.x,c.y,'#ffd24a',24,true); SFX.tackle(); crowdSwell(0.26,3);
+ SFX.tackle(); crowdSwell(0.26,3);
     setMsg('FUMBLE!!',1.4);
     return true;
   }
@@ -1539,7 +1535,7 @@
     if(!canFoul()) return false;
     const p=PENALTY[key]; if(!p) return false;
     G.flag=Object.assign({key, spot:(spot==null?G.los:spot)}, p);
-    SFX.whistle(); spawnBurst(G.flag.spot, fieldMid, '#ffd24a', 14, true);
+    SFX.whistle();
     return true;
   }
   // A dead-ball foul kills the snap before it happens.
@@ -1597,7 +1593,7 @@
     }
     if(reason!=='INCOMPLETE' && !G._returning && spot<OWN_GOAL){ // downed in own end zone -> safety
       if(G.offense==='user') G.cpuScore+=2; else G.userScore+=2;
-      G._safety=true; G._spot=OWN_GOAL; setMsg('SAFETY!',1.7); SFX.tackle(); SFX.whistle(); G.shake=0.22; spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',14,true); syncHUD(); return;
+      G._safety=true; G._spot=OWN_GOAL; setMsg('SAFETY!',1.7); SFX.tackle(); SFX.whistle(); G.shake=0.22; syncHUD(); return;
     }
     if(spot<OWN_GOAL) spot=OWN_GOAL;
     G._spot=spot;
@@ -1612,13 +1608,11 @@
     if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT'){
       // hit impact scales with how fast he was going when he got hit
       const hitSp=Math.hypot(G.carrier.vx||0,G.carrier.vy||0)/PPY;
-      spawnBurst(G.carrier.x,G.carrier.y,'#fff5d6', 12+Math.round(hitSp*1.6), hitSp>6);
       G.shake=0.20+Math.min(0.22,hitSp*0.026);
       G.carrier.vx*=0.15; G.carrier.vy*=0.15;              // stopped dead on contact
       SFX.tackle(); SFX.whistle(); if(hitSp>6.5) crowdSwell(crowdBase+0.10,1.6);
     }
     else SFX.whistle();
-    if(turnover) spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',16,true);
     const gain=(spot-G.los)/PPY; if(G.offense==='user' && !G._returning) G.longest=Math.max(G.longest,Math.round(gain));
     if(gain>=25 && reason!=='INCOMPLETE' && startReplay()){ G.deadT=3.4; color(pick(["Let's see that one again.","Roll it back — look at this.","Watch him here, this is beautiful."])); }
     if(reason==='INCOMPLETE') setMsg('INCOMPLETE',1.0);
@@ -1630,12 +1624,12 @@
     G.clockStop=true;                       // a score stops it until the ensuing kickoff
     if(G.conv){ // 2-point conversion succeeded
       if(G.conv==='user') G.userScore+=2; else G.cpuScore+=2;
-      setMsg(G.conv==='user'?'TWO-POINT — GOOD!':'CPU TWO-POINT — GOOD',1.5); SFX.roar(); G.shake=0.28; G.flash=0.4; spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',22,true);
+      setMsg(G.conv==='user'?'TWO-POINT — GOOD!':'CPU TWO-POINT — GOOD',1.5); SFX.roar(); G.shake=0.28; G.flash=0.4;
       G.conv=null; G.twoPt=false; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false; G.phase='dead'; G.deadT=1.4; syncHUD(); return;
     }
     if(G._td) return; G.phase='dead'; G.deadT=1.6; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false;
     if(startReplay()) G.deadT=3.4;   // hold the whistle so the replay can run
-    spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',26,true); G.shake=0.3; G.flash=0.5; SFX.roar();
+ G.shake=0.3; G.flash=0.5; SFX.roar();
     crowdSwell(G.offense==='user'?0.34:0.18, 4.5);   // huge home roar (muted for a CPU score)
     if(G.offense==='user'){ G.userScore+=6; G.longest=Math.max(G.longest,Math.max(0,Math.round((GOAL_X-G.los)/PPY))); }
     else G.cpuScore+=6;
