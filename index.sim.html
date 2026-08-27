@@ -1853,7 +1853,7 @@
   const Q=()=>QUALITY[qKey];
   function applyQuality(){
     const q=Q();
-    if(renderer){ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, q.pr)); resize3D(); }
+    if(renderer){ resize3D(); }        // resize3D is the single authority on pixel ratio; it reads q.pr
     if(sunLight){ if(sunLight.shadow.map){ sunLight.shadow.map.dispose(); sunLight.shadow.map=null; }
       sunLight.shadow.mapSize.set(q.shadow,q.shadow); }
     const b=document.getElementById('qtog'); if(b) b.textContent='◆ '+q.label;
@@ -2454,7 +2454,11 @@
     camPos=new THREE.Vector3(40,8.5,26.65); camLook=new THREE.Vector3(60,1,26.65);
     resize3D(); window.addEventListener('resize',resize3D); applyQuality();
   }
-  function resize3D(){ if(!renderer) return; const st=document.getElementById('stage'); const w=st.clientWidth||760,h=st.clientHeight||560; renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  // The quality tier owns the pixel ratio. This used to hardcode a cap of 2, which
+  // silently overwrote whatever applyQuality() had just set — so FAST and HIGH rendered
+  // at exactly the same resolution as ULTRA and the tier's `pr` field was dead. On a 2x
+  // display that made the toggle's single biggest lever a no-op.
+  function resize3D(){ if(!renderer) return; const st=document.getElementById('stage'); const w=st.clientWidth||760,h=st.clientHeight||560; renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, Q().pr)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
   function render3D(){
     if(!renderer) return;
     // broadcast scrimmage/first-down lines (only during normal downs)
