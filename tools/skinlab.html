@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>skin lab</title></head><body>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/GLTFLoader.js"></script>
+<script src="../vendor/SkeletonUtils.js"></script>
+<script>
+// Minimal harness: load the player GLB and nothing else, so experiments on the
+// skinning math don't pay for the game's 24 clones, HDR probe and crowd textures.
+window.__lab = { ready:false };
+new THREE.GLTFLoader().load('../assets/fbplayer_opt.glb', (g)=>{
+  window.__lab.gltf = g;
+  window.__lab.ready = true;
+}, undefined, (e)=>{ window.__lab.error = String(e); });
+</script>
+</body></html>
