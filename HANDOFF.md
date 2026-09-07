@@ -140,6 +140,33 @@ re-recorded the same completion every frame, a sim that ran past the end of the
 game and restarted on the goal line. Validate the harness before trusting a
 surprising result.
 
+### Rendering cost
+
+Twenty-two players are on the field, so anything per-player is multiplied by
+twenty-two. Measured in a headless browser off `renderer.info`, mid-play:
+
+| | Was | Now |
+|---|---|---|
+| Triangles per frame, chase camera | 3.30M | 0.82M |
+| Triangles per frame, wide kick camera | 3.31M | 0.32M |
+| Draw calls | ~560 | ~535 |
+
+What holds those numbers down, in order of how much they matter:
+
+- **`assets/player-lod.bin`** — two reduced copies of every primitive in the
+  player mesh (30% and 9% of the source), swapped in by distance in `render3D`.
+  The source model is 150k triangles; a player thirty yards out is sixty pixels
+  tall. **If you change the player model, re-run `npm run build:lod`** or every
+  player renders at full detail again (the game only says so in the console).
+- **The quality tier is chosen by the frame timer** (`autoQuality`), not fixed.
+  It drives pixel ratio, shadow map size, shadow filter and the LOD distances.
+  The ◆ button overrides it and that choice is remembered.
+- **The pool is culled to the camera frustum** each frame. A player who is
+  off-camera is 21 draw calls plus a trip through the shadow map.
+- Draw calls are now the floor: 21 primitives per player is what the source
+  model ships, and cutting it needs the meshes merged per material — which
+  means atlasing the nine textures first.
+
 ---
 
 ## 5. Known gaps — good things to work on

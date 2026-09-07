@@ -49,11 +49,18 @@ if (!fs.existsSync(FONTS)) { console.error('missing ' + FONTS + ' — the bundle
 const fontCss = fs.readFileSync(FONTS, 'utf8');
 s = s.replace('<style>', '<style>\n' + fontCss + '\n');
 
-// ---- 3. the model and the HDR environment as data URIs ---------------------------
+// ---- 3. the model, its LOD meshes and the HDR environment as data URIs -----------
+// The LOD file is what keeps the bundle playable on a laptop — without it every one
+// of the twenty-two players on the field renders all 150k of its triangles — and the
+// game only warns in the console when it is missing, so fail the build instead.
+const LOD = 'assets/player-lod.bin';
+if (!fs.existsSync(LOD)) { console.error('missing ' + LOD + ' — run: npm run build:lod'); process.exit(1); }
 const glb = b64('assets/fbplayer_opt.glb');
 const hdr = b64('assets/env.hdr');
+const lod = b64(LOD);
 s = s.replace("'assets/fbplayer_opt.glb'", "'data:model/gltf-binary;base64," + glb + "'");
 s = s.replace("'assets/env.hdr'", "'data:application/octet-stream;base64," + hdr + "'");
+s = s.replace("'assets/player-lod.bin'", "'data:application/octet-stream;base64," + lod + "'");
 
 // ---- 4. three.js and its loaders, inline and in order (LAST) ---------------------
 const LIBS = ['three.min.js', 'GLTFLoader.js', 'SkeletonUtils.js', 'RGBELoader.js'];
@@ -64,4 +71,4 @@ s = s.replace(LIB_MARK, libBlock);
 
 fs.writeFileSync(out, s);
 console.log('wrote', out, size(Buffer.byteLength(s)),
-  '| model', size(glb.length), '| hdr', size(hdr.length), '| fonts', size(fontCss.length));
+  '| model', size(glb.length), '| lod', size(lod.length), '| hdr', size(hdr.length), '| fonts', size(fontCss.length));

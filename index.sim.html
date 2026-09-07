@@ -4,9 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>GRIDIRON BLITZ</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Anton + Oswald, vendored (vendor/fonts.css). Google Fonts is a render-blocking
+     third-party stylesheet in the <head>: on a slow or filtered network the whole page
+     waits on it, and the same faces already ship with the repo for the bundled build. -->
+<link href="vendor/fonts.css" rel="stylesheet">
 <style>
   :root{ --gold:#ffd24a; --txt:#eaf0f6; --muted:#8da2b5; }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
@@ -99,17 +100,18 @@
   @media (hover:hover) and (pointer:fine){ #touch{display:none;} }
   .credit{position:absolute; bottom:6px; right:10px; font-size:10px; letter-spacing:.14em; color:var(--muted); opacity:.6; pointer-events:none;}
 </style>
-<!-- Three.js: try the CDN first (some network filters block same-origin subfolders),
-     and fall back to the vendored copies if the CDN is unreachable. Each fallback is
-     written synchronously during parse so load order is preserved. -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script>window.THREE||document.write('<script src="vendor/three.min.js"><\/script>');</script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-<script>(window.THREE&&THREE.GLTFLoader)||document.write('<script src="vendor/GLTFLoader.js"><\/script>');</script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
-<script>(window.THREE&&THREE.SkeletonUtils)||document.write('<script src="vendor/SkeletonUtils.js"><\/script>');</script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
-<script>(window.THREE&&THREE.RGBELoader)||document.write('<script src="vendor/RGBELoader.js"><\/script>');</script>
+<!-- Three.js: the vendored copies first — they are what the project ships, and a
+     CDN round trip blocks parsing before anything can start loading. The CDN stays as
+     a fallback for the case where a filter blocks same-origin subfolders. Each
+     fallback is written synchronously during parse so load order is preserved. -->
+<script src="vendor/three.min.js"></script>
+<script>window.THREE||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>');</script>
+<script src="vendor/GLTFLoader.js"></script>
+<script>(window.THREE&&THREE.GLTFLoader)||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"><\/script>');</script>
+<script src="vendor/SkeletonUtils.js"></script>
+<script>(window.THREE&&THREE.SkeletonUtils)||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"><\/script>');</script>
+<script src="vendor/RGBELoader.js"></script>
+<script>(window.THREE&&THREE.RGBELoader)||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"><\/script>');</script>
 </head>
 <body>
 <div id="app">
@@ -1023,7 +1025,8 @@
 
   // ---- loop ----
   let last=performance.now();
-  function loop(now){ let dt=(now-last)/1000; last=now; if(dt>0.05) dt=0.05; lastDt=dt;
+  function loop(now){ const raw=now-last; let dt=raw/1000; last=now; if(dt>0.05) dt=0.05; lastDt=dt;
+    autoQuality(raw);
     if(G&&G.phase!=='start'){ update(dt); if(G.phase==='live'&&G.rec) recordFrame(); }
     render3D(); requestAnimationFrame(loop); }
 
@@ -1882,6 +1885,11 @@
   let scene, camera, renderer, ballMesh, pPool=[], camPos, camLook, flashes=[];
   let playerProto=null, playersReady=false, lastDt=0.016, ringPool=[], losLine, firstLine, catchMark;
   let _frameNo=0, _carrierG=null, downPole=null, firstPole=null; const _tuckV=new THREE.Vector3();
+  // Per-frame scratch. These used to be allocated inside the camera block, which threw
+  // half a dozen Vector3s a frame at the collector for no reason.
+  const _frustum=new THREE.Frustum(), _fpm=new THREE.Matrix4(), _fmi=new THREE.Matrix4();
+  const _psph=new THREE.Sphere(new THREE.Vector3(),3.4);
+  const _cvA=new THREE.Vector3(), _cvB=new THREE.Vector3();
   const _spinAxis=new THREE.Vector3(1,0,0); let _spiral=0;   // ball spirals about its long axis
   const _fdir=new THREE.Vector3(), _qs=new THREE.Quaternion();
   // A real football is 11" x 6.7" = 0.306 x 0.186 yards. ballMesh is a r=0.4 sphere,
@@ -1889,24 +1897,58 @@
   // gets a small readability bump; everything else is true to life.
   const BALL_LIVE=[0.382,0.232,0.232], BALL_FLY=[0.50,0.30,0.30];
   let sunLight=null;
-  // ---- graphics quality tiers (default Ultra; drop a tier if the GPU struggles) ----
+  // ---- graphics quality tiers (autoQuality picks one; the ◆ button overrides) ----
+  // lod[] is the distance in yards at which players drop to the medium and then the
+  // cheap copy of the mesh (see loadLOD); soft picks the shadow filter.
   const QUALITY={
-    ultra:{ label:'ULTRA', pr:2.0, shadow:4096, shadowDist:34, poseDist:52 },
-    high: { label:'HIGH',  pr:1.5, shadow:2048, shadowDist:22, poseDist:42 },
-    fast: { label:'FAST',  pr:1.0, shadow:1024, shadowDist:12, poseDist:30 },
+    ultra:{ label:'ULTRA', pr:2.0, shadow:4096, shadowDist:34, poseDist:52, lod:[20,44], soft:true },
+    high: { label:'HIGH',  pr:1.5, shadow:2048, shadowDist:22, poseDist:42, lod:[11,24], soft:true },
+    fast: { label:'FAST',  pr:1.0, shadow:1024, shadowDist:12, poseDist:30, lod:[7,15],  soft:false },
   };
   const QORDER=['ultra','high','fast'];
-  let qKey='ultra'; try{ const s=localStorage.getItem('gb_quality'); if(s&&QUALITY[s]) qKey=s; }catch(e){}
+  // Default to HIGH and let the frame timer settle on a tier. ULTRA on a laptop GPU
+  // meant a 4096 shadow map and a 2x pixel ratio for a scene already pushing 3.4M
+  // triangles, which is the reason the game crawled on the machines that got it —
+  // and nobody goes looking for a graphics button to find that out. A tier the player
+  // picks by hand is remembered and never overridden.
+  let qKey='high', qAuto=true;
+  try{ const s=localStorage.getItem('gb_quality'); if(s&&QUALITY[s]){ qKey=s; qAuto=false; } }catch(e){}
   const Q=()=>QUALITY[qKey];
   function applyQuality(){
     const q=Q();
-    if(renderer){ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, q.pr)); resize3D(); }
+    if(renderer){
+      // resize3D owns the pixel ratio — it reads the tier. Setting it here as well is
+      // what used to make the FAST tier a no-op: resize3D ran straight afterwards and
+      // put it back to min(devicePixelRatio,2).
+      const st=(q.soft&&THREE.PCFSoftShadowMap)?THREE.PCFSoftShadowMap:THREE.PCFShadowMap;
+      if(renderer.shadowMap.type!==st){ renderer.shadowMap.type=st;
+        if(scene) scene.traverse(o=>{ if(o.isMesh) for(const m of (Array.isArray(o.material)?o.material:[o.material])) if(m) m.needsUpdate=true; }); }
+      resize3D();
+    }
     if(sunLight){ if(sunLight.shadow.map){ sunLight.shadow.map.dispose(); sunLight.shadow.map=null; }
       sunLight.shadow.mapSize.set(q.shadow,q.shadow); }
     const b=document.getElementById('qtog'); if(b) b.textContent='◆ '+q.label;
-    try{ localStorage.setItem('gb_quality',qKey); }catch(e){}
   }
-  function cycleQuality(){ qKey=QORDER[(QORDER.indexOf(qKey)+1)%QORDER.length]; applyQuality(); }
+  function cycleQuality(){ qKey=QORDER[(QORDER.indexOf(qKey)+1)%QORDER.length]; qAuto=false; applyQuality();
+    try{ localStorage.setItem('gb_quality',qKey); }catch(e){} }
+  // Watch real frame intervals and step the tier down until the budget is met. Two
+  // bad windows in a row are required so a burst of shader compilation can't demote a
+  // machine that is actually fine, and it only steps back up when the machine is
+  // clearly idling (sub-13ms frames, which a 60Hz display cannot show) so it can't
+  // oscillate against vsync.
+  let _qFrames=[], _qHold=0, _qWarm=0, _qBad=0, _qGood=0;
+  function autoQuality(ms){
+    if(!qAuto||!playersReady||ms>200) return;      // ignore hitches: tab switches, GC pauses
+    if(_qWarm<90){ _qWarm++; return; }             // first second is shader compiles and texture uploads
+    _qFrames.push(ms); if(_qFrames.length<45) return;
+    const s=_qFrames.slice().sort((a,b)=>a-b), med=s[s.length>>1]; _qFrames.length=0;
+    if(_qHold>0){ _qHold--; return; }
+    const i=QORDER.indexOf(qKey);
+    _qBad = med>24 ? _qBad+1 : 0;
+    _qGood = med<13 ? _qGood+1 : 0;
+    if(_qBad>=2 && i<QORDER.length-1){ qKey=QORDER[i+1]; applyQuality(); _qBad=0; _qHold=6; }
+    else if(_qGood>=3 && i>0){ qKey=QORDER[i-1]; applyQuality(); _qGood=0; _qHold=12; }
+  }
   const SKIN_TONES=[0x8d5a3c,0x6b4226,0xb98a5e,0x4a2f1c,0xa06a40,0xd8a878,0xefc7a2,0x5a3a22,0x7a4a2c];
   function WX(px){ return px/PPY; }
   function WZ(py){ return (py-fieldTop)/PPY; }
@@ -2276,7 +2318,14 @@
       idleAct=mixer.clipAction(playerProto.animations[0]);
       idleAct.play(); mixer.setTime(Math.random()*playerProto.animations[0].duration);
     }
-    grp.userData={B,ring,jerseyMat,helmetMats,trimMats,maskMats,sockMats,sockWhite,team:null,model,mixer,idleAct,gripBones,baseS,buildVh,buildVg,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
+    // Pair every mesh with its reduced copies. Clones share geometry, so the whole
+    // pool points at the same three BufferGeometries per primitive — swapping is a
+    // pointer assignment, not an upload.
+    const lodMeshes=[];
+    if(lodTable){ model.traverse(o=>{ if(o.isMesh && o.geometry && o.geometry.index && o.material){
+      const g2=lodTable.get((o.material.name||'')+'|'+o.geometry.attributes.position.count+'|'+o.geometry.index.count);
+      if(g2) lodMeshes.push({m:o, g:[o.geometry, g2[0], g2[1]]}); } }); }
+    grp.userData={B,ring,jerseyMat,helmetMats,trimMats,maskMats,sockMats,sockWhite,team:null,model,mixer,idleAct,gripBones,baseS,buildVh,buildVg,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, lodMeshes, lod:0};
     grp.visible=false; scene.add(grp); return grp;
   }
   // Pose the Mixamo rig per state.
@@ -2374,8 +2423,41 @@
       L('Spine2', 0.02*Math.sin(u.phase));
     }
   }
+  // ---- distance LOD ------------------------------------------------------------
+  // assets/player-lod.bin carries two reduced copies of every primitive in the player
+  // model (built by tools/build-lod.cjs: 150k triangles -> 46k -> 14k). Entries are
+  // keyed by material name plus vertex and index count, which is unique across all 21
+  // primitives, so the match survives any renaming the model pipeline does. If the
+  // file is missing the game just runs at full detail.
+  let lodTable=null;
+  function loadLOD(){
+    return fetch('assets/player-lod.bin').then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.arrayBuffer(); }).then(buf=>{
+      const dv=new DataView(buf);
+      let magic=''; for(let i=0;i<8;i++) magic+=String.fromCharCode(dv.getUint8(i));
+      if(magic!=='GBLOD100') throw new Error('bad LOD header');
+      const hlen=dv.getUint32(8,true), base=12+hlen;
+      let txt=''; const bytes=new Uint8Array(buf,12,hlen);
+      for(let i=0;i<bytes.length;i++) if(bytes[i]) txt+=String.fromCharCode(bytes[i]);   // header is NUL-padded to 4 bytes
+      const head=JSON.parse(txt);
+      const NAME={POSITION:'position',NORMAL:'normal',TEXCOORD_0:'uv',JOINTS_0:'skinIndex',WEIGHTS_0:'skinWeight',COLOR_0:'color',TANGENT:'tangent'};
+      const CT={Float32Array:Float32Array,Uint16Array:Uint16Array,Uint32Array:Uint32Array};
+      const t=new Map();
+      for(const e of head.entries){
+        t.set(e.mat+'|'+e.v+'|'+e.i, e.lods.map(l=>{
+          const bg=new THREE.BufferGeometry();
+          for(const k of Object.keys(l.attrs)){ const a=l.attrs[k];
+            bg.setAttribute(NAME[k], new THREE.BufferAttribute(new CT[a.t](buf, base+a.o, a.n), a.items)); }
+          bg.setIndex(new THREE.BufferAttribute(new CT[l.index.t](buf, base+l.index.o, l.index.n),1));
+          bg.computeBoundingSphere();
+          return bg;
+        }));
+      }
+      lodTable=t;
+    }).catch(e=>{ lodTable=null; console.warn('player LOD unavailable, rendering at full detail:', e.message||e); });
+  }
   function loadPlayers(){
-    new THREE.GLTFLoader().load('assets/fbplayer_opt.glb', (gltf)=>{
+    const lodReady = (typeof fetch==='function') ? loadLOD() : Promise.resolve();
+    lodReady.then(()=>new THREE.GLTFLoader().load('assets/fbplayer_opt.glb', (gltf)=>{
       playerProto=gltf;
       const aniso=upgradeTextures(playerProto.scene);
       if(window.__gbDebug) console.log('texture anisotropy:',aniso);
@@ -2384,7 +2466,7 @@
         new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.DoubleSide,transparent:true,opacity:0.85,fog:false}));
         r.rotation.x=-Math.PI/2; r.position.y=0.06; r.visible=false; scene.add(r); ringPool.push(r); }
       playersReady=true;
-    }, undefined, (e)=>{ console.error('player glb load failed', e); });
+    }, undefined, (e)=>{ console.error('player glb load failed', e); }));
   }
   function goalpost3D(x){
     const m=new THREE.MeshStandardMaterial({color:0xffe44a,emissive:0x6a560e,emissiveIntensity:0.6,roughness:0.3,metalness:0.35});
@@ -2442,7 +2524,11 @@
   function init3D(){
     scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a1020); scene.fog=new THREE.Fog(0x12203a,75,250);
     camera=new THREE.PerspectiveCamera(54,760/560,0.1,700);
-    renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true}); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    // MSAA on a 2x display spends a lot of bandwidth fixing edges the extra pixels
+    // have already fixed. Take it on low-DPI screens, skip it on high-DPI ones.
+    const hidpi=(window.devicePixelRatio||1)>=1.5;
+    renderer=new THREE.WebGLRenderer({canvas:cv,antialias:!hidpi}); renderer.shadowMap.enabled=true;
+    renderer.shadowMap.type=(Q().soft&&THREE.PCFSoftShadowMap)?THREE.PCFSoftShadowMap:THREE.PCFShadowMap;
     if(THREE.sRGBEncoding) renderer.outputEncoding=THREE.sRGBEncoding;
     if(THREE.ACESFilmicToneMapping){ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05; }
     // image-based lighting: real HDRI for soft reflections, with a gradient fallback until it loads
@@ -2501,7 +2587,10 @@
     camPos=new THREE.Vector3(40,8.5,26.65); camLook=new THREE.Vector3(60,1,26.65);
     resize3D(); window.addEventListener('resize',resize3D); applyQuality();
   }
-  function resize3D(){ if(!renderer) return; const st=document.getElementById('stage'); const w=st.clientWidth||760,h=st.clientHeight||560; renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  function resize3D(){ if(!renderer) return; const st=document.getElementById('stage'); const w=st.clientWidth||760,h=st.clientHeight||560;
+    // The tier's pixel ratio is the whole point of the tier: at devicePixelRatio 2 a
+    // 1100x700 canvas is 3.1 megapixels of shaded, shadowed, tone-mapped field.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, Q().pr)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
   function render3D(){
     if(!renderer) return;
     // broadcast scrimmage/first-down lines (only during normal downs)
@@ -2552,6 +2641,13 @@
     }
     let ringI=0; for(const r of ringPool) r.visible=false;
     _frameNo++; _carrierG=null;
+    // Cull the pool to the camera. On a wide play a third of the squad is behind the
+    // chase cam, and every one of those is 21 draw calls in the main pass plus another
+    // trip through the shadow map. The camera is placed at the END of this function, so
+    // this frustum is one frame old — hence the generous 3.4yd test sphere.
+    camera.updateMatrixWorld();
+    _fmi.copy(camera.matrixWorld).invert();
+    _frustum.setFromProjectionMatrix(_fpm.multiplyMatrices(camera.projectionMatrix,_fmi));
     for(let i=0;i<pPool.length;i++){ const g=pPool[i], u=g.userData;
       if(i<ents.length){ const o=ents[i], e=o.e; g.visible=true;
         if(o.kind==='carry') _carrierG=g;
@@ -2560,7 +2656,20 @@
         // casting shadows — that reclaims most of their cost so the near players can
         // afford full detail.
         const qd=Q(), dxc=Math.abs(WX(e.x)-camera.position.x);
-        const far = dxc>qd.poseDist;
+        _psph.center.set(WX(e.x),1.1,WZ(e.y));
+        const onScreen=_frustum.intersectsSphere(_psph);
+        g.visible = onScreen || dxc<qd.shadowDist;      // off-camera casters still need to draw into the shadow map
+        const far = dxc>qd.poseDist || !onScreen;
+        // Geometry LOD. The source mesh is 150k triangles; a player thirty yards out is
+        // sixty pixels tall and gets a copy at 30% or 10% of that (tools/build-lod.cjs).
+        // Swapping geometry rather than whole models keeps the node count, the draw
+        // calls and the skeleton binding exactly as they were.
+        if(u.lodMeshes && u.lodMeshes.length){
+          const ldx=WX(e.x)-camera.position.x, ldy=camera.position.y-1.0, ldz=WZ(e.y)-camera.position.z;
+          const d=Math.sqrt(ldx*ldx+ldy*ldy+ldz*ldz);
+          const wl = d>qd.lod[1] ? 2 : (d>qd.lod[0] ? 1 : 0);
+          if(u.lod!==wl){ u.lod=wl; for(const it of u.lodMeshes) it.m.geometry=it.g[wl]; }
+        }
         if(u.shadowOn!==(dxc<qd.shadowDist)){ u.shadowOn=dxc<qd.shadowDist;
           u.model.traverse(o=>{ if(o.isMesh) o.castShadow=u.shadowOn; }); }
         const qbDrop = (e===G.carrier && e.role==='qb' && G.passState==='drop');
@@ -2748,8 +2857,8 @@
     else ballMesh.visible=false;
     if(G._fgFlight && G.ball && G.ball.active){ const bx=WX(G.ball.x), bz=WZ(G.ball.y);
       // sit low behind the kick and frame the uprights up the field
-      camPos.lerp(new THREE.Vector3(bx-17,6.5,WZ(fieldMid)+(bz-WZ(fieldMid))*0.4),0.14);
-      camLook.lerp(new THREE.Vector3(119.5,4.5,WZ(fieldMid)),0.14);
+      camPos.lerp(_cvA.set(bx-17,6.5,WZ(fieldMid)+(bz-WZ(fieldMid))*0.4),0.14);
+      camLook.lerp(_cvB.set(119.5,4.5,WZ(fieldMid)),0.14);
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(repFrame){ // replay: four broadcast angles, chosen per replay
       let rc=null; for(const it of repFrame.e) if(it.k==='carry') rc=it;
@@ -2757,13 +2866,13 @@
         const R=G.replay||{cam:0,side:-1}, sd=R.side||-1;
         let pos, look;
         if(R.cam===1){        // end zone, looking back up the field
-          pos=new THREE.Vector3(cx+13, 3.4, cz+1.5);  look=new THREE.Vector3(cx-3, 1.3, cz);
+          pos=_cvA.set(cx+13, 3.4, cz+1.5);  look=_cvB.set(cx-3, 1.3, cz);
         } else if(R.cam===2){ // high and tight, over the shoulder
-          pos=new THREE.Vector3(cx-8, 7.5, cz+sd*5);  look=new THREE.Vector3(cx+3, 1.1, cz);
+          pos=_cvA.set(cx-8, 7.5, cz+sd*5);  look=_cvB.set(cx+3, 1.1, cz);
         } else if(R.cam===3){ // low and close, from the far side
-          pos=new THREE.Vector3(cx-2.5, 1.5, cz-sd*7.5); look=new THREE.Vector3(cx+4, 1.2, cz);
+          pos=_cvA.set(cx-2.5, 1.5, cz-sd*7.5); look=_cvB.set(cx+4, 1.2, cz);
         } else {              // the original tracking sideline
-          pos=new THREE.Vector3(cx-7.5, 3.0, cz+sd*9.5); look=new THREE.Vector3(cx+2.5, 1.3, cz);
+          pos=_cvA.set(cx-7.5, 3.0, cz+sd*9.5); look=_cvB.set(cx+2.5, 1.3, cz);
         }
         camPos.lerp(pos, 0.12); camLook.lerp(look, 0.16);
         camera.position.copy(camPos); camera.lookAt(camLook); } }
@@ -2773,13 +2882,13 @@
       const focusX = (G.ball&&G.ball.active) ? WX(G.ball.x) : WX(tee.x);
       const midX = (focusX + WX(G.carrier.x))*0.5;
       const highBall = (G.ball&&G.ball.active)?7:3;
-      camPos.lerp(new THREE.Vector3(midX+2, 30, WZ(fieldMid)-60), 0.07);
-      camLook.lerp(new THREE.Vector3((focusX+midX)*0.5, highBall, WZ(fieldMid)), 0.10);
+      camPos.lerp(_cvA.set(midX+2, 30, WZ(fieldMid)-60), 0.07);
+      camLook.lerp(_cvB.set((focusX+midX)*0.5, highBall, WZ(fieldMid)), 0.10);
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(G._td && G.phase==='dead' && G.carrier){ // touchdown: slow orbit around the celebration
       const cx=WX(G.carrier.x), cz=WZ(G.carrier.y), a=performance.now()*0.0011;
-      camPos.lerp(new THREE.Vector3(cx+Math.cos(a)*7, 3.2, cz+Math.sin(a)*7), 0.10);
-      camLook.lerp(new THREE.Vector3(cx, 1.4, cz), 0.18);
+      camPos.lerp(_cvA.set(cx+Math.cos(a)*7, 3.2, cz+Math.sin(a)*7), 0.10);
+      camLook.lerp(_cvB.set(cx, 1.4, cz), 0.18);
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(G.carrier){ const cx=WX(G.carrier.x), cz=WZ(G.carrier.y);
       // Broadcast chase. The old rig sat 18 back / 13 high and looked 12 AHEAD of the
@@ -2790,12 +2899,14 @@
       // dropback so the routes still fit.
       const wide=(G.passState==='drop'||G.passState==='air')?1.22:1.0;
       const cmid=cz+(WZ(fieldMid)-cz)*0.20;
-      camPos.lerp(new THREE.Vector3(cx-13*wide,8.2*wide,cmid),0.10);
-      camLook.lerp(new THREE.Vector3(cx+6*wide,1.5,cz),0.13);
+      camPos.lerp(_cvA.set(cx-13*wide,8.2*wide,cmid),0.10);
+      camLook.lerp(_cvB.set(cx+6*wide,1.5,cz),0.13);
       const s=G.shake>0?Math.min(0.45,G.shake*2.4):0;
       camera.position.set(camPos.x+(Math.random()-0.5)*s, camPos.y+(Math.random()-0.5)*s, camPos.z+(Math.random()-0.5)*s);
       camera.lookAt(camLook); }
-    for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; } else if(Math.random()<0.025){ f.material.opacity=0.95; f.lookAt(camera.position); } }
+    for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; f.visible=true; }
+      else if(Math.random()<0.025){ f.material.opacity=0.95; f.lookAt(camera.position); f.visible=true; }
+      else f.visible=false; }   // a spent flash is still a draw call until it is hidden
     // slide the tight shadow frustum onto the action, keeping the light direction fixed
     if(sunLight){ const fx=camLook.x, fz=camLook.z;
       sunLight.target.position.set(fx,0,fz); sunLight.target.updateMatrixWorld();

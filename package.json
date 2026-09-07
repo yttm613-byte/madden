@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "build:player": "node tools/build-player.cjs",
+    "build:lod": "node tools/build-lod.cjs",
     "optimize:player": "node tools/optimize-model.mjs",
     "serve": "http-server -p 8088 -c-1 .",
     "start": "http-server -p 8088 -c-1 ."

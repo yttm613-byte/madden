@@ -43,6 +43,21 @@ play state.
 
 `tools/viewer.html` is a tiny standalone model viewer for inspecting the rig.
 
+## Rebuild the level-of-detail meshes
+
+Twenty-two players are on the field at once, so the source mesh's 150k triangles
+turn into ~3.4M triangles a frame. `assets/player-lod.bin` holds two reduced
+copies of every primitive (30% and 9% of the source), which the game swaps in by
+distance. Regenerate it whenever the player model changes:
+
+```bash
+npm run build:lod
+```
+
+It needs no dependencies — the reduction is uniform vertex clustering, and the
+output is matched back to the model by material name plus vertex and index count.
+Without the file the game still runs, just at full detail everywhere.
+
 ## Layout
 
 ```
@@ -50,6 +65,8 @@ index.html              the game (engine + 3D renderer)
 gridiron-blitz-3d.html  original single-file version (reference)
 vendor/                 three.min.js, GLTFLoader, SkeletonUtils, BufferGeometryUtils, GLTFExporter
 assets/player.glb       generated rigged player model
+assets/player-lod.bin   reduced copies of the player mesh, swapped in by distance
 tools/build-player.cjs  model + animation generator
+tools/build-lod.cjs     level-of-detail generator
 tools/viewer.html       standalone rig viewer
 ```
