@@ -1410,10 +1410,10 @@
   const REPLAY_SECS=1.7, REPLAY_SPD=0.5;   // capture the last 1.7s, play it at half speed
   function recordFrame(){
     const e=[];
-    for(const b of G.blockers) e.push({x:b.x,y:b.y,vx:b.vx,vy:b.vy,k:'block'});
-    for(const r of G.receivers) e.push({x:r.x,y:r.y,vx:r.vx,vy:r.vy,k:'rec'});
-    for(const d of G.defenders) e.push({x:d.x,y:d.y,vx:d.vx,vy:d.vy,k:'def'});
-    if(G.carrier) e.push({x:G.carrier.x,y:G.carrier.y,vx:G.carrier.vx,vy:G.carrier.vy,k:'carry'});
+    for(const b of G.blockers) e.push({x:b.x,y:b.y,vx:b.vx,vy:b.vy,n:b.n,k:'block'});
+    for(const r of G.receivers) e.push({x:r.x,y:r.y,vx:r.vx,vy:r.vy,n:r.n,k:'rec'});
+    for(const d of G.defenders) e.push({x:d.x,y:d.y,vx:d.vx,vy:d.vy,n:d.n,k:'def'});
+    if(G.carrier) e.push({x:G.carrier.x,y:G.carrier.y,vx:G.carrier.vx,vy:G.carrier.vy,n:G.carrier.n,k:'carry'});
     G._recT=(G._recT||0)+lastDt;
     // Record the ball too. Without this a fumble replay showed the carrier still
     // holding it, so the video never showed the ball actually coming loose.
@@ -1907,7 +1907,10 @@
     try{ localStorage.setItem('gb_quality',qKey); }catch(e){}
   }
   function cycleQuality(){ qKey=QORDER[(QORDER.indexOf(qKey)+1)%QORDER.length]; applyQuality(); }
-  const SKIN_TONES=[0x8d5a3c,0x6b4226,0xb98a5e,0x4a2f1c,0xa06a40,0xd8a878,0xefc7a2,0x5a3a22,0x7a4a2c];
+  const TEAM_KIT={
+    user:{jersey:0x1e58d8, trim:0xf0b429, helmet:0xe8ecf4, stripe:0x1e58d8, mask:0x10131a, sock:0x1e58d8, pants:0xe9ebef, belt:0x1e58d8},   // home: royal, gold trim, silver lid
+    cpu: {jersey:0xa5131d, trim:0xe6e8ee, helmet:0x15171d, stripe:0xa5131d, mask:0x0e1014, sock:0x15171d, pants:0x1b1d24, belt:0x15171d},   // away: deep red on black
+  };
   function WX(px){ return px/PPY; }
   function WZ(py){ return (py-fieldTop)/PPY; }
   function fieldTexture(){
@@ -1975,12 +1978,7 @@
     g.fillStyle=sh; g.fillRect(0,0,W,H);
     const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=8; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
   }
-  function numberTex(n){
-    const c=document.createElement('canvas'); c.width=128; c.height=128; const g=c.getContext('2d');
-    g.clearRect(0,0,128,128); g.font='bold 92px Oswald, Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
-    g.lineWidth=9; g.strokeStyle='rgba(0,0,0,0.6)'; g.strokeText(''+n,64,68); g.fillStyle='rgba(255,255,255,0.97)'; g.fillText(''+n,64,68);
-    const t=new THREE.CanvasTexture(c); t.anisotropy=4; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
-  }
+
   // Clone one instance of the rigged GLB player, with its own materials, build
   // variation and animation mixer (idle / run / tackle / celebrate).
   // ---- realistic rigged player (Mixamo-skeleton GLB), driven procedurally ----
@@ -1989,17 +1987,14 @@
   function setBone(b,ax,ang){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromAxisAngle(ax,ang); b.quaternion.multiply(_tq); }
   const _te=new THREE.Euler();
   function setBoneE(b,x,y,z){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromEuler(_te.set(x||0,y||0,z||0)); b.quaternion.multiply(_tq); }
-  // One-time quality pass on the loaded model: max anisotropic filtering (these
-  // textures are small, so glancing-angle sharpness matters a lot), proper mip
-  // filtering, and stronger normal-map relief.
+  // One-time quality pass on the loaded model: max anisotropic filtering and proper
+  // mip filtering on every texture, and vertex colours switched on wherever the
+  // attribute exists — the model bakes its ambient occlusion into COLOR_0, and three
+  // ignores vertex colours unless the material opts in.
   function upgradeTextures(root){
     const maxAniso = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 8;
     const seen=new Set();
     root.traverse(o=>{ if(!o.isMesh||!o.material) return;
-      // The build bakes ambient occlusion into COLOR_0 (see tools/optimize-model.mjs).
-      // three ignores vertex colours unless the material opts in, so switch it on
-      // wherever the attribute actually exists — this is what puts contact shadow in
-      // the neck, under the shoulder pads and along the cloth folds.
       if(o.geometry && o.geometry.attributes && o.geometry.attributes.color){
         for(const mm of (Array.isArray(o.material)?o.material:[o.material])) if(mm) mm.vertexColors=true;
       }
@@ -2010,119 +2005,51 @@
           t.anisotropy=maxAniso; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter;
           t.generateMipmaps=true; t.needsUpdate=true;
         }
-        // Deepen fabric/pad relief — but NOT on skin. At 1.6 the body normal map's
-        // muscle striations amplified into hard horizontal banding down the arms.
-        if(m.normalMap && m.normalScale){ const s=(m.name==='Bodymat')?0.50:1.6; m.normalScale.set(s,s); }
-        m.needsUpdate=true;
         m.needsUpdate=true;
       }});
     return maxAniso;
   }
-  // The GLB ships one baked college kit (maroon/gold "COUGARS"). Multiplying a team
-  // colour over it just muddies both teams into the same salmon. Strip the hue and
-  // keep the weave/lettering/shading as a luminance map, then a team tint reads clean.
-  // Cached per source texture, so all 24 players share one canvas.
-  const _desatCache=new Map();
-  // contrast: how much of the baked artwork survives. The kit texture has a college
-  // uniform painted into it — "COUGARS", a number 1 and a sponsor logo across the
-  // chest, worn by all 22 players on both teams. Proved it lives in the DIFFUSE by
-  // rendering with the normal map removed: the lettering stayed, the weave went. So
-  // the diffuse gets crushed toward its own mean, which erases the artwork, and the
-  // untouched normal map is left to carry the fabric.
-  function desatMap(tex, contrast){
-    if(!tex || !tex.image) return tex;
-    const k = contrast===undefined ? 0.80 : contrast;
-    const key = tex.uuid+'|'+k;
-    if(_desatCache.has(key)) return _desatCache.get(key);
-    const img=tex.image, w=img.width||512, h=img.height||512;
-    let out=tex;
-    try{
-      const c=document.createElement('canvas'); c.width=w; c.height=h;
-      const g=c.getContext('2d'); g.drawImage(img,0,0,w,h);
-      const d=g.getImageData(0,0,w,h), a=d.data;
-      let sum=0, n=0;
-      for(let i=0;i<a.length;i+=4){ sum+=0.299*a[i]+0.587*a[i+1]+0.114*a[i+2]; n++; }
-      const mean = n ? sum/n : 128;
-      for(let i=0;i<a.length;i+=4){
-        const l=0.299*a[i]+0.587*a[i+1]+0.114*a[i+2];
-        // Keep the base dark enough that a tint survives. Measured: a +62 lift
-        // rendered royal 0x1e58d8 as a washed #548dcb under the stadium rig.
-        const v=Math.min(255, 18+(mean+(l-mean)*k)*0.80);
-        a[i]=a[i+1]=a[i+2]=v;
-      }
-      g.putImageData(d,0,0);
-      out=new THREE.CanvasTexture(c);
-      out.flipY=tex.flipY; out.encoding=tex.encoding;          // glTF maps are flipY:false
-      out.wrapS=tex.wrapS; out.wrapT=tex.wrapT; out.offset.copy(tex.offset); out.repeat.copy(tex.repeat);
-      out.anisotropy=tex.anisotropy; out.minFilter=THREE.LinearMipmapLinearFilter; out.magFilter=THREE.LinearFilter;
-      out.generateMipmaps=true; out.needsUpdate=true;
-    }catch(e){ /* tainted/undecoded image — fall back to the original */ }
-    _desatCache.set(key,out); return out;
+  // Colours are authored as sRGB hex, but three r128 treats material.color as linear.
+  // Setting the hex raw rendered royal 0x1e58d8 as a washed-out sky blue; converting it
+  // is what makes the team colours read as the colours they are.
+  const _lin=new THREE.Color();
+  function setSRGB(m,hex){ m.color.setHex(hex); m.color.convertSRGBToLinear(); }
+
+  // ---- jersey numbers and nameplates ------------------------------------------------
+  // Painted per player at runtime onto the decal patches the model carries on the chest,
+  // back, both shoulder caps, and above the back number. Cached, because the same man
+  // wears the same number all game and the pool reassigns players every snap.
+  const _numCache=new Map(), _nameCache=new Map();
+  function decalTex(c){ const t=new THREE.CanvasTexture(c); t.flipY=false; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding;
+    t.anisotropy=8; t.minFilter=THREE.LinearMipmapLinearFilter; t.generateMipmaps=true; return t; }
+  function jerseyNumberTex(n, trim){
+    const key=n+'|'+trim; if(_numCache.has(key)) return _numCache.get(key);
+    const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
+    const txt=String(n);
+    g.font='700 206px Oswald, Anton, "Arial Narrow", Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    const w=g.measureText(txt).width, sx=Math.min(0.86, 226/(w||1));   // the patches are wider than tall
+    g.save(); g.translate(128,138); g.scale(sx,1);
+    g.lineJoin='round'; g.lineWidth=15; g.strokeStyle='#'+trim.toString(16).padStart(6,'0'); g.strokeText(txt,0,0);
+    g.fillStyle='#ffffff'; g.fillText(txt,0,0); g.restore();
+    const t=decalTex(c); _numCache.set(key,t); return t;
   }
-  // The body atlas's face region is a blotchy hand-painted scan. Stretched over the
-  // head it breaks into hard angular shards — the players looked shredded in close-up.
-  // Verified by rendering the head with every map removed: the GEOMETRY is clean, so
-  // the damage is entirely in the texture. Soften it and pull it toward its own mean,
-  // which keeps the tonal variation but drops the shards. Cached across all players.
-  const _softCache=new Map();
-  function softenSkin(tex, keep, blurPx){
-    if(!tex || !tex.image) return tex;
-    if(_softCache.has(tex)) return _softCache.get(tex);
-    const img=tex.image, w=img.width||512, h=img.height||512;
-    let out=tex;
-    try{
-      const c=document.createElement('canvas'); c.width=w; c.height=h;
-      const g=c.getContext('2d');
-      g.filter='blur('+(blurPx||2)+'px)'; g.drawImage(img,0,0,w,h); g.filter='none';
-      const d=g.getImageData(0,0,w,h), a=d.data;
-      let mr=0,mg=0,mb=0,n=0;
-      for(let i=0;i<a.length;i+=4){ if(a[i+3]<8) continue; mr+=a[i]; mg+=a[i+1]; mb+=a[i+2]; n++; }
-      if(n){ mr/=n; mg/=n; mb/=n;
-        const k=keep==null?0.38:keep;
-        for(let i=0;i<a.length;i+=4){
-          a[i]  =Math.max(0,Math.min(255, mr+(a[i]  -mr)*k));
-          a[i+1]=Math.max(0,Math.min(255, mg+(a[i+1]-mg)*k));
-          a[i+2]=Math.max(0,Math.min(255, mb+(a[i+2]-mb)*k));
-        }
-        g.putImageData(d,0,0);
-      }
-      out=new THREE.CanvasTexture(c);
-      out.flipY=tex.flipY; out.encoding=tex.encoding;
-      out.wrapS=tex.wrapS; out.wrapT=tex.wrapT; out.offset.copy(tex.offset); out.repeat.copy(tex.repeat);
-      out.anisotropy=tex.anisotropy; out.minFilter=THREE.LinearMipmapLinearFilter; out.magFilter=THREE.LinearFilter;
-      out.generateMipmaps=true; out.needsUpdate=true;
-    }catch(e){ /* tainted/undecoded image — keep the original */ }
-    _softCache.set(tex,out); return out;
+  function nameplateTex(name){
+    if(_nameCache.has(name)) return _nameCache.get(name);
+    const c=document.createElement('canvas'); c.width=256; c.height=64; const g=c.getContext('2d');
+    g.font='600 44px Oswald, "Arial Narrow", Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    const w=g.measureText(name).width, sx=Math.min(0.78, 236/(w||1));
+    g.save(); g.translate(128,34); g.scale(sx,1); g.lineWidth=6; g.lineJoin='round'; g.strokeStyle='rgba(10,12,18,0.85)'; g.strokeText(name,0,0);
+    g.fillStyle='#ffffff'; g.fillText(name,0,0); g.restore();
+    const t=decalTex(c); _nameCache.set(name,t); return t;
   }
-  // Same story for the body NORMAL map, which turned out to be the bigger offender:
-  // with it removed the face renders smooth, with it on the cheeks break into shards.
-  // Blur it and blend toward flat (128,128,255) so it still carries large-scale form
-  // (muscle, collarbone) without the torn high-frequency scan noise.
-  const _normCache=new Map();
-  function softenNormalMap(tex, keep, blurPx){
-    if(!tex || !tex.image) return tex;
-    if(_normCache.has(tex)) return _normCache.get(tex);
-    const img=tex.image, w=img.width||512, h=img.height||512;
-    let out=tex;
-    try{
-      const c=document.createElement('canvas'); c.width=w; c.height=h;
-      const g=c.getContext('2d');
-      g.filter='blur('+(blurPx||3)+'px)'; g.drawImage(img,0,0,w,h); g.filter='none';
-      const d=g.getImageData(0,0,w,h), a=d.data, k=keep==null?0.45:keep;
-      for(let i=0;i<a.length;i+=4){
-        a[i]  =128+(a[i]  -128)*k;
-        a[i+1]=128+(a[i+1]-128)*k;
-        a[i+2]=255+(a[i+2]-255)*k;
-      }
-      g.putImageData(d,0,0);
-      out=new THREE.CanvasTexture(c);
-      out.flipY=tex.flipY; out.encoding=THREE.LinearEncoding;      // normal maps are linear data
-      out.wrapS=tex.wrapS; out.wrapT=tex.wrapT; out.offset.copy(tex.offset); out.repeat.copy(tex.repeat);
-      out.anisotropy=tex.anisotropy; out.minFilter=THREE.LinearMipmapLinearFilter; out.magFilter=THREE.LinearFilter;
-      out.generateMipmaps=true; out.needsUpdate=true;
-    }catch(e){ /* keep the original */ }
-    _normCache.set(tex,out); return out;
-  }
+
+  // ---- the player ----------------------------------------------------------------------
+  // assets/gridiron_player.glb is generated by tools/player/build.mjs: every part of the
+  // kit is its own literally-named material, the kit is neutral white so any team colour
+  // lands clean, ambient occlusion is baked into the vertex colours, and the skeleton
+  // is Mixamo-named with Mixamo bone frames, so applyPose below drives it unchanged.
+  const SKIN_HEX=[0x3b2219,0x4d2c1c,0x5f3824,0x74462c,0x8c5a3a,0xa86f4c,0xc38c66,0xdcaa86,0xeec4a2];
+  const SKIN_W  =[0.10,  0.13,  0.14,  0.14,  0.12,  0.10,  0.09,  0.10,  0.08];
   function makePlayer(){
     const grp=new THREE.Group();
     const model=THREE.SkeletonUtils.clone(playerProto.scene);
@@ -2132,151 +2059,63 @@
     const s=2.0/(sz.y||1); model.scale.set(s*vg, s*vh, s*vg);
     const baseS=s, buildVh=vh, buildVg=vg;
     const box2=new THREE.Box3().setFromObject(model); model.position.y=-box2.min.y;
-    model.traverse(o=>{ if(o.isMesh){ o.frustumCulled=false; o.castShadow=true;
-      const ms=Array.isArray(o.material)?o.material:[o.material];
-      for(const m of ms){ if(m&&m.isMeshStandardMaterial){ m.envMapIntensity=1.25; } }   // catch the stadium reflections
-    } });
     grp.add(model);
     const B={};
-    ['Hips','Spine2','Spine','Head','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm'].forEach(k=>{
+    ['Hips','Spine2','Spine','Head','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm',
+     'Spine1','Neck','LeftShoulder','RightShoulder'].forEach(k=>{
       const b=findBone(model,k); if(b){ b.userData.bind=b.quaternion.clone(); B[k]=b; } });
-    ['Spine1','Neck','LeftShoulder','RightShoulder'].forEach(k=>{
-      const b=findBone(model,k); if(b){ b.userData.bind=b.quaternion.clone(); B[k]=b; } });
-    // hand bones (used to carry the ball in the actual hand rather than at a fixed offset)
     B.RightHand=findBone(model,'RightHand'); B.LeftHand=findBone(model,'LeftHand');
-    // Close the fingers into a relaxed grip once, at load. The model ships with the
-    // fingers splayed wide open, which reads as claws at gameplay distance.
-    const gripBones=[];
-    // This rig is mitten-style: only Thumb and Index are boned, and the middle/ring/
-    // pinky geometry is skinned to them. A flat 0.62 rad on all four index joints
-    // compounds to ~142 degrees of curl and drags that mass into a claw. Taper it
-    // down the chain to about 60 degrees total — a relaxed, open hand.
-    { const CURL={ Index:[0.30,0.34,0.30,0.10], Thumb:[0.16,0.18,0.16,0.06] };
-      model.traverse(o=>{ if(o.isBone && /Hand(Index|Thumb)\d/.test(o.name)) gripBones.push(o); });
-      for(const f of gripBones){ const isThumb=/Thumb/.test(f.name);
-        const joint=(f.name.match(/(?:Index|Thumb)(\d)/)||[0,'1'])[1]|0;
-        const amt=(CURL[isThumb?'Thumb':'Index'][joint-1])||0, sgn=(f.name.indexOf('Left')>=0)?1:-1;
-        f.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,sgn*amt)));
-        f.userData.grip=f.quaternion.clone();   // remembered so the mocap idle can't undo it
-      } }
-    // per-instance jersey/helmet/skin materials so each player can be tinted independently
-    // Material→body-part map was MEASURED by tinting each material a distinct colour
-    // and looking (tools/kitshot.mjs). Do not infer it from the names — several are
-    // misleading (`Plastic_Matte` is the neck roll, `Default` is the socks).
-    //   shirt_0 jersey | Mat.3 helmet shell (3 meshes!) | Bodymat skin | pants pants
-    //   Default socks  | sepatu_key.obj cleats | Mat.2_2mat belt | Plastic_Matte collar
-    //   material / Mat.8_1 / Mat.2 / default  helmet hardware | frosted_glass visor
-    //   Fabric-Linen / Fabric-Silk  undersleeves
-    let jerseyMat=null; const helmetMats=[], skinMats=[], trimMats=[], maskMats=[], sockMats=[];
-    model.traverse(o=>{ if(o.isMesh && o.material){ const nm=o.material.name||'';
-      if(nm==='shirt_0'){ o.material=o.material.clone(); jerseyMat=o.material; jerseyMat.map=desatMap(jerseyMat.map, 0.05); }
-      else if(nm==='Mat.3'){ o.material=o.material.clone(); helmetMats.push(o.material); o.material.map=desatMap(o.material.map, 0.26);
-        // envMapIntensity 1.9 + metalness 0.5 made the shell mirror the bright stadium,
-        // so the away team's BLACK helmet rendered silver and both teams wore the same lid.
-        o.material.roughness=0.26; o.material.metalness=0.32; o.material.envMapIntensity=0.85; }   // glossy, but the team colour still wins
-      // The eyeballs share the 'Bodymat' material name with the skin, so the skin tint
-      // was being applied to them too — that is the flesh-coloured, rolled-back look.
-      // Identify them by size, NOT by name: the optimizer renames meshes to Object_NN,
-      // so an /eye/ name test silently matched nothing. Eyes are ~1.5k tris, body ~24k.
-      else if(nm==='Bodymat' && o.geometry && o.geometry.index && o.geometry.index.count/3 < 4000){ o.material=o.material.clone();
-        o.material.roughness=0.25; o.material.metalness=0.0; o.material.envMapIntensity=1.1; }
-      else if(nm==='Bodymat'){ o.material=o.material.clone(); skinMats.push(o.material);
-        // Mild soften only. The face shards are TORN GEOMETRY in the source asset —
-        // verified by rendering the head with every map removed (they remain) and by
-        // loading the untouched 27MB source (identical). No texture treatment fixes
-        // them, so don't destroy skin detail chasing it. This much just takes the
-        // edge off the scan noise on the arms.
-        o.material.map=softenSkin(o.material.map, 0.55, 2);
-        o.material.normalMap=softenNormalMap(o.material.normalMap, 0.50, 2);
-        o.material.roughness=0.78; o.material.metalness=0.0; o.material.envMapIntensity=0.38; }        // skin: matte. Higher env read as oiled-up plastic.
-      else if(nm==='Plastic_Matte'){ o.material=o.material.clone(); trimMats.push(o.material);
-        o.material.map=desatMap(o.material.map); o.material.roughness=0.7; }                           // collar / jaw pads take the team accent
-      // Corrected by colour-coding each material and shooting the head: `default` is
-      // the FACEMASK (the whole cage, the most visible thing on a player) and
-      // `Mat.2_2mat` is the CHIN CUP — not generic hardware and a belt. With the chin
-      // cup in the accent group it rendered as a big gold blob under the jaw.
-      // These also need low metalness and env: at 0.25/1.0 a dark navy washed out to
-      // pale grey under the stadium rig, which is the "funny helmet" look.
-      else if(nm==='material'||nm==='Mat.8_1'||nm==='Mat.2'||nm==='default'||nm==='Mat.2_2mat'){
-        o.material=o.material.clone(); maskMats.push(o.material);
-        o.material.map=desatMap(o.material.map);
-        o.material.roughness=0.62; o.material.metalness=0.10; o.material.envMapIntensity=0.35; }
-      else if(nm==='Default'){ o.material=o.material.clone(); sockMats.push(o.material); o.material.map=desatMap(o.material.map);
-        o.material.roughness=0.9; o.material.metalness=0.0; }                                          // socks
-      else if(nm==='pants'||nm==='Fabric-Linen'||nm==='Fabric-Silk'){ o.material=o.material.clone();
-        o.material.roughness=0.88; o.material.metalness=0.0; o.material.envMapIntensity=0.5; }         // matte cloth
-    }});
-    if(jerseyMat){ jerseyMat.roughness=0.8; jerseyMat.metalness=0.0; jerseyMat.envMapIntensity=0.65; } // jersey reads as fabric
-    // Per-player skin tone. This multiplies a light-tan body texture (avg #b3806c),
-    // so the old 0.66..1.12 range could only ever produce light players — the whole
-    // squad came out the same tan. Sample instead from tone anchors spanning deep to
-    // pale, weighted toward the darker end to match who actually plays this sport.
-    // Deeper tones also keep more blue; scaling the channels evenly makes dark skin
-    // read as orange.
-    { const TONES=[[0.26,1.03],[0.34,1.01],[0.45,1.00],[0.60,0.99],[0.78,0.98],[0.96,0.97]];
-      const W    =[0.16, 0.17, 0.15, 0.12, 0.21, 0.19];
-      let r=Math.random(), i=0; while(i<W.length-1 && (r-=W[i])>0) i++;
-      const f=Math.max(0.19, TONES[i][0]+(Math.random()-0.5)*0.07), warm=TONES[i][1];
-      const bMul=0.94-0.06*Math.min(1,f);
-      for(const m of skinMats) m.color.setRGB(f, f*0.95*warm, f*bMul*warm); }
-    // ---- per-player kit ----------------------------------------------------------
-    // One base model becomes a squad of individuals the same way a real sports game
-    // does it: shared body, per-player equipment. Each part is its own material here.
-    // Vary only what really varies inside an NFL locker room: visor, cleats, sock
-    // height/colour, undersleeves. Helmet shell, facemask and belt stay team-uniform —
-    // randomising those is what made an earlier build look like a pickup game.
-    const sockWhite = Math.random()<0.45;
-    { const kit={};
-      model.traverse(o=>{ if(o.isMesh && o.material){ const n=o.material.name||''; (kit[n]=kit[n]||[]).push(o); } });
-      const pickOf=a=>a[(Math.random()*a.length)|0];
-      // Visor. Worn by most players here rather than a minority, and smoked darker,
-      // because it is also the only thing that can shade the face: the head mesh in
-      // this asset has torn polygons across the cheeks (verified against the untouched
-      // source, so it is not something the optimiser did) and it cannot be fixed
-      // without replacing the head. Behind a dark visor it reads as a shadowed face,
-      // which is what a real helmet interior looks like anyway.
-      const wearsVisor=Math.random()<0.82;
-      for(const o of (kit['frosted_glass']||[])){ o.visible=wearsVisor;
-        if(wearsVisor){ o.material=o.material.clone();
-          o.material.color.setHex(pickOf([0x090a0e,0x090a0e,0x0d1420,0x18120a]));
-          o.material.transparent=true; o.material.opacity=0.88; o.material.roughness=0.10; o.material.metalness=0.45;
-          o.material.envMapIntensity=1.5; } }                 // keep the glassy highlight
-      // cleats
-      for(const o of (kit['sepatu_key.obj']||[])){ o.material=o.material.clone();
-        o.material.color.setHex(pickOf([0x101014,0x101014,0xf0f0f2,0xc9302c,0x1d4ea8])); }
-      // undersleeves — not everyone wears them
-      const wearsSleeves=Math.random()<0.55;
-      for(const o of (kit['Fabric-Linen']||[]).concat(kit['Fabric-Silk']||[])){ o.visible=wearsSleeves;
-        if(wearsSleeves){ o.material=o.material.clone(); o.material.color.setHex(pickOf([0x14161c,0x14161c,0xf0f0f2])); } }
-    }
-    // unique jersey number on the back (visible from the chase cam), follows lean/bank via the model
-    // NFL back numbers are ~10in on a 6ft player — about 16% of body height. At the
-    // old 0.34 (34%) it read as a HUD sticker floating over the shoulder pads.
-    { const num=Math.floor(Math.random()*89)+10;
-      const nm=new THREE.MeshBasicMaterial({map:numberTex(num),transparent:true,depthWrite:false});
-      const back=new THREE.Mesh(new THREE.PlaneGeometry(0.20,0.20), nm);
-      // Placed from MEASURED model-local coords (tools/kitshot.mjs): torso spans
-      // y 0..1.32, the spine sits at x=-0.04, the back surface at z=-0.19. Mid-back
-      // is between the Spine (0.83) and Spine1 (0.90) bones.
-      grp.updateMatrixWorld(true);
-      back.position.set(-0.04, 0.845, -0.188); back.rotation.y=Math.PI; back.renderOrder=2; model.add(back); }
-    // team ring (reliable team distinction since both teams wear the same kit)
+    // every part gets its own material instance so each player can be tinted and varied
+    const mats={}, parts={};
+    model.traverse(o=>{ if(!o.isMesh||!o.material) return;
+      o.frustumCulled=false; o.castShadow=true;
+      o.material=o.material.clone(); const n=o.material.name;
+      (mats[n]=mats[n]||[]).push(o.material); (parts[n]=parts[n]||[]).push(o); });
+    const each=(n,f)=>{ for(const m of (mats[n]||[])) f(m); };
+    const surf=(n,r,mt,env)=>each(n,m=>{ m.roughness=r; m.metalness=mt; m.envMapIntensity=env; });
+    surf('Skin',0.56,0,0.42); surf('Eyes',0.14,0,1.0);
+    surf('Jersey',0.80,0,0.55); surf('JerseyTrim',0.72,0,0.55); surf('Pants',0.60,0,0.60); surf('Belt',0.55,0,0.5);
+    surf('Socks',0.90,0,0.45); surf('Gloves',0.55,0,0.6); surf('Cleats',0.42,0,0.8); surf('ChinStrap',0.45,0,0.6);
+    // The shell is glossy, but at envMapIntensity 1.9 + metalness 0.5 it mirrored the
+    // bright stadium and a BLACK helmet rendered silver. The team colour has to win.
+    surf('Helmet',0.24,0.22,0.85); surf('HelmetStripe',0.26,0.22,0.85); surf('Facemask',0.50,0.15,0.40);
+    // number patches sit a millimetre off the jersey; polygon offset keeps them clean at range
+    for(const n of ['Numbers','NameBar']) each(n,m=>{ m.roughness=0.7; m.metalness=0; m.envMapIntensity=0.5;
+      m.polygonOffset=true; m.polygonOffsetFactor=-2; m.polygonOffsetUnits=-2; m.alphaTest=0.5; m.transparent=false; });
+    // skin tone, weighted toward the deeper end to match who actually plays this sport
+    { let r=Math.random(), i=0; while(i<SKIN_W.length-1 && (r-=SKIN_W[i])>0) i++;
+      const tone=new THREE.Color(SKIN_HEX[i]).convertSRGBToLinear().multiplyScalar(0.94+Math.random()*0.12);
+      each('Skin',m=>m.color.copy(tone)); }
+    // ---- per-player kit: what really varies inside an NFL locker room ----
+    // Helmet shell, facemask and uniform stay team-uniform; randomising those is what
+    // made an earlier build look like a pickup game. Visor, gloves and cleats vary.
+    const pickOf=a=>a[(Math.random()*a.length)|0];
+    const wearsVisor=Math.random()<0.38;
+    for(const o of (parts['Visor']||[])){ o.visible=wearsVisor; o.renderOrder=3; }
+    if(wearsVisor){ const v=pickOf([[0x0b0d12,0.86],[0x0b0d12,0.86],[0x2a1a08,0.72],[0xa8b4c8,0.32]]);
+      each('Visor',m=>{ setSRGB(m,v[0]); m.opacity=v[1]; m.transparent=true; m.roughness=0.06; m.metalness=0.5; m.envMapIntensity=1.4; m.depthWrite=false; }); }
+    const gloveHex=pickOf([0x121317,0x121317,0xf0f1f4,-1]);      // -1: team colour, set with the kit
+    const cleatHex=pickOf([0x111216,0x111216,0xf2f2f4,-1]);
+    const chinHex=pickOf([0xf0f1f4,0x15171d]);
+    if(gloveHex>=0) each('Gloves',m=>setSRGB(m,gloveHex));
+    if(cleatHex>=0) each('Cleats',m=>setSRGB(m,cleatHex));
+    each('ChinStrap',m=>setSRGB(m,chinHex));
+    // team ring (reliable team distinction at a glance)
     const ring=new THREE.Mesh(new THREE.RingGeometry(0.66,0.92,28), new THREE.MeshBasicMaterial({color:0x3a86ff,transparent:true,opacity:0.55,side:THREE.DoubleSide,depthWrite:false,fog:false}));
     ring.rotation.x=-Math.PI/2; ring.position.y=0.03; grp.add(ring);
     if(!makePlayer._sh){ const c=document.createElement('canvas'); c.width=c.height=64; const cg=c.getContext('2d');
       const gr=cg.createRadialGradient(32,32,2,32,32,30); gr.addColorStop(0,'rgba(0,0,0,0.5)'); gr.addColorStop(1,'rgba(0,0,0,0)');
       cg.fillStyle=gr; cg.fillRect(0,0,64,64); makePlayer._sh=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,fog:false}); }
     const blob=new THREE.Mesh(new THREE.CircleGeometry(0.62,18), makePlayer._sh); blob.rotation.x=-Math.PI/2; blob.position.y=0.02; grp.add(blob);
-    // The GLB ships a real 13.9s Mixamo mocap idle. Use it verbatim for standing
-    // players (captured motion beats anything synthetic), desynced per player, and
-    // hand back to the procedural poses the moment they move.
+    // idle: the model's own idle clip for standing players, desynced per player; the
+    // procedural poses take over the moment they move
     let mixer=null, idleAct=null;
     if(playerProto.animations && playerProto.animations.length){
       mixer=new THREE.AnimationMixer(model);
       idleAct=mixer.clipAction(playerProto.animations[0]);
       idleAct.play(); mixer.setTime(Math.random()*playerProto.animations[0].duration);
     }
-    grp.userData={B,ring,jerseyMat,helmetMats,trimMats,maskMats,sockMats,sockWhite,team:null,model,mixer,idleAct,gripBones,baseS,buildVh,buildVg,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
+    grp.userData={B,ring,mats,parts,gloveHex,cleatHex,team:null,numKey:null,model,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
     grp.visible=false; scene.add(grp); return grp;
   }
   // Pose the Mixamo rig per state.
@@ -2375,7 +2214,7 @@
     }
   }
   function loadPlayers(){
-    new THREE.GLTFLoader().load('assets/fbplayer_opt.glb', (gltf)=>{
+    new THREE.GLTFLoader().load('assets/gridiron_player.glb', (gltf)=>{
       playerProto=gltf;
       const aniso=upgradeTextures(playerProto.scene);
       if(window.__gbDebug) console.log('texture anisotropy:',aniso);
@@ -2502,6 +2341,16 @@
     resize3D(); window.addEventListener('resize',resize3D); applyQuality();
   }
   function resize3D(){ if(!renderer) return; const st=document.getElementById('stage'); const w=st.clientWidth||760,h=st.clientHeight||560; renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  // Ball in the carrier's right hand: palm centre in the hand bone's frame (y runs to
+  // the fingers, +z faces the palm on the right hand), long axis along the hand.
+  const _ballLocal=new THREE.Vector3(0.0,0.075,0.055), _handQ=new THREE.Quaternion(), _alignQ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.PI/2);
+  function carryBall(g){
+    const hb=g.userData.B && g.userData.B.RightHand;
+    ballMesh.visible=true;
+    if(!hb){ ballMesh.position.copy(_tuckV.set(0.24,0.95,0.16).applyMatrix4(g.matrixWorld)); ballMesh.rotation.set(0.35,g.rotation.y+0.5,0.2); return; }
+    ballMesh.position.copy(hb.localToWorld(_tuckV.copy(_ballLocal)));
+    hb.getWorldQuaternion(_handQ); ballMesh.quaternion.copy(_handQ).multiply(_alignQ);
+  }
   function render3D(){
     if(!renderer) return;
     // broadcast scrimmage/first-down lines (only during normal downs)
@@ -2591,18 +2440,22 @@
         const team = o.def ? other(G.offense) : G.offense;
         u.ring.visible=true; u.ring.material.color.setHex(team==='user'?0x3a86ff:0xff5340);
         if(u.team!==team){ u.team=team;
-          // Two colourways that stay apart at broadcast distance. An all-red away kit
-          // (red lid, red socks) had no internal contrast and read as a pink blob, so
-          // the away team is red-on-black against the home royal-on-silver.
-          const C = team==='user'
-            ? {jersey:0x1e58d8, helmet:0xe8ecf4, trim:0xf0b429, mask:0x10131a, sock:0x1e58d8}   // home: royal, silver lid, gold trim, black cage
-            : {jersey:0xa5131d, helmet:0x15171d, trim:0xe6e8ee, mask:0x0e1014, sock:0x15171d};  // away: deep red, black lid, white trim
-          if(u.jerseyMat) u.jerseyMat.color.setHex(C.jersey);
-          for(const m of u.helmetMats) m.color.setHex(C.helmet);
-          for(const m of u.trimMats)   m.color.setHex(C.trim);
-          for(const m of u.maskMats)   m.color.setHex(C.mask);
-          for(const m of u.sockMats)   m.color.setHex(u.sockWhite?0xeef0f4:C.sock);
+          // Two colourways that stay apart at broadcast distance: home royal and gold on a
+          // silver lid, away deep red on black. Colours are sRGB hex (see setSRGB).
+          const C = TEAM_KIT[team];
+          const M=u.mats, tint=(n,h)=>{ for(const m of (M[n]||[])) setSRGB(m,h); };
+          tint('Jersey',C.jersey); tint('JerseyTrim',C.trim); tint('Helmet',C.helmet); tint('HelmetStripe',C.stripe);
+          tint('Facemask',C.mask); tint('Socks',C.sock); tint('Pants',C.pants); tint('Belt',C.belt);
+          if(u.gloveHex<0) tint('Gloves',C.jersey);
+          if(u.cleatHex<0) tint('Cleats',C.jersey);
+          u.numKey=null;
         }
+        // his own number and name, from the roster — the same man all game
+        { const nn=(e.n|0)||0, key=team+':'+nn;
+          if(u.numKey!==key && u.mats){ u.numKey=key;
+            const man=manOn(team,nn), tex=jerseyNumberTex(nn, TEAM_KIT[team].trim), nt=nameplateTex(man?man.name:'');
+            for(const m of (u.mats['Numbers']||[])){ m.map=tex; m.needsUpdate=true; }
+            for(const m of (u.mats['NameBar']||[])){ m.map=nt; m.needsUpdate=true; } } }
         // pose state machine
         const onDead = !repFrame && G.phase==='dead' && !G._td && !G._fg;
         let want;
@@ -2691,11 +2544,7 @@
         const a= rb.ko?21 : (rb.fg?7.5:Math.min(6,3));
         ballMesh.position.set(WX(rb.x), 0.6+Math.sin(tt*Math.PI)*a, WZ(rb.y));
         _spiral+=lastDt*30; ballMesh.rotation.set(0,0,_spiral); }
-      else if(_carrierG){ _carrierG.updateMatrixWorld(true); ballMesh.scale.set(...BALL_LIVE);
-        const hb=_carrierG.userData.B && (_carrierG.userData.B.RightHand||_carrierG.userData.B.RightForeArm);
-        ballMesh.visible=true;
-        if(hb){ hb.getWorldPosition(_tuckV); _tuckV.y+=0.12; ballMesh.position.copy(_tuckV); }
-        ballMesh.rotation.set(0.35,_carrierG.rotation.y+0.5,0.2); }
+      else if(_carrierG){ _carrierG.updateMatrixWorld(true); ballMesh.scale.set(...BALL_LIVE); carryBall(_carrierG); }
       else ballMesh.visible=false;
     }
     else if(G.fumble){ // loose ball skidding and tumbling on the ground
@@ -2735,15 +2584,11 @@
       ballMesh.position.set(qx+(cx2-qx)*e, 1.08-Math.sin(e*Math.PI)*0.06, qz+(cz2-qz)*e);
       ballMesh.rotation.set(0.3, Math.atan2(cx2-qx,cz2-qz), 0.5); }
     else if(_carrierG && (G.phase==='live'||G.phase==='dead') && !G._fgFlight && G.passState!=='air'){
-      // Carry the ball in the actual hand/forearm rather than at a fixed body offset,
-      // so it stays tucked correctly as the arms pump.
+      // In the palm, not beside it. The hand bone sits at the wrist; the ball's centre
+      // is measured out along the hand toward the fingers and in toward the palm, and
+      // its long axis follows the hand, so it rides the arm as it pumps.
       _carrierG.updateMatrixWorld(true); ballMesh.scale.set(...BALL_LIVE);
-      const hb=_carrierG.userData.B && (_carrierG.userData.B.RightHand||_carrierG.userData.B.RightForeArm);
-      ballMesh.visible=true;
-      if(hb){ hb.getWorldPosition(_tuckV); _tuckV.y+=0.12;                     // cradled just above the hand
-        ballMesh.position.copy(_tuckV); }
-      else ballMesh.position.copy(_tuckV.set(0.24,0.95,0.16).applyMatrix4(_carrierG.matrixWorld));
-      ballMesh.rotation.set(0.35,_carrierG.rotation.y+0.5,0.2); }
+      carryBall(_carrierG); }
     else if(G.phase==='presnap' && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE); ballMesh.position.set(WX(G.los),0.18,WZ(fieldMid)); ballMesh.rotation.set(0,0,1.4); } // ball spotted on the line
     else ballMesh.visible=false;
     if(G._fgFlight && G.ball && G.ball.active){ const bx=WX(G.ball.x), bz=WZ(G.ball.y);

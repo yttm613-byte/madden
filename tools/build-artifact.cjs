@@ -50,9 +50,9 @@ const fontCss = fs.readFileSync(FONTS, 'utf8');
 s = s.replace('<style>', '<style>\n' + fontCss + '\n');
 
 // ---- 3. the model and the HDR environment as data URIs ---------------------------
-const glb = b64('assets/fbplayer_opt.glb');
+const glb = b64('assets/gridiron_player.glb');
 const hdr = b64('assets/env.hdr');
-s = s.replace("'assets/fbplayer_opt.glb'", "'data:model/gltf-binary;base64," + glb + "'");
+s = s.replace("'assets/gridiron_player.glb'", "'data:model/gltf-binary;base64," + glb + "'");
 s = s.replace("'assets/env.hdr'", "'data:application/octet-stream;base64," + hdr + "'");
 
 // ---- 4. three.js and its loaders, inline and in order (LAST) ---------------------

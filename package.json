@@ -1,11 +1,11 @@
 {
   "name": "gridiron-blitz-3d",
   "version": "0.2.0",
-  "description": "A self-served 3D American-football game with rigged GLTF players. No CDN — Three.js r128 and the player model are vendored locally.",
+  "description": "A self-served 3D American-football game with rigged GLTF players generated from code. No CDN — Three.js r128 and the player model are vendored locally.",
   "private": true,
   "scripts": {
-    "build:player": "node tools/build-player.cjs",
-    "optimize:player": "node tools/optimize-model.mjs",
+    "build:player": "node tools/player/build.mjs",
+    "grade:player": "node tools/adopt-model.mjs assets/gridiron_player.glb",
     "serve": "http-server -p 8088 -c-1 .",
     "start": "http-server -p 8088 -c-1 ."
   },
