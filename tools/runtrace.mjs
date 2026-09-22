@@ -15,7 +15,10 @@ const BOT = process.env.BOT || 'rip';
 const b = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--no-sandbox'] });
 const p = await b.newPage({ viewport: { width: 600, height: 500 } });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
-await p.goto('http://localhost:8106/index.sim.html', { waitUntil: 'load' });
+// Only the local server: the page tries a CDN first, and a proxy that stalls instead of
+// refusing makes 'load' wait 30s before it falls back to the vendored copy.
+await p.route(u => u.hostname !== 'localhost', r => r.abort());
+await p.goto('http://localhost:' + (process.env.PORT || 8106) + '/index.sim.html', { waitUntil: 'load' });
 await p.waitForFunction(() => { try { return window.__sim && window.__sim.ready; } catch (e) { return false; } }, null, { timeout: 60000 });
 await p.click('#d-pro');
 const r = await p.evaluate(([N, BOT]) => {
@@ -39,7 +42,8 @@ const r = await p.evaluate(([N, BOT]) => {
     }
     for (const k of ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift']) S.keys[k] = false;
     if (fum || G._turn) continue;
-    const gain = (G._spot - 40*PPY)/PPY;
+    // a touchdown never sets the dead-ball spot: score it as the 70 yards it was
+    const gain = G._td ? 70 : (G._spot - 40*PPY)/PPY;
     out.push({ id, gain: +gain.toFixed(1), td: !!G._td });
   }
   return out;
@@ -50,7 +54,7 @@ const pct = f => (100*g.filter(f).length/g.length).toFixed(1)+'%';
 const mean = g.reduce((a, x) => a+x, 0)/g.length, med = g[Math.floor(g.length/2)];
 console.log(`CPU carries: ${g.length}   mean ${mean.toFixed(2)} yd (NFL 4.3)   median ${med} (NFL ~3)`);
 console.log(`  stuffed at/behind the line: ${pct(x => x <= 0)} (NFL ~17-20%)`);
-console.log(`  10+ yards: ${pct(x => x >= 10)} (NFL ~11%)    20+ yards: ${pct(x => x >= 20)} (NFL ~2.5%)`);
+console.log(`  10+ yards: ${pct(x => x >= 10)} (NFL ~11%)    20+ yards: ${pct(x => x >= 20)} (NFL ~2.5%)    touchdowns: ${r.filter(x => x.td).length}`);
 console.log(`  min ${g[0]}  p10 ${g[Math.floor(g.length*0.1)]}  p90 ${g[Math.floor(g.length*0.9)]}  max ${g[g.length-1]}`);
 for (const id of ['dive', 'sweep', 'draw']) { const a = r.filter(x => x.id === id).map(x => x.gain); if (a.length) console.log(`  ${id.padEnd(6)} n=${a.length} mean ${(a.reduce((s, x) => s+x, 0)/a.length).toFixed(2)}  stuffed ${(100*a.filter(x => x <= 0).length/a.length).toFixed(0)}%  10+ ${(100*a.filter(x => x >= 10).length/a.length).toFixed(0)}%`); }
 console.log('page errors:', errs.length);

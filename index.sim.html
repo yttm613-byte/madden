@@ -502,12 +502,15 @@
   }
   function applyDefCall(call){
     G.defCall=call; const ds=G.defenders;
-    ds.forEach(d=>{ d.blitz=false; d.deep=false; });
+    // The base 4-3 already plays its safeties deep on a pass (see baseDefense); a call
+    // only adds to that. Clearing it here sent both safeties to the same spot ten yards
+    // deep in the middle on every balanced or blitz call.
+    ds.forEach(d=>{ d.blitz=false; d.deepX=0; });
     if(call==='blitz'){
       [...ds].sort((a,b)=>dist(a,G.carrier)-dist(b,G.carrier)).slice(0,2).forEach(d=>{ d.blitz=true; if(d.job==='cover'||d.job==='spy') d.job='rush';
         d.winAt=Math.min(d.winAt, 2.1+Math.random()*1.9); });   // a blitz is how early pressure happens
     } else if(call==='cover'){
-      [...ds].sort((a,b)=>b.x-a.x).slice(0,2).forEach(d=>{ d.deep=true; if(d.job==='rush') d.job='spy'; });
+      [...ds].sort((a,b)=>b.x-a.x).slice(0,2).forEach(d=>{ d.deep=true; d.deepX=yd(4); if(d.job==='rush') d.job='spy'; });
     }
   }
 
@@ -515,10 +518,12 @@
     dive:      {kind:'run',  label:'DIVE',        desc:'up the gut'},
     sweep:     {kind:'run',  label:'SWEEP',       desc:'bounce it outside'},
     draw:      {kind:'run',  label:'DRAW',        desc:'let them rush, cut back'},
-    slants:    {kind:'pass', label:'SLANTS',      desc:'quick & safe',   routes:['slant','slant','slant'], back:5.0},
-    verticals: {kind:'pass', label:'VERTS',       desc:'take a deep shot',routes:['go','post','go'],        back:6.5},
+    // look/hold: when the CPU quarterback starts reading, and when he must be rid of it.
+    // shot: he is looking to hit something deep before he settles for less.
+    slants:    {kind:'pass', label:'SLANTS',      desc:'quick & safe',   routes:['slant','slant','slant'], back:5.0, look:0.85, hold:2.0},
+    verticals: {kind:'pass', label:'VERTS',       desc:'take a deep shot',routes:['go','post','go'],        back:6.5, look:1.5, hold:2.7, shot:true},
     screen:    {kind:'pass', label:'SCREEN',      desc:'dump & block',   screen:true,                      back:5.5},
-    playaction:{kind:'pass', label:'PLAY ACTION', desc:'fake run, go deep',routes:['post','go','out'], pa:true, back:6.5},
+    playaction:{kind:'pass', label:'PLAY ACTION', desc:'fake run, go deep',routes:['post','go','out'], pa:true, back:6.5, look:1.3, hold:2.6, shot:true},
   };
   const RUN_PLAYS=['dive','sweep','draw'], PASS_PLAYS=['slants','verticals','screen','playaction'];
 
@@ -529,67 +534,68 @@
       crowd.push({x:Math.random()*CW, y, c:cols[Math.floor(Math.random()*cols.length)], r:1+Math.random()*1.6}); } })();
   function lighten(hex,amt){ const n=parseInt(hex.slice(1),16); let r=(n>>16)+amt,g=((n>>8)&255)+amt,b=(n&255)+amt; r=Math.min(255,r);g=Math.min(255,g);b=Math.min(255,b); return 'rgb('+r+','+g+','+b+')'; }
 
+  // ---- formations ---------------------------------------------------------------------
+  // Real ones. The offence always has five linemen shoulder to shoulder, a tight end,
+  // receivers at the numbers and in the slot, and a back behind the quarterback; the
+  // defence always lines up in the same base 4-3 — ends outside the tackles, tackles on
+  // the guards, three linebackers in the box, corners on the outside receivers, two
+  // safeties deep — and reads run or pass AT the snap.
+  //
+  // The old alignments spread the run-defence linemen from sideline to sideline (±5 and
+  // ±16 yards from the ball) with linebackers at ±12, so there was no line for anyone to
+  // block, and the defence lined up differently for runs than for passes: the formation
+  // told you the play before the snap.
+  const OL=[[0,60],[-1.45,64],[1.45,66],[-2.9,72],[2.9,76]];      // yards from the ball, jersey
+  const WR_OUT=17.2, WR_SLOT=9.0, TE_Y=4.4;
+  let PEN_DL=0.07, PEN_LB=0.04;
+  // open-field pursuit speed as a fraction of S.defSprint (the CPU back sprints at 9.4)
+  const ROLE_SPEED={ CB:1.04, S:1.02, LB:0.95, MLB:0.95, DE:0.90, DT:0.84 };
   function setupPlay(playId){
     const play=PLAYS[playId]||PLAYS.dive; const type=play.kind; const cx=G.los;
     G.playId=playId; G.playType=type;
-    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.fumble=null;
-    G.passState = type==='pass'?'drop':null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0;
+    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.fumble=null; G.mesh=null;
+    G.passState = type==='pass'?'drop':null; G.qbHurry=null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0;
     document.getElementById('spinpip').textContent='SPIN READY';
+    const Y=v=>fieldMid+yd(v);
+    const side=Math.random()<0.5?-1:1;                   // strength: tight end, slot, play direction
+    for(const [oy,n] of OL) G.blockers.push(mk(cx-yd(0.55),Y(oy),n));
     if(type==='pass'){
-      G.carrier={x:cx-yd(play.back||5.5),y:fieldMid,vx:0,vy:0,n:12,role:'qb'};
+      // shotgun
+      const back=play.back||5.5;
+      G.carrier={x:cx-yd(back),y:fieldMid,vx:0,vy:0,n:12,role:'qb'};
       if(play.screen){
-        const side=Math.random()<0.5?-1:1;
-        // screen back behind the line to one side
-        G.receivers.push({x:cx-yd(1.5),y:fieldMid+side*yd(5),vx:0,vy:0,n:22,route:{breakT:0.45,d1:{x:-0.2,y:side*0.7},d2:{x:1,y:side*0.15},depth:2},screen:true});
-        // two clear-out verticals
-        G.receivers.push({x:cx-yd(0.3),y:fieldTop+PLAYH*0.16,vx:0,vy:0,n:80,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0},depth:99}});
-        G.receivers.push({x:cx-yd(0.3),y:fieldTop+PLAYH*0.84,vx:0,vy:0,n:84,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0},depth:99}});
-        // blockers release to the screen side
-        G.blockers=[ mk(cx,fieldMid+side*yd(7),70), mk(cx+yd(1),fieldMid+side*yd(4),76), mk(cx-yd(1),fieldMid,65) ];
+        // the back leaks out to the flat behind a convoy: the tight end and the slot are
+        // already out there to block for him, the outside receivers clear the corners away
+        G.receivers.push({x:cx-yd(back),y:Y(side*1.8),vx:0,vy:0,n:22,route:{breakT:0.45,d1:{x:-0.25,y:side*0.97},d2:{x:1,y:side*0.15},depth:2},screen:true});
+        G.receivers.push({x:cx-yd(0.4),y:Y(-WR_OUT),vx:0,vy:0,n:80,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0},depth:99}});
+        G.receivers.push({x:cx-yd(0.4),y:Y(WR_OUT),vx:0,vy:0,n:84,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0},depth:99}});
+        { const te=mk(cx-yd(0.2),Y(side*6.5),86), sl=mk(cx+yd(0.6),Y(side*9.5),83); te.convoy=sl.convoy=true; G.blockers.push(te,sl); }
       } else {
-        const slots=[fieldTop+PLAYH*0.16,fieldTop+PLAYH*0.5,fieldTop+PLAYH*0.84];
+        // X alone on the weak side, the slot and Z to the strong side
         const routes=play.routes||['out','slant','post'];
-        slots.forEach((sy,i)=>{ const toC=(fieldMid-sy)>=0?1:-1; G.receivers.push({x:cx-yd(0.3),y:sy,vx:0,vy:0,n:[80,11,84][i],route:makeRoute(routes[i],toC)}); });
-        G.blockers=[ mk(cx-yd(1.2),fieldMid-yd(2.2),74), mk(cx-yd(1.2),fieldMid+yd(2.2),76) ];
+        [-side*WR_OUT, side*WR_SLOT, side*WR_OUT].forEach((sy,i)=>{ const yy=Y(sy), toC=(fieldMid-yy)>=0?1:-1;
+          G.receivers.push({x:cx-yd(i===1?1.0:0.4),y:yy,vx:0,vy:0,n:[80,83,84][i],route:makeRoute(routes[i],toC)}); });
+        // the tight end and the back stay in to protect
+        G.blockers.push(mk(cx-yd(0.7),Y(-side*TE_Y),86), mk(cx-yd(back),Y(side*1.6),22));
       }
-      [-2.4,0,2.4].forEach((o,i)=> G.defenders.push(def(cx+yd(0.9),fieldMid+yd(o),0.16+Math.random()*0.14,90+i,'rush',null)));
-      G.receivers.forEach((r,i)=>{ const d=def(cx+yd(2.2),r.y,0.0,24+i,'cover',r); d.cush=PPY*(0.9+Math.random()*1.1); G.defenders.push(d); }); // trail cushion -> realistic separation
-      G.defenders.push(def(cx+yd(14),fieldMid,0.0,31,'spy',null));
-      if(play.pa){ for(const d of G.defenders){ if(d.job==='cover'||d.job==='spy') d.pa=0.65; } } // linebackers/safeties bite the fake
     } else {
-      let rbX=cx-yd(4.5), rbY=fieldMid, side=0;
-      if(playId==='dive') rbX=cx-yd(3.3);
-      else if(playId==='sweep'){ side=Math.random()<0.5?-1:1; rbY=fieldMid+side*yd(5); rbX=cx-yd(4.5); }
-      else if(playId==='draw') rbX=cx-yd(4.0);   // was 5.5 — too deep to ever beat the front
+      // I-formation: quarterback under centre, fullback, tailback; the tight end and both
+      // receivers block
+      let rbX=cx-yd(4.5), rbY=fieldMid;
+      if(playId==='dive') rbX=cx-yd(3.9);
+      else if(playId==='sweep'){ rbX=cx-yd(4.6); rbY=Y(side*2.2); }
+      else if(playId==='draw') rbX=cx-yd(4.2);
       G.carrier={x:rbX,y:rbY,vx:0,vy:0,n:22,role:'rb'};
       G.mesh={x:rbX+yd(1.2), y:rbY};    // where the back takes it — a penetrator's target
-      if(playId==='sweep') G.blockers=[ mk(cx+yd(0.5),fieldMid+side*yd(3),70), mk(cx+yd(1),fieldMid+side*yd(6),76), mk(cx-yd(0.5),fieldMid+side*yd(1),65) ];
-      else if(playId==='dive') G.blockers=[ mk(cx-yd(0.3),fieldMid-yd(2),70), mk(cx-yd(0.3),fieldMid,76), mk(cx-yd(0.3),fieldMid+yd(2),65) ];
-      else G.blockers=[ mk(cx-yd(0.4),fieldMid-yd(2.6),70), mk(cx-yd(0.4),fieldMid,76), mk(cx-yd(0.4),fieldMid+yd(2.6),65) ];  // draw: interior wall, not spread wide
-      { const qb=mk(cx-yd(1.4),fieldMid,12); qb.role='qb'; qb.noblock=true; G.blockers.push(qb); G.runQB=qb; }   // QB hands off to the RB
-      // Run defence used to be FULLY DETERMINISTIC: fixed reaction delays and fixed
-      // alignment, so the same call produced the identical result every single time —
-      // measured dive 7 yards, sweep 3, draw 0, over and over. That is what made the
-      // run game feel pointless. Jitter the reactions and the gaps so a hole opens on
-      // one snap and closes on the next, which is where run variance actually comes
-      // from in football.
-      const jx=()=>(Math.random()-0.5)*yd(1.1), jy=()=>(Math.random()-0.5)*yd(2.2);
-      // A quarter of the front wins its gap immediately (see def().pen) — that is where
-      // tackles for loss come from, and without it the run game had no bad outcome at
-      // all: 75 carries with a minimum gain of +1.
-      [0.20,0.40,0.60,0.80].forEach((p,i)=>{ const d=def(cx+yd(0.8)+jx(),fieldTop+PLAYH*p+jy(),0.10+Math.random()*0.20,90+i,'pursue',null);
-        d.pen=Math.random()<0.30; G.defenders.push(d); });
-      [0.28,0.52,0.72].forEach((p,i)=>{ const d=def(cx+yd(5.5)+jx(),fieldTop+PLAYH*p+jy(),0.04+Math.random()*0.16,50+i,'pursue',null);
-        d.pen=Math.random()<0.12; G.defenders.push(d); });   // a linebacker shooting the gap
-      [0.34,0.66].forEach((p,i)=>{ const d=def(cx+yd(13)+jx(),fieldTop+PLAYH*p+jy(),0.0+Math.random()*0.10,20+i,'pursue',null);
-        d.bite=Math.random()<0.45 ? 0.85+Math.random()*0.75 : 0; G.defenders.push(d); });
-      // The draw's whole point is that the front commits upfield and the back slips
-      // through behind them. It was starting 5.5 yards deep — so far back that he ran
-      // into the front AFTER it had already turned around, netting exactly 0 every
-      // time. Shallower, and the front stays committed long enough to matter.
-      if(playId==='draw'){ for(const d of G.defenders){ if(d.homeY!==undefined && Math.abs(d.x-(cx+yd(5.5)))<yd(3)) d.draw=0.7+Math.random()*0.45; } }
+      { const qb=mk(cx-yd(1.2),fieldMid,12); qb.role='qb'; qb.noblock=true; G.blockers.push(qb); G.runQB=qb; }
+      const fb=mk(cx-yd(2.7),Y(playId==='sweep'?side*1.2:side*0.5),44); G.blockers.push(fb);
+      G.blockers.push(mk(cx-yd(0.7),Y(side*TE_Y),86), mk(cx-yd(0.4),Y(-side*WR_OUT),80), mk(cx-yd(0.9),Y(side*WR_OUT),84));
+      // On the sweep the playside guard and tackle pull: they run to the edge first and
+      // only then look for someone to block, which is what gives the back a convoy.
+      if(playId==='sweep') for(const b of G.blockers){ const oy=(b.y-fieldMid)/PPY;
+        if(b.n===64||b.n===66||b.n===72||b.n===76) if(oy*side>0) b.pull={x:cx+yd(1.2), y:Y(side*(6.5+Math.abs(oy))), until:0.55}; }
     }
-    fillFormation(cx, type);
+    G.defenders=baseDefense(cx, type, playId, side);
     G.cam=clampCam(G.carrier.x); G.trail=[];
     const sorted=[...G.defenders].sort((a,b)=>a.homeY-b.homeY);
     if(sorted[0]) sorted[0].contain=true; if(sorted[sorted.length-1]) sorted[sorted.length-1].contain=true;
@@ -598,7 +604,96 @@
       for(const d of G.defenders) d.react*=G.diff.react;
       const r=Math.random();
       applyDefCall(r<0.25?'blitz':(r<0.45?'cover':'balanced'));
-    } else { G.userDef=nearestDefToBall(); }
+    } else {
+      // You start on the middle linebacker, the way every football game does: he sees
+      // the whole play and nobody is lined up on him. Space still switches.
+      G.userDef=G.defenders.find(d=>d.role==='MLB')||nearestDefToBall();
+    }
+  }
+  // The base 4-3, then run or pass jobs at the snap. Positions jitter a little so no two
+  // snaps are identical — a hole opens on one play and closes on the next.
+  function baseDefense(cx, type, playId, side){
+    const Y=v=>fieldMid+yd(v), D=[];
+    const jx=()=>(Math.random()-0.5)*yd(0.7), jy=()=>(Math.random()-0.5)*yd(0.9);
+    const add=(x,yy,n,role,job,react)=>{ const d=def(cx+yd(x)+jx(),Y(yy)+jy(),react,n,job,null); d.role=role; D.push(d); return d; };
+    const run = type!=='pass';
+    const deL=add(1.0,-4.6,91,'DE',run?'pursue':'rush',0.10+Math.random()*0.20);
+    const dtL=add(0.9,-1.5,94,'DT',run?'pursue':'rush',0.10+Math.random()*0.20);
+    const dtR=add(0.9, 1.5,97,'DT',run?'pursue':'spy', 0.10+Math.random()*0.20);
+    const deR=add(1.0, 4.6,99,'DE',run?'pursue':'rush',0.10+Math.random()*0.20);
+    const lbW=add(4.6,-4.4,52,'LB','pursue',0.04+Math.random()*0.16);
+    const mlb=add(4.8, 0.0,54,'MLB','pursue',0.04+Math.random()*0.16);
+    const lbS=add(4.6, 4.4,57,'LB','pursue',0.04+Math.random()*0.16);
+    const cbL=add(6.5,-WR_OUT,24,'CB','pursue',0.12+Math.random()*0.20);
+    const cbR=add(6.5, WR_OUT,31,'CB','pursue',0.12+Math.random()*0.20);
+    // Safeties read before they trigger: pass first, then downhill. Reacting in under a
+    // tenth of a second, they met every run at five yards — 36% of all tackles, and
+    // nothing ever broke past them.
+    const sL=add(12.5,-8.5,41,'S','pursue',type!=='pass'?0.32+Math.random()*0.30:Math.random()*0.10);
+    const sR=add(12.5, 8.5,45,'S','pursue',type!=='pass'?0.32+Math.random()*0.30:Math.random()*0.10);
+    if(run){
+      // Now and then a lineman wins his gap at once (see def().pen) — that is where
+      // tackles for loss come from — and now and then a linebacker shoots one. The 30%
+      // this used to be was tuned when the linemen stood 5-16 yards from the ball; head-up
+      // on the guards and tackles it put someone in the backfield on 3 snaps out of 4.
+      for(const d of [deL,dtL,dtR,deR]) d.pen=Math.random()<PEN_DL;
+      for(const d of [lbW,mlb,lbS]) d.pen=Math.random()<PEN_LB;
+      // A safety who bites and commits downhill is how a back who bounces outside
+      // reaches the third level — the only source of explosive runs.
+      for(const d of [sL,sR]) d.bite=Math.random()<0.45 ? 0.85+Math.random()*0.75 : 0;
+      // The draw's whole point: the second level drops for the pass it thinks is
+      // coming, and the back slips through underneath.
+      if(playId==='draw') for(const d of [lbW,mlb,lbS]) d.draw=0.7+Math.random()*0.45;
+      // No block lasts forever. Run defenders only ever got off a block on a 6% lottery,
+      // so a receiver's stalk block held a corner for the whole of a 70-yard run: that
+      // is how 4% of CPU carries became touchdowns once the back could outrun the rest.
+      // Linemen fight through in 2-3.5s, linebackers sooner, a corner off a receiver
+      // soonest — and then they are in the race to cut the runner off.
+      for(const d of D){ if(!d.pen) d.winAt=shedSecs(d.role); }
+    } else {
+      // Three rush, a tackle spies, the corners and the strong linebacker take the three
+      // receivers man to man with a trail cushion, the other backers drop into the
+      // short zones and the safeties split the deep half.
+      const rec=G.receivers, byY=(y)=>rec.reduce((a,r)=>Math.abs(r.y-y)<Math.abs(a.y-y)?r:a, rec[0]);
+      const man=(d,r)=>{ if(!r) return; d.job='cover'; d.assign=r; d.cush=PPY*(0.9+Math.random()*1.1); };
+      man(cbL, byY(Y(-WR_OUT))); man(cbR, byY(Y(WR_OUT)));
+      const slot=rec.find(r=>r!==cbL.assign && r!==cbR.assign);
+      man(side>0?lbS:lbW, slot);
+      for(const d of [lbW,mlb,lbS]) if(d.job!=='cover') d.job='spy';
+      for(const d of [sL,sR]){ d.job='cover'; d.deep=true; }
+      if(PLAYS[playId] && PLAYS[playId].pa) for(const d of D) if(d.job==='cover'||d.job==='spy') d.pa=0.65;   // they bite the fake
+    }
+    return D;
+  }
+  // How long a man takes to get off a block once one is on him: linemen fight through in
+  // 2-3.5s, linebackers sooner, a corner or safety off a receiver soonest.
+  function shedSecs(role){
+    return role==='DE'||role==='DT' ? 1.9+Math.random()*1.6
+         : role==='CB'||role==='S'  ? 0.8+Math.random()*1.1 : 1.2+Math.random()*1.3;
+  }
+  // Where a zone defender belongs while the quarterback holds the ball. Everyone not
+  // rushing or in man coverage used to run to ONE point, ten yards deep between the
+  // middle and the quarterback — both safeties, both linebackers and the spy stacked on
+  // the same spot, so nobody was over the top of a sideline route and the flats were
+  // empty. Now each man has his own piece of the field.
+  function zoneSpot(d,qb){
+    const half=d.homeY>=fieldMid?1:-1;
+    if(d.deep){
+      // a safety takes his half and keeps the deepest man in it in front of him —
+      // over the top of him, shading out to cap a vertical rather than waiting on the
+      // hash for the ball to be thrown (measured, sideline go routes caught 64% of the
+      // time with the safety arriving four yards late)
+      let deepest=G.los+yd(6), dr=null;
+      for(const r of G.receivers) if((r.y-fieldMid)*half>-yd(4) && r.x>deepest){ deepest=r.x; dr=r; }
+      let ty=fieldMid+half*yd(9.5);
+      if(dr && dr.x>G.los+yd(8)) ty+=(dr.y-ty)*0.5;
+      return {x:Math.max(G.los+yd(12)+(d.deepX||0), deepest+yd(3.5)), y:ty};
+    }
+    if(d.role==='DT') return {x:G.los+yd(2), y:qb.y};     // the spy mirrors the quarterback
+    // underneath: a hook or curl zone where he lined up, sinking under the route in it
+    const zx=G.los+yd(7.5), zy=d.homeY; let rr=null, rb=yd(8);
+    for(const r of G.receivers){ const dd=Math.hypot(r.x-zx,r.y-zy); if(dd<rb){rb=dd;rr=r;} }
+    return rr ? {x:zx+(rr.x-zx)*0.35, y:zy+(rr.y-zy)*0.5} : {x:zx, y:zy};
   }
   function nearestDefToBall(){ let best=null,bd=1e9; for(const d of G.defenders){ const dd=dist(d,G.carrier); if(dd<bd){bd=dd;best=d;} } return best; }
   // depth: how far past the line the route actually goes before the receiver settles.
@@ -638,48 +733,12 @@
     // line by penetration — measured min gain +1 across 75 carries. Set per-defender by
     // the run formation below (run defenders are job 'pursue', not 'rush'), on a
     // separate clock and gated to run plays, so pass protection is untouched.
-    pen:false, penAt: 0.10+Math.random()*0.42,
+    pen:false, penAt: 0.22+Math.random()*0.43,
     // Individual speed and pursuit angle. Identical values on all eleven is what made
     // every run resolve the same way — see the angle-error note in stepDefenders.
     spd: 0.91+Math.random()*0.17, ang: (Math.random()*2-1),
     winAt: job==='rush' ? 2.6+Math.random()*5.6
                         : (Math.random()<SHED_P ? 0.85+Math.random()*1.35 : Infinity) }; }
-  // Pad both sides to a full, real-looking 11: a tight offensive line, receivers
-  // split out wide, corners pressed over them, linebackers in the box, and deep
-  // safeties. Filler defenders play run defense but don't blanket the pass.
-  function fillFormation(cx, type){
-    const offCount = ()=> 1 + G.receivers.length + G.blockers.length;
-    // --- 5-man offensive line, tight at center ---
-    for(const oy of [0,-1.6,1.6,-3.2,3.2]){ if(offCount()>=11) break;
-      const sy=fieldMid+yd(oy);
-      if(!G.blockers.some(b=>Math.abs(b.y-sy)<yd(1.2)&&b.x>cx-yd(2.4))) G.blockers.push(mk(cx-yd(0.8),sy,60+((oy*7)&7)));
-    }
-    // --- split the rest out wide (WR / TE) at the numbers and sidelines ---
-    const wides=[];
-    const wideSpots=[fieldTop+yd(4),fieldBot-yd(4),fieldTop+yd(13),fieldBot-yd(13)];
-    for(const sy of wideSpots){ if(offCount()>=11) break;
-      if(!G.blockers.some(b=>Math.abs(b.y-sy)<yd(2.5)) && !G.receivers.some(r=>Math.abs(r.y-sy)<yd(2.5))){
-        G.blockers.push(mk(cx-yd(0.5),sy,80+(wides.length))); wides.push(sy); }
-    }
-    // guarantee a full 11 offense (tight ends / wings / slots)
-    { const exY=[-6,6,-2,2,-8,8,-4.5,4.5]; let ei=0;
-      while(offCount()<11){ const sy=fieldMid+yd(exY[ei++%exY.length]);
-        G.blockers.push(mk(cx-yd(0.6),Math.max(fieldTop+yd(1),Math.min(fieldBot-yd(1),sy)),86+ei)); if(ei>40) break; } }
-    // --- defense to 11: corners over the wide men, deep safeties, then box LBs ---
-    let need=()=>11-G.defenders.length;
-    for(const wy of wides){ if(need()<=0) break;
-      if(!G.defenders.some(d=>Math.abs(d.y-wy)<yd(2.5)&&d.x>cx+yd(0.5))){
-        const d=def(cx+yd(2.0), wy, 0.05, 40+G.defenders.length, type==='pass'?'cover':'pursue', null); d.fill=true; G.defenders.push(d); }
-    }
-    for(const sy of [fieldMid-yd(7.5), fieldMid+yd(7.5)]){ if(need()<=0) break;
-      const d=def(cx+yd(type==='pass'?15:11), sy, 0.06, 50+G.defenders.length, type==='pass'?'cover':'pursue', null); d.deep=true; d.fill=true; G.defenders.push(d);
-    }
-    const lbY=[0,-3.5,3.5,-6.5,6.5];
-    for(let i=0; need()>0; i++){ const sy=fieldMid+yd(lbY[i%lbY.length]);
-      const d=def(cx+yd(5), Math.max(fieldTop+yd(1),Math.min(fieldBot-yd(1),sy)), 0.06, 70+G.defenders.length, 'pursue', null); d.fill=true; G.defenders.push(d);
-    }
-  }
-
   // ---- input ----
   const keys={}; let touchDir=null, sprintHeld=false;
   addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
@@ -749,7 +808,10 @@
     // available — you were shoved around for the whole down and could do nothing about
     // it. Winning the rep frees you for the rest of the play, which is what actually
     // happens when a rusher beats his man.
-    if((d.blocked||0)>0 || d._takenBy){
+    // Only once he actually has hold of you: allowed the moment a blocker merely picked
+    // you out, it was used before contact — a third of the time you were through the
+    // line untouched, and a player ripping on every snap stuffed 59% of CPU runs.
+    if((d.blocked||0)>0){
       // Not automatic, and not free. Spamming it made a rusher unblockable — 30 sacks
       // in 30 blitzes. It is a commitment: long cooldown, better odds once you have
       // worked the block a moment, and if you lose the rep he rides you out of the play.
@@ -980,16 +1042,24 @@
     ent.x+=ent.vx*dt; ent.y+=ent.vy*dt;
   }
 
-  function blockNearest(dt,pool){
+  // only: which blockers take part (all by default). focus: whose threat they rank and
+  // whose way they block — the ball carrier, unless a screen's convoy is setting up
+  // for the back before he has the ball.
+  function blockNearest(dt,pool,only,focus){
+    const f=focus||G.carrier;
     for(const b of G.blockers){
       if(b.noblock || b===G.ctrlBlocker) continue;   // QB hands off; user-controlled blocker is steered by you
+      if(only && !only(b)) continue;
+      // a pulling lineman gets to the edge first, and only then looks for a man
+      if(b.pull && (G.playT||0)<b.pull.until){ const a=Math.atan2(b.pull.y-b.y,b.pull.x-b.x);
+        b.vx=Math.cos(a)*S.blocker*1.1; b.vy=Math.sin(a)*S.blocker*1.1; b.x+=b.vx*dt; b.y+=b.vy*dt; continue; }
       let best=null,bd=1e9;
       // Rank by threat to the carrier AND reachability by THIS blocker. Ranking purely
       // on proximity to the carrier assigned blockers to men 30 yards across the field
       // on kick/punt returns, where coverage is spread over the full width — they never
       // arrived, and only 0.2 of 12 coverage defenders ever got blocked.
       for(const d of pool){ if(d.shed || (d._takenBy&&d._takenBy!==b)) continue;
-        const dd=dist(d,G.carrier)+dist(d,b)*0.6; if(dd<bd){bd=dd;best=d;} }
+        const dd=dist(d,f)+dist(d,b)*0.6; if(dd<bd){bd=dd;best=d;} }
       b.target=best;
       if(best){ best._takenBy=b;
         // Clock the matchup from the moment a blocker picks him up, not from actual
@@ -1000,15 +1070,26 @@
         // a penetrating lineman is on his own much faster clock — see def().
         const wa = (best.pen && G.playType==='run' && !G._returning) ? best.penAt : best.winAt;
         if(best.engT>wa){ best.shed=true; best._takenBy=null; b.target=null; }
-        const gx=best.x*0.62+G.carrier.x*0.38, gy=best.y*0.62+G.carrier.y*0.38, a=Math.atan2(gy-b.y,gx-b.x);
+        const gx=best.x*0.62+f.x*0.38, gy=best.y*0.62+f.y*0.38, a=Math.atan2(gy-b.y,gx-b.x);
         b.vx=Math.cos(a)*S.blocker; b.vy=Math.sin(a)*S.blocker;      // needed so blockers animate/face correctly
         b.x+=b.vx*dt; b.y+=b.vy*dt;
         if(dist(b,best)<S.blockR && !best.shed){ best.blocked=0.12;
-          const pa=Math.atan2(best.y-G.carrier.y,best.x-G.carrier.x); best.x+=Math.cos(pa)*S.def*0.5*dt; best.y+=Math.sin(pa)*S.def*0.5*dt; }
+          const pa=Math.atan2(best.y-f.y,best.x-f.x); best.x+=Math.cos(pa)*S.def*0.5*dt; best.y+=Math.sin(pa)*S.def*0.5*dt; }
       }
       b.y=Math.max(fieldTop,Math.min(fieldBot,b.y));
     }
     for(const d of pool){ if(d._takenBy&&(!d._takenBy.target||d._takenBy.target!==d||dist(d,d._takenBy)>S.shedR)) d._takenBy=null; }
+  }
+  // Earliest time t at which a pursuer running at speed v can reach the runner's
+  // straight-line path: |c + vc*t - d| = v*t. Returns -1 when he cannot get there.
+  function interceptT(d,c,v){
+    const rx=c.x-d.x, ry=c.y-d.y, vx=c.vx||0, vy=c.vy||0;
+    const a=vx*vx+vy*vy-v*v, b=2*(rx*vx+ry*vy), cc=rx*rx+ry*ry;
+    if(Math.abs(a)<1e-6) return b<0 ? -cc/b : -1;
+    const disc=b*b-4*a*cc; if(disc<0) return -1;
+    const sq=Math.sqrt(disc), t1=(-b-sq)/(2*a), t2=(-b+sq)/(2*a);
+    const t=Math.min(t1>0?t1:Infinity, t2>0?t2:Infinity);
+    return isFinite(t)?t:-1;
   }
   function aiPursue(d,tx,ty,dt,base){
     // NOTE: this must record vx/vy. It used to move x/y directly and leave velocity at
@@ -1081,7 +1162,15 @@
     // live
     if(G.fumble){ updateFumble(dt); syncHUD(); return; }
     if(G._koFlight){ updateKickoffFlight(dt); syncHUD(); return; }
-    if(G.offense==='cpu' && G.userDef) moveEntity(G.userDef,dt,userDefBase(),userDefSprint());
+    if(G.offense==='cpu' && G.userDef){
+      // A blocker who has hold of you HOLDS you. The player's defender used to be pushed
+      // back at 3.8 yd/s while sprinting at 9.9, so holding "toward the ball" walked him
+      // straight through the line: measured, CPU runs averaged -1 yard and every sweep
+      // was stuffed. Engaged, he moves at a blocked man's pace like everyone else; the
+      // rip move (Q/E) is how he gets free.
+      const d=G.userDef, held=(d.blocked||0)>0 && !d.shed, hs=S.defBlocked*1.3;
+      moveEntity(d,dt,held?hs:userDefBase(),held?hs:userDefSprint());
+    }
     G.playT=(G.playT||0)+dt;
     const elapsed=G.playT;      // game time, so tabbing away cannot kill a play
     if(elapsed>14){ // play clock: nothing lasts forever
@@ -1101,6 +1190,8 @@
   // therefore never catch him at any difficulty, which is what "impossible to tackle"
   // actually was. Give the controlled defender a small closing edge, and never scale
   // him DOWN on All-Pro: difficulty belongs in the CPU's speed, not in crippling you.
+  // is the player pushing his defender at this man?
+  function steeringAt(d,c){ const inp=inputVec(); return inp.m>0.2 && inp.x*(c.x-d.x)+inp.y*(c.y-d.y)>0; }
   function userDefSprint(){ return S.defSprint*Math.max(1,G.diff.you)*1.08; }
   function userDefBase(){   return S.def      *Math.max(1,G.diff.you); }
   function tackleHit(d,c){
@@ -1125,6 +1216,9 @@
     if((d.diveT||0)>0) p += 0.10;                   // a dive is all-or-nothing
     if(dsp>7.2) p -= 0.07;                          // a full-speed square hit sticks
     if((d.blocked||0)>0) p += 0.10;                 // still shedding a blocker as he arrives
+    // A corner or safety meeting a back in space misses more than a lineman in traffic
+    // does — that one-on-one is where every long run in football comes from.
+    if((d.role==='S'||d.role==='CB') && c.x>G.los+yd(4)) p += 0.09;
     if(Math.random() >= Math.max(0.02,Math.min(0.34,p))) return false;
     c.brkN++; c.brkCd=0.7;
     d.whiff=0.75; d.blocked=0;                      // he is beaten, and has to recover
@@ -1148,24 +1242,41 @@
       if(d.whiff>0)  d.whiff  = Math.max(0, d.whiff  - dt);
       if(d.blocked>0)d.blocked= Math.max(0, d.blocked- dt);
       if(d.catchT>0) d.catchT = Math.max(0, d.catchT - dt);
+      if(d.hustleT>0) d.hustleT = Math.max(0, d.hustleT - dt);
       const human = (G.offense==='cpu' && d===G.userDef);
       if(!human){
         if(mode==='run'){
-          if(dist(d,c)<yd(2.6)){ const cs = dist(d,c)<yd(1.4)? S.defSprint*0.98 : S.def*1.0; aiPursue(d, c.x, c.y, dt, cs*ds); } // close out (no super-dive)
+          if(dist(d,c)<yd(2.6)){ let cs = dist(d,c)<yd(1.4)? S.defSprint*0.98 : S.def*1.0;
+            // in an open-field race the man right behind him runs at race speed too — a
+            // corner trailing by 1.7 yards at the catch used to ease off to 7.55 yd/s and
+            // watch the receiver go
+            if(!G._returning && c.x>G.los+yd(3)) cs=Math.max(cs, S.defSprint*(ROLE_SPEED[d.role]||0.9));
+            aiPursue(d, c.x, c.y, dt, cs*ds); } // close out (no super-dive)
           else if(d.draw>0){ d.draw-=dt; aiPursue(d, G.los+yd(8), d.homeY, dt, S.cover*ds); } // draw: second level bails into coverage, vacating the box
           // A penetrating lineman attacks the MESH POINT, not the ball carrier. Trailing
           // the carrier he can never catch him — the runner is the faster man — so
           // penetration produced no tackles for loss at all. Aiming at the handoff spot
           // puts him in the backfield where the back still has to come to him.
-          else if(d.pen && d.shed && !G._returning && G.mesh && c.x<G.los+yd(0.5)){
-            aiPursue(d, G.mesh.x, G.mesh.y, dt, S.defSprint*0.95*ds);
+          // ...and once through, he attacks the BALL CARRIER'S PATH, not the mesh point.
+          // Aiming at the mesh, he arrived after the back had already left it and could
+          // only chase from behind: measured 0.9% of CPU carries stuffed, NFL ~17%.
+          else if(d.pen && d.shed && !G._returning && c.x<G.los+yd(0.5)){
+            const lead=Math.min(0.45, dist(d,c)/(S.defSprint||1)*0.7);
+            const tx = G.handoff && G.mesh ? G.mesh.x : c.x+(c.vx||0)*lead, ty = G.handoff && G.mesh ? G.mesh.y : c.y+(c.vy||0)*lead;
+            aiPursue(d, tx, ty, dt, S.defSprint*0.82*ds);      // fighting through the wash, not sprinting in space
           }
           // A safety who bites and commits downhill is how a back who bounces outside
           // gets to the third level, and it is the only source of explosive runs:
           // without it the deep pair cut off every carry and 60 CPU rushes produced a
           // maximum gain of 7.8 yards, with nothing over 10 in 168 measured carries.
           else if(d.bite>0){ d.bite-=dt; aiPursue(d, G.los+yd(2), d.homeY, dt, S.def*1.0*ds); }
-          else if(d.deep){ // hold deep help, only commit once the ball reaches you
+          // Deep help is a job for BEFORE the ball crosses the line. Held for the whole
+          // play, the deep man shadowed the runner nine yards ahead, shaded to the middle,
+          // and never met one who turned up the sideline.
+          // (Contain is NOT cut off the same way: a corner who keeps outside leverage at a
+          // jog is where the long runs come from — racing him instead took 20+ yard carries
+          // from 2.1% to 0.2%, against an NFL 2.5%.)
+          else if(d.deep && (G._returning || c.x<G.los+yd(2))){ // hold deep help, only commit once the ball reaches you
             const tx=Math.min(c.x+yd(9), GOAL_X-yd(2)), ty=fieldMid+(c.y-fieldMid)*0.6;
             if(c.x < tx-yd(3)) aiPursue(d,tx,ty,dt,S.def*0.92*ds);
             else aiPursue(d, c.x+c.vx*0.16, c.y, dt, S.def*1.05*ds);
@@ -1187,22 +1298,43 @@
             // over- and under-run. The error is rolled once per defender per play and
             // shrinks as he closes, because you do correct your angle on the way.
             const ae = (d.ang||0)*yd(3.0)*Math.min(1, dist(d,c)/yd(15));
-            aiPursue(d, c.x+c.vx*lead, c.y+c.vy*lead+ae, dt, S.def*(d.blitz?1.12:1)*ds);
+            // Once the ball is past the line it is a footrace, run at each man's real
+            // speed: corners and safeties about as fast as the back, linebackers a step
+            // slower, linemen well behind. Pursuit used to jog (7.55 yd/s) whoever it was,
+            // so a back who beat the last man was never caught — 25 of 292 CPU carries
+            // went 70 yards once he ran at full speed through the hole.
+            const race = !G._returning && c.x>G.los+yd(3);
+            const base = race ? S.defSprint*(ROLE_SPEED[d.role]||0.9) : S.def;
+            let tx=c.x+c.vx*lead, ty=c.y+c.vy*lead;
+            // ...and in the race a man takes a real angle: the point where, at his own
+            // speed, he meets the runner — not a fixed lead that only works from alongside.
+            if(race){ const t=interceptT(d,c,base*(d.spd||1)*ds); if(t>0 && t<3.5){ tx=c.x+c.vx*t; ty=c.y+c.vy*t; } }
+            aiPursue(d, tx, ty+ae, dt, base*(d.blitz?1.12:1)*ds);
           }
         }
         else if(mode==='air'){ // man defenders stay on their receiver (separation carries to the catch); zone/spy break on the ball
           if(d.job==='cover' && d.assign && !d.fill){ const r=d.assign,sp=Math.hypot(r.vx||0,r.vy||0)||1,c=d.cush||PPY*1.2; aiPursue(d, r.x-(r.vx/sp)*c, r.y-(r.vy/sp)*c, dt, S.cover*1.0*ds); }
-          else if(d.job!=='rush') aiPursue(d, G.ball.tx, G.ball.ty, dt, S.cover*0.98*ds); }
+          // A zone defender reads the throw before he breaks on it. Breaking at the
+          // instant of release, every one within reach of a quick throw got there with it:
+          // half of all passes arrived with a man inside 0.8 yards, and slants into the
+          // hook zones were picked off at five times the NFL rate.
+          else if(d.job!=='rush'){
+            if(G.ball.t < (d.readT==null ? (d.readT=0.08+Math.random()*0.24) : d.readT)){ const z=zoneSpot(d,G.carrier); aiPursue(d, z.x, z.y, dt, S.cover*0.95*ds); }
+            else aiPursue(d, G.ball.tx, G.ball.ty, dt, S.cover*0.98*ds);
+          } }
         else { // drop
           if(d.pa>0){ d.pa-=dt; aiPursue(d, G.los+yd(1), d.homeY, dt, S.cover*0.85*ds); } // bite the play-action fake
           else if(d.job==='rush') aiPursue(d,c.x,c.y,dt,S.rush*(d.blitz?1.12:1)*ds);
           else if(d.job==='cover'&&d.assign){ const r=d.assign,sp=Math.hypot(r.vx||0,r.vy||0)||1,c=d.cush||PPY*1.2; aiPursue(d, r.x-(r.vx/sp)*c, r.y-(r.vy/sp)*c, dt, S.cover*ds); } // trail by a cushion
-          else { const depth=d.deep?yd(15):yd(10); aiPursue(d, Math.max(c.x+depth,G.los+depth), fieldMid+(c.y-fieldMid)*0.5, dt, S.cover*0.95*ds); }
+          else { const z=zoneSpot(d,c); aiPursue(d, z.x, z.y, dt, S.cover*0.95*ds); }
         }
       }
       // Once the ball is in the air the QB is no longer the play — he cannot be
       // tackled to end it. This was ending live passes as sacks.
-      if(mode!=='air' && (d.catchT||0)<=0 && (d.whiff<=0 || dist(d,c)<yd(0.8)) && (d.blocked<=0 || dist(d,c)<yd(1.0)) && tackleHit(d,c)){
+      // a man with a blocker on him can still reach out for a runner going right past
+      // him, but only right past him (returns keep the old reach: coverage men are
+      // blocked in the open field, not at the line)
+      if(mode!=='air' && ((d.catchT||0)<=0 || (human && d.hustleT===0 && steeringAt(d,c))) && (d.whiff<=0 || dist(d,c)<yd(0.8)) && (d.blocked<=0 || dist(d,c)<(mode==='run'&&!G._returning?yd(0.7):yd(1.0))) && tackleHit(d,c)){
         G.lastTackler=d;                                  // so the result can name him
         if(mode==='drop') return sackOrTackle();
         if(mode==='run' && tackleBreak(d,c)) continue;    // he shook him off — play lives
@@ -1215,12 +1347,14 @@
 
   function cpuRunAI(c,dt){
     let hx=1,hy=0,near=null,nd=1e9;
-    for(const d of G.defenders){ if(d.x>c.x-yd(1.5)){ const dd=dist(d,c); if(dd<nd){nd=dd;near=d;} } }
+    // a defender a blocker has hold of is not the one to flinch from
+    const occupied=d=>(d.blocked||0)>0 && !d.shed;
+    for(const d of G.defenders){ if(d.x>c.x-yd(1.5) && !(occupied(d) && !G._returning)){ const dd=dist(d,c); if(dd<nd){nd=dd;near=d;} } }
     // Lane vision, on EVERY carry rather than only on returns. With the spin AoE bug
     // gone the CPU back had nothing left but running straight into contact, and the
     // CPU offence stopped scoring entirely. The answer is a smarter runner, not a
     // dumber defence: read the gaps like the returner already does.
-    {
+    if(G._returning){
       // On a return the coverage is spread across the full width, so flinching away
       // from the single nearest man just runs you into the next one. Look ahead and
       // take the emptiest lane — the difference between a 3-yard gain and a real one.
@@ -1234,20 +1368,46 @@
         const score=clear-Math.abs(ty-c.y)*0.25;         // don't run sideways for nothing
         if(score>best){ best=score; bestY=ty; }
       }
-      // A returner has the whole field; a back between the tackles does not, so scale
-      // the lateral freedom down on a normal carry.
       // Lateral room is capped against a forward component of 1.0, so 1.2 let 77% of a
       // returner's speed go SIDEWAYS — he had 15 yards of cushion and 2.8 seconds and
       // still netted 2.6, because he spent them running across the field rather than up
       // it. Forward has to stay dominant while still letting him pick a lane.
-      const room = G._returning ? 0.8 : 0.75;
-      hy=Math.max(-room,Math.min(room,(bestY-c.y)/yd(6)));
-      if(!G._returning && near && nd<yd(4)){ const dy=c.y-near.y; hy += (dy>=0?1:-1)*(1-nd/yd(4))*0.8; }
+      hy=Math.max(-0.8,Math.min(0.8,(bestY-c.y)/yd(6)));
+    } else {
+      // A back behind a line reads the LINE: which gap is open now, and whether it stays
+      // open two and five yards on. Looking only 8 yards downfield, as the returner
+      // does, he ran straight into men who were already being blocked — blocked tackles
+      // made one tackle in five once the defence lined up in a real front. A man with a
+      // blocker on him counts as much further away; a lane that is open near the line
+      // matters most; and he keeps to the lane he chose unless a clearly better one opens.
+      let bestY=c.y, best=-1e9;
+      for(let k=-6;k<=6;k++){
+        const ty=c.y+k*yd(1.75);
+        if(ty<fieldTop+yd(2)||ty>fieldBot-yd(2)) continue;
+        let score=1e9;
+        for(const [a,w] of [[2.0,1.0],[4.5,1.12],[8.0,1.3]]){
+          const px=c.x+yd(a), py=c.y+(ty-c.y)*Math.min(1,a/4);
+          let clear=1e9;
+          for(const d of G.defenders){ if(d.x<c.x-yd(1.5)) continue;
+            const dd=Math.hypot(d.x-px,d.y-py)*(occupied(d)?1.8:1);
+            if(dd<clear) clear=dd; }
+          score=Math.min(score, clear*w);
+        }
+        score -= Math.abs(ty-c.y)/PPY*0.18*PPY;
+        if(c.lane!=null && Math.abs(ty-c.lane)<yd(1.2)) score += yd(0.35);
+        if(score>best){ best=score; bestY=ty; }
+      }
+      c.lane=bestY;
+      hy=Math.max(-0.75,Math.min(0.75,(bestY-c.y)/yd(3.5)));
+      if(near && nd<yd(4)){ const dy=c.y-near.y; hy += (dy>=0?1:-1)*(1-nd/yd(4))*0.8; }
     }
     if(c.y<fieldTop+yd(7)) hy+=0.5; if(c.y>fieldBot-yd(7)) hy-=0.5;
     hy=Math.max(-1.0,Math.min(1.0,hy));
     const m=Math.hypot(hx,hy)||1; hx/=m; hy/=m;
-    const speed = ((nd>yd(8))?S.cpuSprint:S.cpuRun)*G.diff.cpu;
+    // Through the line he runs flat out, not only when the nearest man is 8 yards away:
+    // a back who hit the second level at jogging pace was run down by every safety.
+    const open = nd>yd(8) || (!G._returning && c.x>G.los+yd(2.5) && nd>yd(2.2));
+    const speed = (open?S.cpuSprint:S.cpuRun)*G.diff.cpu;
     c.vx=hx*speed; c.vy=hy*speed; c.x+=c.vx*dt; c.y+=c.vy*dt;
     if(near && nd<S.spinR*1.05 && G.spinCd<=0 && Math.random()<0.5*dt) spin();   // ~0.5/s, not 0.04 PER FRAME (=2.4/s)
   }
@@ -1270,13 +1430,43 @@
     for(const r of G.receivers){ const h=elapsed<r.route.breakT?r.route.d1:r.route.d2; const sp=routeSpeed(r);
       r.vx=h.x*sp; r.vy=h.y*sp; r.x+=r.vx*dt; r.y+=r.vy*dt; r.y=Math.max(fieldTop,Math.min(fieldBot,r.y)); }
 
-    blockNearest(dt, G.defenders.filter(d=>d.job==='rush'));
-    if(stepDefenders(dt,'drop',elapsed)) return;
+    passBlocks(dt);
+    // once the ball is out nobody can sack him on the same frame — that used to turn a
+    // release into a sack whenever a rusher was within reach of it
+    if(stepDefenders(dt, G.passState==='air'?'air':'drop', elapsed)) return;
 
     if(G.offense==='user' && G.selLock<=0){
-      let bi=0,bo=-1; G.receivers.forEach((r,i)=>{ let n=1e9; for(const d of G.defenders) n=Math.min(n,dist(d,r)); if(n>bo){bo=n;bi=i;} }); G.sel=bi;
+      let bi=0,bo=-1e9; G.receivers.forEach((r,i)=>{ const n=openAt(r,c).sep; if(n>bo){bo=n;bi=i;} }); G.sel=bi;
     }
     G.cam+=(clampCam(c.x)-G.cam)*Math.min(1,dt*6);
+  }
+  // Protection, from the snap until the ball is caught — blocks do not stop while the
+  // ball is in the air. A screen's convoy (the tight end and slot already out in the
+  // flat) blocks the second level for the back. It used to wait on the pass rush with
+  // everyone else, found every rusher already taken, and stood there: the linebacker
+  // covering the back met him at the catch and screens were tackled for about a yard.
+  function passBlocks(dt){
+    const convoy=G.receivers.find(r=>r.screen);
+    // your defender is a rusher once he comes across the line, and a back or tight end
+    // who is staying in to block picks him up; the rip move is how you beat him. Nobody
+    // ever blocked him, so sending him every down was a free runner at the quarterback.
+    const you=G.offense==='cpu'?G.userDef:null;
+    blockNearest(dt, G.defenders.filter(d=>d.job==='rush' || (d===you && d.x<G.los+yd(1.5))), convoy?(b=>!b.convoy):null);
+    if(convoy) blockNearest(dt, G.defenders.filter(d=>d.job!=='rush'), b=>b.convoy, convoy);
+  }
+  // How open a receiver will be where the ball can reach him, in yards, and how far
+  // downfield that is. Judged where the ball will be caught, not where he stands: a man
+  // running a go route is worth more than his current depth, and a zone defender sitting
+  // in his path closes while the ball is in the air. Reading only the gap as it stood,
+  // the CPU threw play-action seams straight into the safety in them, and the "most
+  // open" marker sent you there too: 43% of your throws arrived with a man inside 0.8
+  // yards. Pass rushers guard nobody, and a man-to-man defender trailing him keeps the
+  // gap he has.
+  function openAt(r,qb){
+    const fly=Math.max(0.3,Math.min(1.5,dist(qb,r)/S.throwSpd)), lx=r.x+(r.vx||0)*fly, ly=r.y+(r.vy||0)*fly;
+    let n=1e9; for(const dd of G.defenders) if(dd.job!=='rush')
+      n=Math.min(n, dd.assign===r ? dist(dd,r) : Math.hypot(dd.x-lx,dd.y-ly)-Math.max(0,fly-0.2)*S.cover);
+    return {sep:n/PPY, depth:(lx-G.los)/PPY};
   }
   function cpuDropAI(c,dt,elapsed){
     // pocket: drift back a touch early
@@ -1285,16 +1475,62 @@
     const a=Math.atan2(ty-c.y,tx-c.x), d=Math.hypot(tx-c.x,ty-c.y);
     const sp=Math.min(S.cpuRun, d*4)*G.diff.cpu;
     c.vx=Math.cos(a)*sp; c.vy=Math.sin(a)*sp; c.x+=c.vx*dt; c.y+=c.vy*dt;
-    // pressure
-    let pr=1e9; for(const dd of G.defenders) if(dd.job==='rush'||dd===G.userDef) pr=Math.min(pr,dist(dd,c));
-    // best open receiver
-    let bi=0,bo=-1; G.receivers.forEach((r,i)=>{ let n=1e9; for(const dd of G.defenders) n=Math.min(n,dist(dd,r)); if(n>bo){bo=n;bi=i;} });
-    const mustThrow = elapsed>1.8 || (pr<yd(2.3)&&elapsed>0.5);
-    const goodLook = elapsed>0.7 && bo>yd(3.2);
+    // pressure: a rusher with a blocker on him is not pressure (his block timer flickers
+    // frame to frame, so whether a blocker has him is the steadier test)
+    let pr=1e9; for(const dd of G.defenders){
+      const free = dd===G.userDef ? !((dd.blocked||0)>0 && !dd.shed) : dd.job==='rush' && (dd.shed || !dd._takenBy);
+      if(free) pr=Math.min(pr,dist(dd,c)); }
+    // A free rusher has to be seen and the ball got away before he arrives. The QB used
+    // to throw on the very frame a man came within 2.3 yards — inside the reach of a
+    // full-speed tackle — so an unblocked blitzer never got home: 1 sack in 80 with your
+    // own linebacker sent straight at him. He now picks the man up five yards away and
+    // needs a beat to get rid of it.
+    if(pr<yd(5) && elapsed>0.3 && G.qbHurry==null) G.qbHurry=0.08+Math.random()*0.32;
+    if(G.qbHurry!=null) G.qbHurry-=dt;
+    // What each man is worth: the odds of the catch — the same table resolveCatch uses,
+    // on separation from the COVERAGE (the rushers guard nobody) — times the yards it
+    // gains. He misjudges: each read is off by up to a yard or so either way, rolled once
+    // per receiver per play, and a tight window counts against a throw on top of its
+    // odds, because that is where interceptions come from.
+    let bi=0,bs=-1,be=-1e9; const play=PLAYS[G.playId]||{};
+    G.receivers.forEach((r,i)=>{
+      const o=openAt(r,c);
+      if(r.misread==null) r.misread=(Math.random()+Math.random()-1)*1.3;
+      const sep=o.sep + r.misread, depth=o.depth;
+      let p = sep>2.2?0.95 : sep>1.3?0.85 : sep>0.8?0.66 : 0.44;
+      p *= depth<9 ? 1 : depth<18 ? 1-(depth-9)*0.03 : Math.max(0.26, 0.73-(depth-18)*0.035);
+      const ev = p*(Math.max(0,depth)+4) - (sep<1.3 ? 3 : 0) + (play.shot && depth>=18 && sep>1.3 ? 6 : 0);
+      if(ev>be){be=ev;bs=sep;bi=i;} });
+    // Protection holds for ~2.6s, so there is time to wait for a look; he used to give up
+    // at 1.8s and force it, which is where most of his interceptions came from.
+    const look=play.look||1.1, hold=play.hold||2.35;
+    const mustThrow = elapsed>hold || (G.qbHurry!=null && G.qbHurry<=0);
+    // He takes his drop and looks for something worth throwing: a shot first, the
+    // checkdown as the clock in his head runs down. Throwing to the first man 2.4 yards
+    // clear, he found one at 0.7s on nearly every play — 86% of his throws were short
+    // of ten yards and he completed 75% of them.
+    const w0=play.shot?18:12, want = w0 - (elapsed-look)*(w0-4)/(hold-look);
+    // a screen is thrown on time, once the back has set up behind his convoy
+    const scr=G.receivers.findIndex(r=>r.screen);
+    if(scr>=0){ let n=1e9; for(const dd of G.defenders) if(dd.job!=='rush') n=Math.min(n,dist(dd,G.receivers[scr]));
+      if(elapsed>0.7 && n/PPY+G.receivers[scr].misread>1.8){ G.sel=scr; throwBall(); return; } }
+    const goodLook = elapsed>look && be>=want;
     if(goodLook || mustThrow){
-      if(mustThrow && bo<yd(2.0) && pr<yd(2.0)){ G.passState='scramble'; setMsg('SCRAMBLE!',0.7); return; }
+      if(mustThrow && bs<2.0 && pr<yd(2.0)){ G.passState='scramble'; setMsg('SCRAMBLE!',0.7); return; }
+      // Nobody open and the clock in his head has run out: throw it away rather than
+      // into a linebacker's hands. Real quarterbacks do; the CPU used to force it.
+      if(mustThrow && bs<1.2){ throwAway(bi); return; }
       G.sel=bi; throwBall();
     }
+  }
+  // Out of bounds beyond the receiver: a throw nobody can catch. Resolves as incomplete.
+  function throwAway(i){
+    const r=G.receivers[i]||G.receivers[0], qb=G.carrier; if(!r) return;
+    G.sel=G.receivers.indexOf(r);
+    const ty=(r.y>=fieldMid)?fieldBot+yd(3):fieldTop-yd(3), tx=r.x+yd(4);
+    const dur=Math.max(0.4,Math.min(1.4,Math.hypot(tx-qb.x,ty-qb.y)/S.throwSpd));
+    G.ball={active:true,x:qb.x,y:qb.y,fromX:qb.x,fromY:qb.y,tx,ty,t:0,dur,rec:r,away:true};
+    G.passState='air'; G.throwT=0.42; SFX.throw();
   }
   function sackOrTackle(){
     // A hit on the quarterback is where roughing comes from, so it is rolled here
@@ -1314,7 +1550,9 @@
     let pr=1e9; for(const d of G.defenders) if(d.job==='rush'||d===G.userDef) pr=Math.min(pr,dist(d,qb));
     const pressure=Math.max(0, 1-(pr/yd(4)));                 // 0 clean pocket .. 1 in his face
     const deep=Math.min(1, dist(qb,r)/yd(35));
-    const err=yd(0.35)*pressure*2.2 + yd(0.30)*deep;
+    // a deep ball is thrown with far less margin: the error grows with the square of
+    // the distance, so a 40-yard throw lands a yard or two off where a 10-yarder is on it
+    const err=yd(0.35)*pressure*2.2 + yd(0.30)*deep + yd(1.1)*deep*deep;
     tx += (Math.random()*2-1)*err; ty += (Math.random()*2-1)*err;
     ty=Math.max(fieldTop,Math.min(fieldBot,ty));
     G.ball={active:true,x:qb.x,y:qb.y,fromX:qb.x,fromY:qb.y,tx,ty,t:0,dur,rec:r};
@@ -1324,6 +1562,7 @@
   function updateBall(dt){
     const b=G.ball; b.t+=dt; const p=Math.min(1,b.t/b.dur); b.x=b.fromX+(b.tx-b.fromX)*p; b.y=b.fromY+(b.ty-b.fromY)*p;
     for(const r of G.receivers){ r.x+=r.vx*dt; r.y+=r.vy*dt; r.y=Math.max(fieldTop,Math.min(fieldBot,r.y)); }
+    passBlocks(dt);
     stepDefenders(dt,'air'); // movement only (tackle n/a while ball in air toward spot)
     G.cam+=(clampCam(b.x)-G.cam)*Math.min(1,dt*6);
     if(p>=1) resolveCatch();
@@ -1352,7 +1591,7 @@
     const b=G.ball, r=b.rec, pt={x:b.tx,y:b.ty};
     // separation = tightest REAL (non-fill) defender's distance to the receiver, in yards
     let nd=1e9; for(const d of G.defenders) if(d.job!=='rush' && !d.fill) nd=Math.min(nd,dist(d,r));
-    const sepY=nd/PPY, rd=dist(r,pt), overthrown = rd>S.catchR*1.7; G.ball.active=false;
+    const sepY=nd/PPY, rd=dist(r,pt), overthrown = b.away || rd>S.catchR*1.7; G.ball.active=false;
     // realistic outcome odds by how open the receiver is (normal completion & INT rates)
     let pCatch,pInt;
     // Pick odds halved when routes got real depths: a receiver who SETTLES has less
@@ -1360,26 +1599,27 @@
     // tight-coverage buckets and interceptions doubled to 5.0% of attempts against an
     // NFL 2.3%. The separation thresholds are still right; the odds attached to them
     // were calibrated against receivers who never stopped running.
+    // Recalibrated when the defence got real underneath zones and the harness got a
+    // by-depth breakdown: measured, 20+ yard throws were completing 63-67% (NFL ~35%)
+    // while throws inside 10 yards completed 54-61% (NFL ~72%) — the deep ball was as
+    // safe as a checkdown, which is most of why a quarterback averaged ~10 yards a
+    // dropback. Difficulty now climbs steadily with depth, and a ball that arrives
+    // off target is harder to hold on to.
+    const airY=(b.tx-G.los)/PPY;
     if(overthrown){ pCatch=0.04; pInt=0.0; }
-    else if(sepY>2.2){ pCatch=0.95; pInt=0.0045; }
-    else if(sepY>1.3){ pCatch=0.82; pInt=0.014; }
-    else if(sepY>0.8){ pCatch=0.60; pInt=0.038; }
-    else            { pCatch=0.38; pInt=0.075; }
-    // ...and by how far it was thrown, which this used to ignore completely. Measured
-    // over 220 throws: 85% caught at 30+ air yards, the same as everything else,
-    // against an NFL rate of 33%. That single number is most of why games finished
-    // 60-plus — one uncontested deep shot a drive scores. A 45-yard ball hangs long
-    // enough for help to arrive and is thrown with less margin, so the odds fall with
-    // depth and the pick odds rise.
-    if(!overthrown){
-      const airY=(b.tx-G.los)/PPY;
-      pCatch *= 1 - Math.max(0, Math.min(0.50, (airY-6)*0.020));
-      pInt   *= 1 + Math.min(0.8, Math.max(0, airY-10)*0.035);
+    else {
+      pCatch = sepY>2.2?0.95 : sepY>1.3?0.85 : sepY>0.8?0.66 : 0.44;
+      pInt   = sepY>2.2?0.004 : sepY>1.3?0.012 : sepY>0.8?0.024 : 0.046;
+      pCatch *= airY<9 ? 1 : airY<18 ? 1-(airY-9)*0.03 : Math.max(0.26, 0.73-(airY-18)*0.035);
+      pInt   *= 1 + Math.max(0, Math.min(1.6, (airY-8)*0.06));
+      pCatch *= 1 - Math.min(0.45, (rd/PPY)*0.15);
     }
     const roll=Math.random();
     if(roll<pInt){ if(G.conv){ setMsg('PICKED OFF — NO GOOD',1.3); SFX.whistle(); G.conv=null;G.twoPt=false;G._td=true;G._turn=false;G._fg=false;G.phase='dead';G.deadT=1.1; return; } return liveInterception(); }
     if(roll<pInt+pCatch){
-      G.carrier={x:r.x,y:r.y,vx:r.vx*0.4,vy:r.vy*0.4,n:r.n,role:'wr'};
+      // caught in stride, not at a standstill: keeping 40% of his speed let the trailing
+      // man tackle almost every receiver on the spot (median yards after catch ~1)
+      G.carrier={x:r.x,y:r.y,vx:r.vx*0.75,vy:r.vy*0.75,n:r.n,role:'wr'};
       const others=G.receivers.filter(x=>x!==r); G.receivers=[];
       for(const o of others){ o.target=null; o._takenBy=null; G.blockers.push(o); }
       // Everyone needs a beat to react to the ball arriving. Without it the trailing
@@ -1388,7 +1628,14 @@
       // NB: this must NOT use `react`, which freezes a defender in place entirely. They
       // lost ground they could never recover and YAC went from 0 to 12 yards. They keep
       // closing; they just cannot make the tackle for a moment.
-      for(const d of G.defenders){ d.job='pursue';
+      // After the catch it is a run: nobody is covering anyone any more. The safeties
+      // kept their deep-help job and shadowed the ball nine yards ahead, shaded toward
+      // the middle, so a receiver who turned up the sideline never met them; and the
+      // other receivers and the line, now all blockers, held coverage men forever
+      // (their shed clock is only set for run plays). Measured: 93 touchdowns in 240
+      // CPU dropbacks, median YAC 60 yards.
+      for(const d of G.defenders){ d.job='pursue'; d.deep=false; d.contain=false; d.pa=0;
+        d.winAt=Math.min(d.winAt, (d.engT||0)+shedSecs(d.role));
         d.catchT=0.22+Math.random()*0.22; }
       if(G.offense==='cpu') G.userDef=nearestDefToBall();
       // ...but a much shorter one on the defender YOU are steering. Measured by planting
@@ -1398,7 +1645,12 @@
       // complaint. Removing it entirely went too far the other way — every CPU catch
       // came back 0.1 yards. Seven frames is under the threshold where a player feels
       // ignored, and still stops a wrap-up on the literal instant of the catch.
-      if(G.offense==='cpu' && G.userDef) G.userDef.catchT=0.12;
+      // It is for a player who is going for the tackle, though. The game hands you the
+      // man nearest the catch, and a tackle is made on contact, so it used to be made for
+      // you seven frames after every catch whatever you were doing: median yards after
+      // the catch 0.9, a median of 0.13s from catch to whistle. Steering at the receiver,
+      // you get the short window; otherwise your man reacts like everyone else.
+      if(G.offense==='cpu' && G.userDef) G.userDef.hustleT=0.12;
       G.passState='caught'; setMsg((G.offense==='user'?'CAUGHT — ':'CPU CATCH — ')+tag(G.offense,r.n),0.9); SFX.catch();
     } else {
       // Interference is only ever called when a defender is genuinely on the
@@ -1455,6 +1707,13 @@
       c.vx=Math.cos(a)*S.carrier*0.42; c.vy=Math.sin(a)*S.carrier*0.42;
       c.x+=c.vx*dt; c.y+=c.vy*dt;
       G.cam+=(clampCam(c.x)-G.cam)*Math.min(1,dt*6);
+      // The rest of the field plays the snap too. This used to return here, which froze
+      // both lines and all eleven AI defenders for the whole mesh (0.3s, 0.62s on a draw)
+      // while the player's defender — moved before this function — ran free: a third of
+      // a second of unopposed penetration on every CPU run. It also meant nobody could
+      // ever be met in the backfield, the one place a run gets stuffed.
+      blockNearest(dt,G.defenders);
+      stepDefenders(dt,'run');
       return;
     }
     const ub = (G.ctrlBlocker && G.blockers.indexOf(G.ctrlBlocker)>=0) ? G.ctrlBlocker : null;

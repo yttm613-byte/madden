@@ -45,14 +45,15 @@ All line numbers are from the current `index.html`.
 | What | Where |
 |---|---|
 | Speed and radius constants (`S`) | 207 |
-| Difficulty table (`DIFF`) | 253 |
+| Difficulty table (`DIFF`) | 255 |
 | Quarter length (`QTR_SECS = 75`) | 215 |
-| Game state object (`G`) built in `newGame()` | 257 |
-| Play definitions (`PLAYS`) | 471 |
+| Game state object (`G`) built in `newGame()` | 297 |
+| Play definitions (`PLAYS`) | 517 |
+| Formation constants (`OL`, `WR_OUT`, `ROLE_SPEED`) | 548 |
 
 The game runs on a fixed-size 2D "world" in pixels; `PPY` is pixels per yard and
 `yd(n)` converts. The 3D scene is a projection of that 2D world — `WX()`/`WZ()`
-at line 1769 map world pixels to three.js metres. **All gameplay logic is 2D.**
+at line 2175 map world pixels to three.js metres. **All gameplay logic is 2D.**
 The 3D layer is presentation only.
 
 `G.phase` is the state machine: `start` → `playcall` → `presnap` → `live` →
@@ -60,30 +61,34 @@ The 3D layer is presentation only.
 
 ### Per-frame flow
 ```
-loop()            978   requestAnimationFrame driver
- update(dt)       993   phase dispatch; everything below hangs off this
-  updateKickoffFlight  310   kickoffs and punts, from the approach to the catch
-  updateDrop     1204   QB drop-back, routes, pass rush
-  updateBall     1267   ball in the air
-   resolveCatch  1294   catch / incompletion / interception odds
-  updateRun      1382   ball carrier, blocking, pursuit, tackles
-  updateFG       1663   field goal mini-game
- render3D()      2363   the entire 3D layer, driven off the 2D state
+loop()           1109   requestAnimationFrame driver
+ update(dt)      1124   phase dispatch; everything below hangs off this
+  updateKickoffFlight  353   kickoffs and punts, from the approach to the catch
+  updateDrop     1415   QB drop-back, routes, pass rush
+  updateBall     1562   ball in the air
+   resolveCatch  1590   catch / incompletion / interception odds
+  updateRun      1696   ball carrier, blocking, pursuit, tackles
+  updateFG       2066   field goal mini-game
+ render3D()      2623   the entire 3D layer, driven off the 2D state
 ```
 
 ### The systems most worth understanding
 | System | Line | Notes |
 |---|---|---|
-| `stepDefenders` | 1086 | The heart of the defence. Per-defender timers tick here for **everyone**, including the human-controlled defender. Tackle resolution lives at the bottom. |
-| `aiPursue` | 963 | Moves a defender toward a point. Must write `vx`/`vy` or the player renders as a motionless idle pose. |
-| `blockNearest` | 933 | Blocker-to-defender assignment and shed timing. |
-| `tackleHit` / `tackleBreak` | 1056 / 1069 | Reach grows with closing speed; broken tackles are rolled from angle, speed and a per-carrier elusiveness. |
-| `cpuRunAI` | 1165 | CPU ball carrier. Lane vision — looks ahead and picks the emptiest gap. |
-| `resolveCatch` | 1294 | Catch odds by separation **and** throw depth; interception odds likewise. |
-| `makeRoute` / `routeSpeed` | 566 / 574 | Routes have a settle depth so receivers stop running away. |
-| `makePlayer` | 2053 | Per-player material instances, skin tone and kit variation (visor, gloves, cleats). Team colours and numbers are applied in `render3D`. |
-| `jerseyNumberTex` | 2025 | Paints a player's roster number / surname onto the jersey decals. |
-| `applyPose` | 2128 | Procedural skeletal animation — run, throw, tackle, block, celebrate. Standing players play the model's idle clip. |
+| `setupPlay` | 553 | Real formations: five linemen, a tight end, receivers at the numbers and in the slot; shotgun for passes, I-formation for runs (the sweep pulls the playside guard and tackle). |
+| `baseDefense` | 615 | The one base 4-3 every snap, reading run or pass **at** the snap: run fits, penetration, safety bites, draw drops; on a pass three rush, a tackle spies, man on the three receivers, zones for the rest. |
+| `zoneSpot` | 679 | Where each zone defender belongs: safeties split the deep halves and cap verticals, backers take hook/curl zones where they lined up. |
+| `stepDefenders` | 1230 | The heart of the defence. Per-defender timers tick here for **everyone**, including the human-controlled defender. Open-field pursuit races at each role's speed on an intercept angle (`interceptT`). Tackle resolution lives at the bottom. |
+| `aiPursue` | 1094 | Moves a defender toward a point. Must write `vx`/`vy` or the player renders as a motionless idle pose. |
+| `blockNearest` | 1048 | Blocker-to-defender assignment and shed timing (`shedSecs` 670), pulling linemen, screen convoys. |
+| `tackleHit` / `tackleBreak` | 1197 / 1210 | Reach grows with closing speed; broken tackles are rolled from angle, speed and a per-carrier elusiveness. |
+| `cpuRunAI` | 1348 | CPU ball carrier. Reads the line — which gap is open now and two and five yards on — and treats a blocked man as mostly out of the way. Returns keep the old whole-field lane vision. |
+| `passBlocks` / `openAt` / `cpuDropAI` | 1448 / 1465 / 1471 | Protection until the catch; how open a receiver will be where the ball can reach him (drives both the CPU's read and your "most open" marker); the CPU quarterback's expected-value read with per-play timing (`PLAYS[].look/hold/shot`). |
+| `resolveCatch` | 1590 | Catch odds by separation **and** throw depth; interception odds likewise. After the catch everyone becomes a pursuer — see the traps below. |
+| `makeRoute` / `routeSpeed` | 704 / 712 | Routes have a settle depth so receivers stop running away. |
+| `makePlayer` | 2314 | Per-player material instances, skin tone and kit variation (visor, gloves, cleats). Team colours and numbers are applied in `render3D`. |
+| `jerseyNumberTex` | 2286 | Paints a player's roster number / surname onto the jersey decals. |
+| `applyPose` | 2389 | Procedural skeletal animation — run, throw, tackle, block, celebrate, get up. Standing players play the model's idle clip. |
 
 ---
 
@@ -111,7 +116,22 @@ per-defender timer put inside it will never expire on your own player. This
 caused a bug where a single block meant blocked for the entire rest of the play.
 
 **The 2D world flips on a change of possession.** Offence always attacks +x.
-`flipLos()` at 267 mirrors the field. Interception returns mirror every entity.
+`flipLos()` at 308 mirrors the field. Interception returns mirror every entity.
+
+**The game hands you the defender nearest the ball at every catch.** A harness that
+leaves your defender idle is therefore freezing the one man best placed to make
+the tackle — it made the committed game look like 85 CPU touchdowns in 240
+dropbacks. `passtrace` steers him like a person (heads for the ball, then chases
+the catch after 0.3s); use that, not `BOT=none`, for anything about the pass game.
+
+**A defender's `blocked` timer flickers.** It is re-stamped each frame a blocker is
+in contact and lapses the moment he is not. To ask "does a blocker have this man",
+test `_takenBy`; to ask "is he in contact right now", test `blocked`.
+
+**Per-play defender jobs outlive the play they were meant for.** `deep`,
+`contain`, `pa` and `cover` all persist through the catch unless cleared — which
+is how safeties once shadowed every receiver nine yards ahead all the way to the
+end zone. `resolveCatch` resets them.
 
 ---
 
@@ -122,19 +142,27 @@ harnesses, not guessed. If you change the physics, the AI or the odds, re-measur
 these before claiming an improvement. Several of them moved in the wrong
 direction from changes that looked obviously correct on paper.
 
+Measured with the harnesses in section 6, on Pro, from the offence's own 40.
+Ranges are repeat runs of ~600 plays; the spread between runs is real, so compare
+like with like.
+
 | Metric | Current | NFL |
 |---|---|---|
-| Yards per carry | 4.5 | 4.3 |
-| Run gain range | −0.1 to 15.1 | wide tails both ways |
-| Completion rate | 62.8% | 65% |
-| Interception rate | 3.3% of attempts | 2.3% |
-| Yards after catch (median) | 3.0 | ~4 |
-| Sack rate | ~6% of dropbacks | 6.5% |
-| Punt return | 10.1 avg | ~9 |
-| Kick return | 22.3 avg | ~22 |
-| Field goal, 40 yards | 89% | 82% |
-| Field goal, 50 yards | 71% | 68% |
-| Total points per game | 51–63 | 45 |
+| CPU yards per carry (`runtrace`, BOT=chase) | 4.05–4.23 | 4.3 |
+| CPU carries stuffed at or behind the line | 21–24% | 17–20% |
+| CPU carries of 10+ / 20+ yards | 4.5–6% / 1.2–2.1% | 11% / 2.5% |
+| CPU carries against a player who rips every block (BOT=rip) | 3.2 yd, 27% stuffed | — |
+| Your completion rate (`passtrace`, random-timing QB) | 64.7–64.9% | 65% |
+| Your interceptions / net yards per dropback | 2.5% / 6.4–6.7 | 2.3% / 6.3 |
+| CPU completion rate (human-like defender) | 66–72% | 65% |
+| CPU interceptions / net yards per dropback | 1.3–2.3% / 7.4–7.8 | 2.3% / 6.3 |
+| CPU yards after catch (median) | 2.1–2.7 | ~3 |
+| CPU touchdowns from its own 40, per 600 dropbacks | 0–1 | — |
+| Your linebacker blitzing every down: sacks | ~1%, more with a well-timed rip | — |
+| Punt return | 11.0–11.3 avg | ~9 |
+| Kick return | 24.1–24.2 avg (committed build: 21.7–25.2) | ~22 |
+| Field goal, 40 / 50 yards | 89% / 71% (not re-measured) | 82% / 68% |
+| Total points, one full `yactrace` game | 37 (was 51–63) | 45 |
 
 **The measurement method matters more than the numbers.** Three separate times a
 "regression" turned out to be a broken harness rather than a broken game — a
@@ -149,23 +177,24 @@ surprising result.
 
 Roughly in order of how much they would improve the game.
 
-1. **Scoring is ~25% too high.** 51–63 points a game against an NFL 45. Not one
-   broken mechanic any more; it is that a game is ~40 offensive plays instead of
-   125, so every drive is a large fraction of the game. Needs a structural
-   answer, not more tuning.
-2. **No CPU carry ever loses yards.** Tackles for loss happen to the player but
-   not to the CPU back, who starts 3–4 yards deep and is faster than anyone
-   chasing him. The NFL stuffs ~17% of carries at or behind the line.
-3. **Only 3% of runs go 10+ yards** against an NFL 11%. The explosive tail is
-   thin even though the mean is right.
-4. **Players do not get up after the whistle.** They stay down through the dead
-   phase and pop upright at the next snap.
-5. **No onside kicks, no fair catches, no penalties, no audibles, no hot routes,
-   no defensive line shifts.** All standard Madden features that are simply
-   absent.
+1. **Only ~5% of runs go 10+ yards** against an NFL 11%. The mean and the stuff
+   rate are right now; the explosive tail is still thin. Racing the contain
+   corners in the open field took 20+ carries to 0.2%, so the tail is sensitive
+   to them — measure before touching `contain`.
+2. **The AI pass rush never sacks the CPU quarterback on its own.** Protection
+   holds 2.6s at the earliest and he is rid of the ball by 2.0–2.7s, so sacks
+   come from your blitz. He also never throws more than ~18 yards downfield.
+3. **Screens net ~3 yards** against an NFL ~6. The convoy blocks now; the back
+   catches it two yards behind the line and has to make it all up.
+4. **Scoring** was 51–63 a game; one full sim now scores 37. Not yet measured
+   over enough games to call.
+5. **No onside kicks, no fair catches, no audibles, no hot routes, no defensive
+   line shifts.** All standard Madden features that are simply absent.
 6. ~~The player model is a cheap free asset.~~ Replaced by a generated model that
    meets `PLAYER_MODEL_PROMPT.md`'s spec (grade it: `node tools/adopt-model.mjs`).
    Still open: one body type scaled wider for linemen rather than a heavier build.
+7. ~~No CPU carry ever loses yards~~, ~~players do not get up after the whistle~~,
+   ~~no penalties~~ — done.
 
 ---
 
@@ -180,10 +209,15 @@ headless browser and measuring against NFL rates.
   `choosePlay()` and friends, so a harness can drive the game frame by frame
   without rendering.
 
-Harnesses live in `tools/*.mjs` and each one measures a single thing:
-`runtrace` (run distribution), `yactrace` (yards after catch), `depthtrace`
+Harnesses live in `tools/*.mjs` and each one measures a single thing (serve the
+repo with `http-server -p 8106` first; on the four newer ones `PORT=` points them
+at another server, which is how to A/B against a worktree of the last commit):
+`runtrace` (CPU run distribution; `BOT=chase|rip|none` for your defender),
+`passtrace` (both quarterbacks; `BOT=human|none`, `USERQB=random|smart`),
+`returntrace` (kick and punt returns), `yactrace` (a whole game with a scripted
+player, plus yards after catch and contact-to-tackle frames), `depthtrace`
 (completion by throw depth), `tacklenow` (frames from contact to whistle),
-`puntzero` / `koret` (returns), `sacktrace`, `inttrace`, `fullsim` (whole games).
+`puntzero` / `koret` (older return checks).
 
 Two practical notes: drive `update(dt)` directly rather than waiting on real
 time, because software rendering only manages a few frames a second; and listen
@@ -199,10 +233,10 @@ compile never raises a page error and will silently render nothing.
 > measured baselines the gameplay is tuned to.
 >
 > [then pick one]
-> - Work on gap #2 and #3 from the handoff: the run game has the right average
->   but almost no tail in either direction.
-> - Add penalties: holding, false start, pass interference, with the flag, the
->   announcement and the yardage.
+> - Work on gap #1 from the handoff: the run game has the right average and
+>   stuff rate but too few 10+ yard carries.
+> - Give the CPU quarterback a real deep game and let the AI rush get home
+>   occasionally (gap #2) without undoing the pass baselines.
 > - Add a playbook screen so the player picks from a real set of formations
 >   instead of three runs and four passes.
 > - Review the rendering for performance; it targets 60fps and drops on older
