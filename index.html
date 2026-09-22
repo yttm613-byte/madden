@@ -213,6 +213,8 @@
   // Four quarters of this length. 75*4 keeps the same total game length as the
   // single 300-second clock it replaced, so pacing is unchanged.
   const QTR_SECS = 75;
+  // how long a man takes to get back up off the turf after the whistle
+  const GETUP_SECS = 0.62;
 
   // ---- synthesized sound ----
   let actx=null, muted=false;
@@ -2203,6 +2205,14 @@
       L('LeftUpLeg',0.85); L('RightUpLeg',0.20);                 // legs buckle under him
       KNEE('LeftLeg',1.30); KNEE('RightLeg',0.95);
       E('Head',0.25,0,0);
+    } else if(st==='getup'){         // hands and knees, then up: u.upK runs 0 -> 1
+      const k=u.upK||0, a=1-k*k*(3-2*k);
+      L('Spine2',0.20+0.50*a); L('Spine',0.08+0.28*a);
+      ARM('LeftArm',0.95*a,0.10); ARM('RightArm',0.95*a,0.10);     // arms planted, pushing
+      ELB('LeftForeArm',0.35+0.45*a); ELB('RightForeArm',0.35+0.45*a);
+      L('LeftUpLeg',0.10+1.05*a); L('RightUpLeg',0.05+0.75*a);     // one knee drives under him
+      KNEE('LeftLeg',0.12+1.45*a); KNEE('RightLeg',0.10+1.10*a);
+      E('Head',-0.25*a,0,0);
     } else if(st==='celebrate'){      // arms up, little bob
       u.phase += 0.09;
       const up=-2.5+Math.sin(u.phase)*0.15;
@@ -2463,18 +2473,36 @@
         else if(e===G.koKicker && (G.koKickT||0)>0) want='kick';
         else if(e===G.carrier && e.role==='qb' && (G.passState==='air'||(G.throwT||0)>0)) want='throw';
         else if(G._td && G.phase==='dead' && e===G.carrier) want='celebrate';
-        else if(onDead && e===G.carrier && spy<3.5) want='tackle';
-        else if(onDead && o.kind==='def' && G.carrier && dist(e,G.carrier)<yd(3.0)) want='tackle';
+        else if(onDead && ((e===G.carrier && spy<3.5) || (o.kind==='def' && G.carrier && dist(e,G.carrier)<yd(3.0)) || u.downT>0)){
+          // Down, and then back UP. Players used to lie on the turf for the whole dead
+          // ball and pop upright at the next snap. Each man gets his own beat: the
+          // tacklers roll off first, the ball carrier a moment later.
+          if(!(u.downT>0)){ u.downT=1e-4; u.upT=0; u.getUpAt=(o.kind==='carry'?0.55:0.28)+Math.random()*0.35; }
+          u.downT+=lastDt;
+          want = u.downT<u.getUpAt ? 'tackle' : 'getup';
+        }
         else if(o.kind==='rec' && G.passState==='air' && G.ball && G.ball.rec===e) want='reach';   // target receiver reaches for the ball
         else if(G.phase==='presnap' && spy<1 && (o.kind==='block' || (o.kind==='def' && G.carrier && Math.abs(e.x-G.los)<yd(3.4)))) want='set';
         else want = spy>1.4 ? 'run' : 'idle';
+        if(!onDead){ u.downT=0; u.upT=0; }
+        if(want==='getup'){ u.upT=(u.upT||0)+lastDt; u.upK=Math.min(1,u.upT/GETUP_SECS); if(u.upK>=1) want='idle'; }
         if(want==='idle' && u.mixer){ u.mixer.update(lastDt);      // real mocap idle
           // the clip drives 11 finger bones, so restore the closed grip it just overwrote
           if(u.gripBones) for(const f of u.gripBones) if(f.userData.grip) f.quaternion.copy(f.userData.grip); }
         else if(!far || (_frameNo&1)===0) applyPose(u, want, spy);
         // Going to ground: a tackled player pitches over AND drops toward the turf.
         // Previously he only leaned ~30deg and stayed upright, so nobody ever fell.
-        if(u.model){
+        if(u.model && want==='getup'){
+          // Rise out of whatever fall he took: pitch, roll and drop all unwind together,
+          // eased, over GETUP_SECS — not the 0.34-per-frame snap that read as a pop.
+          if(u.upT<=lastDt+1e-6){ u.pitch0=u.model.rotation.x; u.roll0=u.fallZ||0; u.drop0=u.fall||0; }
+          const k=u.upK, ez=k*k*(3-2*k);
+          u.model.rotation.x=(u.pitch0||0)*(1-ez);
+          u.fallZ=(u.roll0||0)*(1-ez); u.model.rotation.z=u.fallZ;
+          u.fall=(u.drop0||0)*(1-Math.min(1,ez*1.1));
+          u.wasDown=false;
+        }
+        else if(u.model){
           const goingDown = (want==='tackle');
           // Every tackle used to look identical — same pitch, same rate, no roll. At the
           // size a player actually renders, motion is the only thing the eye reads, so
