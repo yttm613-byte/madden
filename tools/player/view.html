@@ -1,0 +1,91 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:#0a1020;overflow:hidden}</style>
+<script src="../../vendor/three.min.js"></script>
+<script src="../../vendor/GLTFLoader.js"></script>
+<script src="../../vendor/RGBELoader.js"></script>
+<script src="../../vendor/SkeletonUtils.js"></script>
+</head><body><script>
+// Player viewer: the game's lights, tone mapping and HDR environment, so what looks
+// right here looks right on the field. Driven by tools/player/shoot.mjs.
+const W=900,H=900;
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(W,H); renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x1a2438);
+const camera=new THREE.PerspectiveCamera(30,W/H,0.02,200);
+scene.add(new THREE.AmbientLight(0x4a5a78,0.5));
+const sun=new THREE.DirectionalLight(0xfff4dc,1.45); sun.position.set(10,95,-8.65).normalize().multiplyScalar(20); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); const sc=sun.shadow.camera; sc.left=-3;sc.right=3;sc.top=3;sc.bottom=-3;sc.near=1;sc.far=60; sun.shadow.bias=-0.0002; sun.shadow.normalBias=0.01;
+scene.add(sun);
+const rim=new THREE.DirectionalLight(0x9ab8ff,0.5); rim.position.set(-20,38,-72.65).normalize().multiplyScalar(20); scene.add(rim);
+const warm=new THREE.DirectionalLight(0xffd2a0,0.32); warm.position.set(30,30,43.35).normalize().multiplyScalar(20); scene.add(warm);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(40,40), new THREE.MeshStandardMaterial({color:0x2f8040,roughness:0.85}));
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+const pmrem=new THREE.PMREMGenerator(renderer);
+window.__envReady=false;
+new THREE.RGBELoader().load('../../assets/env.hdr',hdr=>{ hdr.mapping=THREE.EquirectangularReflectionMapping; scene.environment=pmrem.fromEquirectangular(hdr).texture; hdr.dispose(); window.__envReady=true; },undefined,()=>{window.__envReady=true;});
+
+const TEAM={
+  home:{Jersey:0x1e58d8,JerseyTrim:0xf0b429,Helmet:0xe8ecf4,HelmetStripe:0x1e58d8,Facemask:0x10131a,Socks:0x1e58d8,Pants:0xe9ebef,Belt:0x1e58d8,ChinStrap:0xe8ecf4,Gloves:0x14161c,Cleats:0x101014},
+  away:{Jersey:0xa5131d,JerseyTrim:0xe6e8ee,Helmet:0x15171d,HelmetStripe:0xa5131d,Facemask:0x0e1014,Socks:0x15171d,Pants:0x15171d,Belt:0x15171d,ChinStrap:0x15171d,Gloves:0xe8e8ec,Cleats:0xf0f0f2},
+  white:{},
+};
+let models=[];
+function tint(model, team, skin){
+  model.traverse(o=>{ if(!o.isMesh) return; const m=o.material=o.material.clone(); m.vertexColors=!!o.geometry.attributes.color;
+    const c=(TEAM[team]||{})[m.name]; if(c!==undefined) m.color.setHex(c);
+    if(m.name==='Skin') m.color.setHex(skin||0x8d5a3c);
+    m.envMapIntensity = m.name==='Helmet'?0.9:(m.name==='Skin'?0.45:0.7);
+    o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; });
+}
+window.__load=(url, opts)=>new Promise((res,rej)=>{
+  opts=opts||{};
+  new THREE.GLTFLoader().load(url, g=>{
+    const m=g.scene; tint(m, opts.team||'home', opts.skin);
+    if(opts.novisor) m.traverse(o=>{ if(o.material && o.material.name==='Visor') o.visible=false; });
+    if(opts.chin!==undefined) m.traverse(o=>{ if(o.material && o.material.name==='ChinStrap') o.material.color.setHex(opts.chin); });
+    m.position.set(opts.x||0,0,opts.z||0); m.rotation.y=opts.ry||0;
+    if(opts.scale) m.scale.setScalar(opts.scale);
+    if(opts.fitHeight){ const b=new THREE.Box3().setFromObject(m); const h=b.max.y-b.min.y; m.scale.setScalar(opts.fitHeight/h); const b2=new THREE.Box3().setFromObject(m); m.position.y-=b2.min.y; }
+    scene.add(m); const B={}; m.traverse(o=>{ if(o.isBone){ o.userData.bind=o.quaternion.clone(); const k=o.name.replace(/^mixamorig:?_?/,'').replace(/_\d+$/,''); B[k]=B[k]||o; } });
+    const rec={model:m,B,anims:g.animations,mixer:null,phase:0}; models.push(rec);
+    res({bones:Object.keys(B).length, anims:g.animations.map(a=>a.name)});
+  }, undefined, e=>rej(String(e)));
+});
+window.__clear=()=>{ for(const r of models) scene.remove(r.model); models=[]; };
+// ---- the game's pose code (applyPose), ported verbatim in behaviour ----
+const _axX=new THREE.Vector3(1,0,0), _tq=new THREE.Quaternion(), _te=new THREE.Euler();
+function setBone(b,ax,ang){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromAxisAngle(ax,ang); b.quaternion.multiply(_tq); }
+function setBoneE(b,x,y,z){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromEuler(_te.set(x||0,y||0,z||0)); b.quaternion.multiply(_tq); }
+function reset(B){ for(const k in B){ const b=B[k]; if(b.userData.bind) b.quaternion.copy(b.userData.bind); } }
+function applyPose(u, st, spy, k){
+  const B=u.B; reset(B);
+  const L=(n,a)=>setBone(B[n],_axX,a), E=(n,x,y,z)=>setBoneE(B[n],x,y,z), KNEE=(n,a)=>setBone(B[n],_axX,-a);
+  const ARM=(n,fwd,out)=>setBoneE(B[n], out||0, 0, (n.charAt(0)==='L'? fwd : -fwd));
+  const ELB=(n,a)=>setBoneE(B[n], 0,0, (n.charAt(0)==='L'? a : -a));
+  if(st==='run'){ const A=Math.min(0.78, 0.22+spy*0.062); const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI), cs=Math.cos(p);
+    L('LeftUpLeg', sn*A);  L('RightUpLeg', sn2*A);
+    KNEE('LeftLeg',  0.16+Math.max(0,-sn )*A*1.05); KNEE('RightLeg', 0.16+Math.max(0,-sn2)*A*1.05);
+    L('LeftFoot',  0.06+sn *0.16); L('RightFoot', 0.06+sn2*0.16);
+    const armFwd=-sn*A*0.98; ARM('LeftArm',  armFwd, -0.14); ARM('RightArm', -armFwd, -0.14);
+    ELB('LeftForeArm',  1.05+Math.max(0,sn )*0.30); ELB('RightForeArm', 1.05+Math.max(0,sn2)*0.30);
+    E('Hips',0,-cs*0.10*A,0); E('Spine',Math.min(0.08,0.03+spy*0.007),-cs*0.05*A,0); E('Spine1',Math.min(0.10,0.03+spy*0.009),cs*0.06*A,0); E('Spine2',Math.min(0.14,0.05+spy*0.012),cs*0.09*A,0);
+    ARM('LeftShoulder',armFwd*0.30,0); ARM('RightShoulder',-armFwd*0.30,0); E('Neck',-Math.min(0.06,spy*0.006),-cs*0.05*A,0); E('Head',-Math.min(0.12,spy*0.010),-cs*0.08*A,0);
+  } else if(st==='reach'){ L('LeftArm',-2.45); L('RightArm',-2.45); ELB('LeftForeArm',0.15); ELB('RightForeArm',0.15); L('Spine2',-0.06);
+  } else if(st==='set'){ L('LeftUpLeg',0.42); L('RightUpLeg',0.42); KNEE('LeftLeg',0.62); KNEE('RightLeg',0.62); L('Spine2',0.5); ARM('LeftArm',0.30,0.16); ARM('RightArm',0.30,0.16); ELB('LeftForeArm',1.15); ELB('RightForeArm',1.15);
+  } else if(st==='throw'){ const ease=k==null?0:k; L('RightArm', -2.05+ease*0.95); ELB('RightForeArm', 1.25-ease*1.05); L('LeftArm', -0.85+ease*0.45); ELB('LeftForeArm', 0.55+ease*0.35);
+    E('Spine2', 0.12+ease*0.16, -0.42+ease*0.80, 0); E('Hips', 0, -0.18+ease*0.34, 0); L('LeftUpLeg', -0.10-ease*0.20); L('RightUpLeg', 0.16+ease*0.22); KNEE('LeftLeg',0.18); KNEE('RightLeg',0.14); E('Head', -0.06, -0.10+ease*0.16, 0);
+  } else if(st==='kick'){ L('RightUpLeg',1.4); KNEE('RightLeg',0.10); L('LeftUpLeg',-0.15); KNEE('LeftLeg',0.16); L('Spine2',-0.1); L('LeftArm',-0.3); L('RightArm',0.3);
+  } else if(st==='tackle'){ L('Spine2',0.72); L('Spine',0.30); ARM('LeftArm',1.35,0.08); ARM('RightArm',1.35,0.08); ELB('LeftForeArm',1.05); ELB('RightForeArm',1.05); L('LeftUpLeg',0.85); L('RightUpLeg',0.20); KNEE('LeftLeg',1.30); KNEE('RightLeg',0.95); E('Head',0.25,0,0);
+  } else if(st==='celebrate'){ const up=-2.5; L('LeftArm',up); L('RightArm',up); ELB('LeftForeArm',0.3); ELB('RightForeArm',0.3); L('Spine2',-0.15); KNEE('LeftLeg',0.08); KNEE('RightLeg',0.08);
+  } else if(st==='block'){ L('Spine2',0.5); L('LeftArm',-1.15); L('RightArm',-1.15); L('LeftForeArm',-0.5); L('RightForeArm',-0.5);
+  } else if(st==='stiffarm'){ const A=0.5,p=u.phase,sn=Math.sin(p); L('LeftUpLeg', sn*A); L('RightUpLeg', -sn*A); setBone(B['RightArm'],_axX,-1.45); setBone(B['RightForeArm'],_axX,-0.05); }
+}
+window.__pose=(st,spy,phase,k)=>{ for(const u of models){ if(phase!=null) u.phase=phase; applyPose(u,st,spy||0,k); } };
+window.__idle=(t)=>{ for(const u of models){ reset(u.B); if(u.anims&&u.anims.length){ if(!u.mixer){ u.mixer=new THREE.AnimationMixer(u.model); u.mixer.clipAction(u.anims[0]).play(); } u.mixer.setTime(t||0); } } };
+window.__cam=(pos,look,fov)=>{ camera.position.set(...pos); camera.lookAt(...look); if(fov){ camera.fov=fov; camera.updateProjectionMatrix(); } };
+window.__render=()=>{ renderer.render(scene,camera); return renderer.domElement.toDataURL('image/png'); };
+window.__ready=true;
+</script></body></html>

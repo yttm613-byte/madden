@@ -40,7 +40,7 @@ function run(spy,dt){
   rend.render(scene,cam);
 }
 let base=0;
-new THREE.GLTFLoader().load('../assets/fbplayer_opt.glb',(g)=>{
+new THREE.GLTFLoader().load('../assets/gridiron_player.glb',(g)=>{
   model=g.scene; scene.add(model);
   const bx=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); bx.getSize(sz);
   model.scale.setScalar(2/sz.y);
