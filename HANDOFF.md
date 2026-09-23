@@ -95,7 +95,8 @@ loop()           1170   requestAnimationFrame driver
 | `makeRoute` / `routeSpeed` | 758 / 766 | Routes have a settle depth so receivers stop running away. |
 | `makePlayer` | 2386 | Per-player material instances, skin tone and kit variation (visor, gloves, cleats). Team colours and numbers are applied in `render3D`. |
 | `jerseyNumberTex` | 2358 | Paints a player's roster number / surname onto the jersey decals. |
-| `applyPose` | 2461 | Procedural skeletal animation — run, throw, tackle, block, celebrate, get up. Standing players play the model's idle clip. |
+| Pose library (`/*POSE-LIB-BEGIN*/`) | 2503 | All procedural animation: `applyPose` (30 states — stances for every position, pass set, engaged blocks, drive blocks, backpedal, shuffle, QB drop/set/throw/handoff, carry with a real tuck and stiff-arm, reach and secure, wrap, dive, fall, get-up, celebrations, kick, fair-catch signal), cross-fades between states (`poseBlendFrom`), ground contact (`poseGround`), two-bone IK (`ik2`), `footFlat` and `headLook`. Self-contained so `tools/posebook.html` can render it. |
+| Pose choice (in `render3D`) | 3100 | Picks each man's state from `poseRole()` and the moment in the play, and hands IK targets to the pose: a blocker's hands on the defender's chest, a receiver's hands to the ball, the tackler's arms round the carrier. Replays play back each man's recorded state. |
 
 ---
 
@@ -113,6 +114,22 @@ pose code treats as neutral. Change the bone frames in `tools/player/rig.mjs` an
 every `applyPose` axis changes meaning with them.
 
 **Decal textures need `flipY=false`.** The number patches use glTF UV convention.
+
+**Pose axes were measured, not guessed** (see the comment block above `applyPose`):
+thigh X+ swings forward, arm X- raises it out to the side on BOTH sides, arm Z is
+fore/aft mirrored left/right, the foot's X+ lifts the toes. The upper-arm twist that
+cocks a throwing arm is -1.6 on the `ARM` helper. Render a pose in
+`tools/posebook.html` (`node tools/posebook.mjs specs.mjs out.png`) before trusting it.
+
+**Never call `getWorldPosition` in per-frame pose code.** It recomputes every ancestor
+matrix on each call; the first cut of the IK did that ~25 times per player per frame
+and cost 6x the old render loop. Refresh a chain once with
+`bone.updateWorldMatrix(true,false)` and read `setFromMatrixPosition(bone.matrixWorld)`.
+
+**IK runs in the model's space.** Linemen are scaled wider than they are tall, and
+angles in non-uniformly scaled world space are wrong. Targets go in through the
+inverse model matrix; bone rotations relative to the model come from multiplying local
+quaternions (`relQ`).
 
 **The running lean writes `model.rotation.z` every frame.** Anything else that
 wants that axis (the fall animation) has to own it explicitly or it gets
@@ -228,6 +245,12 @@ at another server, which is how to A/B against a worktree of the last commit):
 player, plus yards after catch and contact-to-tackle frames), `depthtrace`
 (completion by throw depth), `tacklenow` (frames from contact to whistle),
 `puntzero` / `koret` (older return checks).
+
+`tools/posebook.html` + `tools/posebook.mjs` render any pose (or pair of players, for
+blocks and tackles) from the game's own pose library on the real model, from any
+angle, with joint positions printed — that is how every pose was tuned. For poses in
+context, set `window.__gbNoDraw=true` on `index.test.html` so `render3D()` runs the
+pose logic without drawing, step the game, and render a close camera yourself.
 
 Two practical notes: drive `update(dt)` directly rather than waiting on real
 time, because software rendering only manages a few frames a second; and listen

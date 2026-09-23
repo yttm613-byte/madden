@@ -1,0 +1,100 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:#1a2438;overflow:hidden}</style>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/GLTFLoader.js"></script>
+<script src="../vendor/RGBELoader.js"></script>
+<script src="../vendor/SkeletonUtils.js"></script>
+</head><body><script>
+// Pose book: renders the GAME'S OWN pose code on the real model, so a pose can be
+// tuned by looking at it rather than by guessing angles. The pose library is lifted
+// out of ../index.html between the POSE-LIB markers and evaluated here unchanged.
+// Driven by tools/posebook.mjs.
+const W=380,H=440;
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(W,H); renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x1a2438);
+const camera=new THREE.PerspectiveCamera(32,W/H,0.02,200);
+scene.add(new THREE.AmbientLight(0x4a5a78,0.55));
+const sun=new THREE.DirectionalLight(0xfff4dc,1.45); sun.position.set(6,20,8); sun.castShadow=true;
+sun.shadow.mapSize.set(1024,1024); const sc=sun.shadow.camera; sc.left=-4;sc.right=4;sc.top=4;sc.bottom=-4;sc.near=1;sc.far=60; sun.shadow.bias=-0.0003;
+scene.add(sun);
+const rim=new THREE.DirectionalLight(0x9ab8ff,0.5); rim.position.set(-8,10,-14); scene.add(rim);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(40,40), new THREE.MeshStandardMaterial({color:0x2f8040,roughness:0.85}));
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+// yard-line style reference lines every yard, so heights and spacing can be read
+for(let i=-6;i<=6;i++){ const l=new THREE.Mesh(new THREE.PlaneGeometry(0.03,12), new THREE.MeshBasicMaterial({color:0x6fb07a}));
+  l.rotation.x=-Math.PI/2; l.position.set(i,0.002,0); scene.add(l); }
+const pmrem=new THREE.PMREMGenerator(renderer);
+let envReady=false, proto=null, LIB=null;
+new THREE.RGBELoader().load('../assets/env.hdr',hdr=>{ hdr.mapping=THREE.EquirectangularReflectionMapping; scene.environment=pmrem.fromEquirectangular(hdr).texture; hdr.dispose(); envReady=true; },undefined,()=>{envReady=true;});
+const KIT={
+  home:{Jersey:0x1e58d8,JerseyTrim:0xf0b429,Helmet:0xe8ecf4,HelmetStripe:0x1e58d8,Facemask:0x10131a,Socks:0x1e58d8,Pants:0xe9ebef,Belt:0x1e58d8,ChinStrap:0x15171d,Gloves:0x14161c,Cleats:0x101014},
+  away:{Jersey:0xa5131d,JerseyTrim:0xe6e8ee,Helmet:0x15171d,HelmetStripe:0xa5131d,Facemask:0x0e1014,Socks:0x15171d,Pants:0x15171d,Belt:0x15171d,ChinStrap:0x15171d,Gloves:0xe8e8ec,Cleats:0xf0f0f2},
+};
+// the game's G/lastDt, stubbed: poses read a few fields off them
+const G={ throwT:0 }; let lastDt=1/60;
+const pool=[];
+function makeOne(){
+  const model=THREE.SkeletonUtils.clone(proto.scene);
+  const box=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); box.getSize(sz);
+  const s=2.0/(sz.y||1); model.scale.set(s,s,s);
+  const b2=new THREE.Box3().setFromObject(model); model.position.y=-b2.min.y;
+  const grp=new THREE.Group(); grp.add(model); scene.add(grp);
+  const mats={};
+  model.traverse(o=>{ if(!o.isMesh) return; o.material=o.material.clone(); o.material.vertexColors=!!o.geometry.attributes.color;
+    o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; (mats[o.material.name]=mats[o.material.name]||[]).push(o.material);
+    if(o.material.name==='Visor') o.visible=false; });
+  const u={ model, grp, mats, baseY:model.position.y, phase:0, gait:1, heading:0, bank:0 };
+  LIB.initRig(u, model);
+  return u;
+}
+function kit(u, team, skin){
+  for(const n in u.mats) for(const m of u.mats[n]){
+    const c=(KIT[team]||{})[n]; if(c!==undefined){ m.color.setHex(c); m.color.convertSRGBToLinear(); }
+    if(n==='Skin'){ m.color.setHex(skin||0x6a432c); m.color.convertSRGBToLinear(); }
+    m.envMapIntensity = n==='Helmet'?0.85:(n==='Skin'?0.42:0.6);
+  }
+}
+// spec: {players:[{pose,spy,P,x,z,ry,team,bones:{Bone:[x,y,z]}}], cam:[pos,look,fov] | 'side'|'front'|'q34'|'back'|'q34b'}
+const CAMS={ side:[[4.6,1.0,0],[0,0.8,0]], front:[[0,1.0,4.6],[0,0.8,0]], back:[[0,1.0,-4.6],[0,0.8,0]],
+  q34:[[3.2,1.4,3.4],[0,0.8,0]], q34b:[[-3.2,1.4,3.4],[0,0.8,0]], top:[[0.01,6,0.4],[0,0,0]], wide:[[5,2.4,6.5],[0,0.7,0]] };
+window.__shot=(spec)=>{
+  for(const u of pool) u.grp.visible=false;
+  const ps=spec.players||[spec];
+  ps.forEach((p,i)=>{
+    const u=pool[i]||(pool[i]=makeOne()); u.grp.visible=true; kit(u,p.team||'home',p.skin);
+    u.grp.position.set(p.x||0,0,p.z||0); u.grp.rotation.set(0,p.ry||0,0);
+    u.model.rotation.set(0,0,0); u.phase=p.phase!=null?p.phase:0; u.upK=p.upK||0;
+    G.throwT=p.throwT||0;
+    LIB.poseReset(u);
+    const P=Object.assign({}, p.P||{}); for(const key of ['lookT']) if(Array.isArray(P[key])) P[key]=new THREE.Vector3(...P[key]);
+    if(p.pose){ lastDt=1/60; for(let i=0;i<(p.frames||1);i++) LIB.applyPose(u, p.pose, p.spy||0, P); }
+    if(p.bones) for(const k in p.bones){ const v=p.bones[k]; LIB.setBoneE(u.B[k], v[0],v[1],v[2]); }
+    if(p.pitch) u.model.rotation.x=p.pitch;
+    u.model.position.y=u.baseY;
+    u.grp.updateMatrixWorld(true);
+    const off = p.noGround ? 0 : LIB.poseGround(u, !!u.ikQueue);
+    u.model.position.y=u.baseY+off+(p.dy||0);
+    u.grp.updateMatrixWorld(true);
+    if(p.pose) LIB.poseFinish(u, p.pose, P);
+    u.grp.updateMatrixWorld(true);
+  });
+  let c=spec.cam||'q34'; if(typeof c==='string') c=CAMS[c];
+  camera.position.set(...c[0]); camera.lookAt(...c[1]); camera.fov=c[2]||32; camera.updateProjectionMatrix();
+  renderer.render(scene,camera);
+  // report joint heights so poses can be checked numerically too
+  const u0=pool[0], v=new THREE.Vector3(), rep={};
+  for(const k of ['LeftHand','RightHand','LeftFoot','RightFoot','Hips','Head']){ const b=u0.B[k]; if(b){ b.getWorldPosition(v); rep[k]=[+v.x.toFixed(2),+v.y.toFixed(2),+v.z.toFixed(2)]; } }
+  return {url:renderer.domElement.toDataURL('image/png'), rep};
+};
+fetch('../index.html').then(r=>r.text()).then(src=>{
+  const a=src.indexOf('/*POSE-LIB-BEGIN*/'), b=src.indexOf('/*POSE-LIB-END*/');
+  if(a<0||b<0) throw new Error('POSE-LIB markers not found');
+  const body=src.slice(a,b);
+  LIB=new Function('THREE','G','getDt', 'let lastDt=1/60; const __dt=()=>getDt();\n'+body+'\n;return {initRig,poseReset,applyPose,poseGround,poseFinish,setBone,setBoneE};')(THREE,G,()=>lastDt);
+  new THREE.GLTFLoader().load('../assets/gridiron_player.glb', g=>{ proto=g; window.__ready=true; }, undefined, e=>{ window.__err=String(e); });
+}).catch(e=>{ window.__err=String(e&&e.message||e); });
+</script></body></html>

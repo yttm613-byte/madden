@@ -1256,6 +1256,7 @@
 
     if(G.phase==='dead' && !G.clockStop && G.clock>2 && G.deadT<0.9 && G.timeouts && G.timeouts.cpu>0) cpuTimeoutCheck();
     if(G.phase==='dead'){ G.deadT-=dt; G.cam+=(clampCam((G.pile||G.carrier).x)-G.cam)*Math.min(1,dt*4);
+      if(G._pendingConv){ if(!G.replay) tdGather(dt); if(G.deadT<=0) afterTD(); syncHUD(); return; }
       gangTackle(dt);
       if(G.deadT<=0) finishDead(); syncHUD(); return; }
 
@@ -1771,10 +1772,11 @@
   const REPLAY_SECS=1.7, REPLAY_SPD=0.5;   // capture the last 1.7s, play it at half speed
   function recordFrame(){
     const e=[];
-    for(const b of G.blockers) e.push({x:b.x,y:b.y,vx:b.vx,vy:b.vy,n:b.n,k:'block'});
-    for(const r of G.receivers) e.push({x:r.x,y:r.y,vx:r.vx,vy:r.vy,n:r.n,k:'rec'});
-    for(const d of G.defenders) e.push({x:d.x,y:d.y,vx:d.vx,vy:d.vy,n:d.n,k:'def'});
-    if(G.carrier) e.push({x:G.carrier.x,y:G.carrier.y,vx:G.carrier.vx,vy:G.carrier.vy,n:G.carrier.n,k:'carry'});
+    const rp=(o,k)=>({x:o.x,y:o.y,vx:o.vx,vy:o.vy,n:o.n,k,role:o.role,st:o.st,pk:o.pk,ba:o.ba,pr:o.pr});
+    for(const b of G.blockers) e.push(rp(b,'block'));
+    for(const r of G.receivers) e.push(rp(r,'rec'));
+    for(const d of G.defenders) e.push(rp(d,'def'));
+    if(G.carrier) e.push(rp(G.carrier,'carry'));
     G._recT=(G._recT||0)+lastDt;
     // Record the ball too. Without this a fumble replay showed the carrier still
     // holding it, so the video never showed the ball actually coming loose.
@@ -2067,13 +2069,31 @@
       setMsg(G.conv==='user'?'TWO-POINT — GOOD!':'CPU TWO-POINT — GOOD',1.5); SFX.roar(); G.shake=0.28; G.flash=0.4; spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',22,true);
       G.conv=null; G.twoPt=false; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false; G.phase='dead'; G.deadT=1.4; syncHUD(); return;
     }
-    if(G._td) return; recordPlay('TD', GOAL_X); G.phase='dead'; G.deadT=1.6; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false;
-    if(startReplay()) G.deadT=3.4;   // hold the whistle so the replay can run
+    if(G._td) return; recordPlay('TD', GOAL_X); G.phase='dead'; G.deadT=1.9; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false;
+    // The scorer gets his moment first — the celebration, teammates running in to him —
+    // then the replay, then the conversion. The conversion used to start on the same
+    // frame as the touchdown, so nobody ever saw anyone celebrate.
+    G._pendingConv=G.offense; G._tdReplayed=false;
     spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',26,true); G.shake=0.3; G.flash=0.5; SFX.roar();
     crowdSwell(G.offense==='user'?0.34:0.18, 4.5);   // huge home roar (muted for a CPU score)
     if(G.offense==='user'){ G.userScore+=6; G.longest=Math.max(G.longest,Math.max(0,Math.round((GOAL_X-G.los)/PPY))); }
     else G.cpuScore+=6;
-    syncHUD(); startConversion(G.offense);
+    syncHUD();
+  }
+  // after the celebration: the replay, and then the try
+  function afterTD(){
+    if(!G._tdReplayed){ G._tdReplayed=true; if(startReplay()){ G.deadT=2.9; return; } }
+    const t=G._pendingConv; G._pendingConv=null; stopReplay(); startConversion(t);
+  }
+  // Teammates close enough to matter run in to the scorer; everybody else pulls up.
+  function tdGather(dt){
+    const c=G.carrier; if(!c) return;
+    for(const o of [...G.blockers, ...G.receivers]){ if(o===c) continue;
+      const dx=c.x-o.x, dy=c.y-o.y, d=Math.hypot(dx,dy);
+      if(d<yd(22) && d>yd(1.3)){ const sp=Math.min(yd(4.2), d*2); o.vx=dx/d*sp; o.vy=dy/d*sp; o.x+=o.vx*dt; o.y+=o.vy*dt; }
+      else { o.vx*=0.85; o.vy*=0.85; } }
+    for(const d of G.defenders){ d.vx*=0.9; d.vy*=0.9; d.x+=d.vx*dt; d.y+=d.vy*dt; }
+    c.vx*=0.9; c.vy*=0.9;
   }
   function startConversion(team){
     G.conv=team; G.twoPt=false; G.los=GOAL_X-yd(2.5); G.firstX=GOAL_X; G.down=1;
@@ -2271,7 +2291,7 @@
   // ---- 3D rendering (three.js r128) ----
   let scene, camera, renderer, ballMesh, pPool=[], camPos, camLook, flashes=[];
   let playerProto=null, playersReady=false, lastDt=0.016, ringPool=[], losLine, firstLine, catchMark;
-  let _frameNo=0, _carrierG=null, downPole=null, firstPole=null; const _tuckV=new THREE.Vector3();
+  let _runQBG=null, _frameNo=0, _carrierG=null, downPole=null, firstPole=null; const _tuckV=new THREE.Vector3();
   const _spinAxis=new THREE.Vector3(1,0,0); let _spiral=0;   // ball spirals about its long axis
   const _fdir=new THREE.Vector3(), _qs=new THREE.Quaternion();
   // A real football is 11" x 6.7" = 0.306 x 0.186 yards. ballMesh is a r=0.4 sphere,
@@ -2372,11 +2392,7 @@
   // Clone one instance of the rigged GLB player, with its own materials, build
   // variation and animation mixer (idle / run / tackle / celebrate).
   // ---- realistic rigged player (Mixamo-skeleton GLB), driven procedurally ----
-  const _axX=new THREE.Vector3(1,0,0), _tq=new THREE.Quaternion();
   function findBone(root,sub){ let f=null; root.traverse(o=>{ if(!f && o.isBone && o.name.indexOf(sub)>=0) f=o; }); return f; }
-  function setBone(b,ax,ang){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromAxisAngle(ax,ang); b.quaternion.multiply(_tq); }
-  const _te=new THREE.Euler();
-  function setBoneE(b,x,y,z){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromEuler(_te.set(x||0,y||0,z||0)); b.quaternion.multiply(_tq); }
   // One-time quality pass on the loaded model: max anisotropic filtering and proper
   // mip filtering on every texture, and vertex colours switched on wherever the
   // attribute exists — the model bakes its ambient occlusion into COLOR_0, and three
@@ -2450,11 +2466,6 @@
     const baseS=s, buildVh=vh, buildVg=vg;
     const box2=new THREE.Box3().setFromObject(model); model.position.y=-box2.min.y;
     grp.add(model);
-    const B={};
-    ['Hips','Spine2','Spine','Head','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm',
-     'Spine1','Neck','LeftShoulder','RightShoulder'].forEach(k=>{
-      const b=findBone(model,k); if(b){ b.userData.bind=b.quaternion.clone(); B[k]=b; } });
-    B.RightHand=findBone(model,'RightHand'); B.LeftHand=findBone(model,'LeftHand');
     // every part gets its own material instance so each player can be tinted and varied
     const mats={}, parts={};
     model.traverse(o=>{ if(!o.isMesh||!o.material) return;
@@ -2505,112 +2516,383 @@
       idleAct=mixer.clipAction(playerProto.animations[0]);
       idleAct.play(); mixer.setTime(Math.random()*playerProto.animations[0].duration);
     }
-    grp.userData={B,ring,mats,parts,gloveHex,cleatHex,team:null,numKey:null,model,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
+    grp.userData={ring,mats,parts,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
+    initRig(grp.userData, model);
     grp.visible=false; scene.add(grp); return grp;
   }
-  // Pose the Mixamo rig per state.
-  // Joint axes were MEASURED on this skeleton (rotate a bone, see where the end
-  // effector goes), because guessing them was wrong in two places:
-  //   hip   : +X swings the leg forward            (fwd +0.70)
-  //   knee  : -X is the natural bend, heel back/up (+X hyperextends it backwards!)
-  //   arm   : Z is fore/aft, X is lateral          (mirrored L/R)
-  //   elbow : Z flexes, mirrored L/R
-  function applyPose(u, st, spy){
-    const B=u.B; if(!B) return;
-    const L=(k,a)=>setBone(B[k],_axX,a);                 // raw X (hips, ankles, spine)
-    const E=(k,x,y,z)=>setBoneE(B[k],x,y,z);
-    const KNEE=(k,a)=>setBone(B[k],_axX,-a);             // +a = natural forward-knee bend
-    const ARM =(k,fwd,out)=>setBoneE(B[k], out||0, 0, (k.charAt(0)==='L'? fwd : -fwd)); // +fwd = forward both sides
-    const ELB =(k,a)=>setBoneE(B[k], 0,0, (k.charAt(0)==='L'? a : -a));                 // +a = natural elbow flex
-    if(st==='run'){
-      // Stride is locked to ground distance (distance / stride length) so the feet turn
-      // over at exactly the rate the body moves — no sliding. Stride LENGTHENS with
-      // speed, the way real runners cover more ground per step as they open up.
-      // Stride length is DERIVED from the leg's actual reach (2*legLength*sin(hipSwing))
-      // rather than picked by hand. A hand-picked constant was 71-106% longer than the
-      // legs can sweep, which forced the feet to slide no matter how the phase advanced.
-      const A=Math.min(0.78, 0.22+spy*0.062);
-      // Stride = leg sweep (2*legLen*sin(hipSwing)) TIMES an aerial factor: a runner is
-      // airborne for part of every step, so real stride is longer than the leg's reach.
-      // Using leg sweep alone forced ~6.6 steps/sec at speed (a frantic flutter);
-      // with the aerial term the cadence lands at a realistic ~4.3.
-      const stride=Math.max(0.92, 2*0.92*Math.sin(A)*1.62);
-      u.phase += (Math.max(0.6,spy)*lastDt/stride)*Math.PI;
-      const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI), cs=Math.cos(p);
-      L('LeftUpLeg', sn*A);  L('RightUpLeg', sn2*A);
-      KNEE('LeftLeg',  0.16+Math.max(0,-sn )*A*1.05);    // heel kicks up behind, correctly
-      KNEE('RightLeg', 0.16+Math.max(0,-sn2)*A*1.05);
-      L('LeftFoot',  0.06+sn *0.16);                     // ankle rolls smoothly (was a snap)
-      L('RightFoot', 0.06+sn2*0.16);
-      const armFwd=-sn*A*0.98;
-      ARM('LeftArm',  armFwd, -0.14); ARM('RightArm', -armFwd, -0.14);
-      ELB('LeftForeArm',  1.05+Math.max(0,sn )*0.30);
-      ELB('RightForeArm', 1.05+Math.max(0,sn2)*0.30);
-      // Torso motion is spread down the whole spine chain instead of being applied to
-      // one bone, and the shoulders roll with the arms — a single rigid segment is what
-      // made the upper body look stiff.
-      E('Hips',   0, -cs*0.10*A, 0);
-      E('Spine',  Math.min(0.08, 0.03+spy*0.007), -cs*0.05*A, 0);
-      E('Spine1', Math.min(0.10, 0.03+spy*0.009),  cs*0.06*A, 0);
-      E('Spine2', Math.min(0.14, 0.05+spy*0.012),  cs*0.09*A, 0);
-      ARM('LeftShoulder',   armFwd*0.30, 0);
-      ARM('RightShoulder', -armFwd*0.30, 0);
-      E('Neck',   -Math.min(0.06, spy*0.006), -cs*0.05*A, 0);
-      E('Head',   -Math.min(0.12, spy*0.010), -cs*0.08*A, 0);
-    } else if(st==='reach'){          // receiver tracking the ball: arms up, legs striding
-      u.phase += (Math.max(0.6,spy)*lastDt/1.85)*Math.PI;
-      const A=Math.min(0.7,0.25+spy*0.06), sn=Math.sin(u.phase), sn2=Math.sin(u.phase+Math.PI);
-      L('LeftUpLeg', sn*A); L('RightUpLeg', sn2*A);
-      KNEE('LeftLeg', 0.14+Math.max(0,-sn)*A*1.3); KNEE('RightLeg', 0.14+Math.max(0,-sn2)*A*1.3);
-      L('LeftArm',-2.45); L('RightArm',-2.45); ELB('LeftForeArm',0.15); ELB('RightForeArm',0.15);
-      L('Spine2',-0.06);
-    } else if(st==='set'){            // pre-snap crouch
-      L('LeftUpLeg',0.42); L('RightUpLeg',0.42); KNEE('LeftLeg',0.62); KNEE('RightLeg',0.62);
-      L('Spine2',0.5); ARM('LeftArm',0.30,0.16); ARM('RightArm',0.30,0.16);
-      ELB('LeftForeArm',1.15); ELB('RightForeArm',1.15);
-    } else if(st==='throw'){
-      // A real throw is a sequence, not a frozen pose: cock the ball back, rotate the
-      // shoulders through, release, then follow through across the body. G.throwT runs
-      // 0.42 -> 0 after release, so k goes 0 (cocked) -> 1 (full follow-through).
-      const k=1-Math.max(0,Math.min(1,(G.throwT||0)/0.42));
-      const ease=k*k*(3-2*k);
-      L('RightArm', -2.05+ease*0.95);                  // up and back, then whipping down
-      ELB('RightForeArm', 1.25-ease*1.05);             // elbow uncoils through the release
-      L('LeftArm', -0.85+ease*0.45);                   // off arm points at the target, then drops
-      ELB('LeftForeArm', 0.55+ease*0.35);
-      E('Spine2', 0.12+ease*0.16, -0.42+ease*0.80, 0); // shoulders rotate through the throw
-      E('Hips',   0, -0.18+ease*0.34, 0);              // hips open toward the target
-      L('LeftUpLeg', -0.10-ease*0.20); L('RightUpLeg', 0.16+ease*0.22);
-      KNEE('LeftLeg',0.18); KNEE('RightLeg',0.14);
-      E('Head', -0.06, -0.10+ease*0.16, 0);
-    } else if(st==='kick'){           // place-kicker leg swing
-      L('RightUpLeg',1.4); KNEE('RightLeg',0.10); L('LeftUpLeg',-0.15); KNEE('LeftLeg',0.16);
-      L('Spine2',-0.1); L('LeftArm',-0.3); L('RightArm',0.3);
-    } else if(st==='tackle'){         // wrapped up and going to ground
-      L('Spine2',0.72); L('Spine',0.30);
-      ARM('LeftArm',1.35,0.08); ARM('RightArm',1.35,0.08);      // arms thrown out
-      ELB('LeftForeArm',1.05); ELB('RightForeArm',1.05);
-      L('LeftUpLeg',0.85); L('RightUpLeg',0.20);                 // legs buckle under him
-      KNEE('LeftLeg',1.30); KNEE('RightLeg',0.95);
-      E('Head',0.25,0,0);
-    } else if(st==='getup'){         // hands and knees, then up: u.upK runs 0 -> 1
-      const k=u.upK||0, a=1-k*k*(3-2*k);
-      L('Spine2',0.20+0.50*a); L('Spine',0.08+0.28*a);
-      ARM('LeftArm',0.95*a,0.10); ARM('RightArm',0.95*a,0.10);     // arms planted, pushing
-      ELB('LeftForeArm',0.35+0.45*a); ELB('RightForeArm',0.35+0.45*a);
-      L('LeftUpLeg',0.10+1.05*a); L('RightUpLeg',0.05+0.75*a);     // one knee drives under him
-      KNEE('LeftLeg',0.12+1.45*a); KNEE('RightLeg',0.10+1.10*a);
-      E('Head',-0.25*a,0,0);
-    } else if(st==='celebrate'){      // arms up, little bob
-      u.phase += 0.09;
-      const up=-2.5+Math.sin(u.phase)*0.15;
-      L('LeftArm',up); L('RightArm',up); ELB('LeftForeArm',0.3); ELB('RightForeArm',0.3);
-      L('Spine2',-0.15); KNEE('LeftLeg',0.08); KNEE('RightLeg',0.08);
-    } else {                          // idle: subtle breathing
-      u.phase += 0.025*u.gait;
-      L('Spine2', 0.02*Math.sin(u.phase));
-    }
+  /*POSE-LIB-BEGIN*/
+  // ---- procedural animation ---------------------------------------------------------
+  // Everything a player's body does is posed here, bone by bone, relative to the rig's
+  // rest pose. This block is self-contained (THREE, G and lastDt only) because
+  // tools/posebook.html lifts it out of this file verbatim and renders every pose on
+  // the real model — tune a pose by looking at it there, not by guessing angles.
+  const _axX=new THREE.Vector3(1,0,0), _tq=new THREE.Quaternion(), _te=new THREE.Euler(), _gv=new THREE.Vector3();
+  function setBone(b,ax,ang){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromAxisAngle(ax,ang); b.quaternion.multiply(_tq); }
+  function setBoneE(b,x,y,z){ if(!b||!b.userData.bind) return; b.quaternion.copy(b.userData.bind); _tq.setFromEuler(_te.set(x||0,y||0,z||0)); b.quaternion.multiply(_tq); }
+  // the bones a pose owns: reset to rest before every pose, and cross-faded between poses
+  const POSE_BONES=['Hips','Spine','Spine1','Spine2','Neck','Head','LeftShoulder','LeftArm','LeftForeArm','LeftHand',
+    'RightShoulder','RightArm','RightForeArm','RightHand','LeftUpLeg','LeftLeg','LeftFoot','LeftToeBase','RightUpLeg','RightLeg','RightFoot','RightToeBase'];
+  // points that can touch the turf, and how high each sits above it when touching
+  const GROUND_PTS=[['LeftFoot',null],['RightFoot',null],['LeftToeBase',null],['RightToeBase',null],['LeftLeg',0.07],['RightLeg',0.07],['LeftHand',0.05],['RightHand',0.05]];
+  function initRig(u, model){
+    const B={}; model.traverse(o=>{ if(o.isBone){ const k=o.name.replace(/^mixamorig:?/,''); if(!B[k]){ B[k]=o; o.userData.bind=o.quaternion.clone(); } } });
+    u.B=B; u.poseQ=POSE_BONES.map(()=>new THREE.Quaternion()); u.blendT=1; u.blendDur=0;
+    // rest heights of the feet, measured once in the rest pose with the model on the turf
+    model.updateMatrixWorld(true); const oy=model.parent?_gv.setFromMatrixPosition(model.parent.matrixWorld).y:0; u.rest={}; u.restScaleY=model.scale.y;
+    for(const [k] of GROUND_PTS){ const b=B[k]; if(b){ _gv.setFromMatrixPosition(b.matrixWorld); u.rest[k]=_gv.y-oy; } }
+    // and how far the toe sits below the ankle, in the model's own units (footFlat)
+    if(B.LeftFoot && B.LeftToeBase){ const inv=new THREE.Matrix4().copy(model.matrixWorld).invert();
+      const f=B.LeftFoot.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv), t=B.LeftToeBase.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+      u.rest.toeDy=t.y-f.y; }
   }
+  function poseReset(u){ const B=u.B; for(const k of POSE_BONES){ const b=B[k]; if(b&&b.userData.bind) b.quaternion.copy(b.userData.bind); } }
+  // Start a cross-fade from whatever the body is doing now into the next pose.
+  function poseBlendFrom(u, dur){ const B=u.B; POSE_BONES.forEach((k,i)=>{ const b=B[k]; if(b) u.poseQ[i].copy(b.quaternion); }); u.blendT=0; u.blendDur=dur; }
+  function poseBlendApply(u){ if(!(u.blendT<u.blendDur)) return; u.blendT+=lastDt; const t=Math.min(1,u.blendT/u.blendDur), k=t*t*(3-2*t);
+    const B=u.B; POSE_BONES.forEach((n,i)=>{ const b=B[n]; if(b){ _tq.copy(u.poseQ[i]).slerp(b.quaternion,k); b.quaternion.copy(_tq); } }); }
+  // How far to raise (+) or lower (-) the model so the lowest contact point sits on
+  // the turf. Bending the knees with the hips pinned lifts the feet, so without this
+  // every crouch floated; with it a stance sinks into the ground the way it should.
+  function poseGround(u, feetOnly){
+    const g=u.model.parent; if(!g) return 0; const B=u.B;
+    // refresh just the chains this reads (toe tips carry their whole leg; hands their arm)
+    for(const t of feetOnly?['LeftToeBase','RightToeBase']:['LeftToeBase','RightToeBase','LeftHand','RightHand']) if(B[t]) B[t].updateWorldMatrix(true,false);
+    const oy=_gv.setFromMatrixPosition(g.matrixWorld).y;
+    let off=-1e9; for(const [k,clear] of GROUND_PTS){ if(feetOnly && clear!=null) continue; const b=B[k]; if(!b) continue; _gv.setFromMatrixPosition(b.matrixWorld);
+      const c=(clear==null? (u.rest[k]||0)*(u.model.scale.y/(u.restScaleY||1)) : clear); off=Math.max(off, c-(_gv.y-oy)); }
+    return off>-1e8?off:0;
+  }
+  // ---- two-bone IK ------------------------------------------------------------------
+  // Hands that actually reach things: the ground in a stance, the ball, a man's chest.
+  // Solved in the MODEL's space, not the world's: linemen are scaled wider than they
+  // are tall, and angles measured in non-uniformly scaled space come out wrong. The
+  // FK pose chooses which way the elbow or knee points; IK only closes the distance.
+  // (Two-joint solve after Daniel Holden, "Simple Two Joint IK".)
+  const _m4=new THREE.Matrix4(), _ka=new THREE.Vector3(), _kb=new THREE.Vector3(), _kc=new THREE.Vector3(), _kt=new THREE.Vector3(),
+    _v1=new THREE.Vector3(), _v2=new THREE.Vector3(), _v3=new THREE.Vector3(), _v4=new THREE.Vector3(), _v5=new THREE.Vector3(),
+    _v6=new THREE.Vector3(), _v7=new THREE.Vector3(), _v8=new THREE.Vector3(),
+    _kq0=new THREE.Quaternion(), _kq1=new THREE.Quaternion(), _kq2=new THREE.Quaternion(), _kqa=new THREE.Quaternion(), _kqb=new THREE.Quaternion(), _kqr=new THREE.Quaternion();
+  function relQ(u, bone, out){ out.identity(); let o=bone; while(o && o!==u.model){ out.premultiply(o.quaternion); o=o.parent; } return out; }
+  const _cl=v=>v<-1?-1:(v>1?1:v);
+  function ik2(u, na, nb, nc, targetW, w){
+    const A=u.B[na], Bn=u.B[nb], C=u.B[nc]; if(!A||!Bn||!C||!targetW) return;
+    C.updateWorldMatrix(true,false); _m4.copy(u.model.matrixWorld).invert();   // just this chain
+    _ka.setFromMatrixPosition(A.matrixWorld).applyMatrix4(_m4); _kb.setFromMatrixPosition(Bn.matrixWorld).applyMatrix4(_m4); _kc.setFromMatrixPosition(C.matrixWorld).applyMatrix4(_m4);
+    _kt.copy(targetW).applyMatrix4(_m4);
+    if(w!=null && w<1) _kt.lerpVectors(_kc,_kt,Math.max(0,w));
+    const lab=_ka.distanceTo(_kb), lcb=_kb.distanceTo(_kc);
+    const lat=Math.min(Math.max(_ka.distanceTo(_kt),Math.abs(lab-lcb)+1e-3), lab+lcb-1e-3);
+    const ac=_v1.subVectors(_kc,_ka).normalize(), ab=_v2.subVectors(_kb,_ka).normalize(), ba=_v3.subVectors(_ka,_kb).normalize(),
+          bc=_v4.subVectors(_kc,_kb).normalize(), at=_v5.subVectors(_kt,_ka).normalize();
+    const ac_ab_0=Math.acos(_cl(ac.dot(ab))), ba_bc_0=Math.acos(_cl(ba.dot(bc))), ac_at_0=Math.acos(_cl(ac.dot(at)));
+    const ac_ab_1=Math.acos(_cl((lcb*lcb-lab*lab-lat*lat)/(-2*lab*lat))), ba_bc_1=Math.acos(_cl((lat*lat-lab*lab-lcb*lcb)/(-2*lab*lcb)));
+    const axis0=_v6.crossVectors(ac,ab); if(axis0.lengthSq()<1e-10) axis0.set(1,0,0); axis0.normalize();
+    const axis1=_v7.crossVectors(ac,at), l1=axis1.lengthSq();
+    relQ(u,A,_kqa); relQ(u,Bn,_kqb);
+    _kq2.copy(_kqa).invert(); _kq0.setFromAxisAngle(_v8.copy(axis0).applyQuaternion(_kq2), ac_ab_1-ac_ab_0);
+    if(l1>1e-12){ axis1.normalize(); _kqr.setFromAxisAngle(_v8.copy(axis1).applyQuaternion(_kq2), ac_at_0); } else _kqr.identity();
+    _kq2.copy(_kqb).invert(); _kq1.setFromAxisAngle(_v8.copy(axis0).applyQuaternion(_kq2), ba_bc_1-ba_bc_0);
+    A.quaternion.multiply(_kq0.multiply(_kqr)); Bn.quaternion.multiply(_kq1);
+  }
+  const ikArm=(u,sd,t,w)=>ik2(u, sd==='L'?'LeftArm':'RightArm', sd==='L'?'LeftForeArm':'RightForeArm', sd==='L'?'LeftHand':'RightHand', t, w);
+  const ikLeg=(u,sd,t,w)=>ik2(u, sd==='L'?'LeftUpLeg':'RightUpLeg', sd==='L'?'LeftLeg':'RightLeg', sd==='L'?'LeftFoot':'RightFoot', t, w);
+  // Turn the head (and a little of the neck) toward a world point: helmets that track
+  // the ball are most of what makes 22 men look like they are playing the same play.
+  function headLook(u, targetW, w){
+    const H=u.B.Head, N=u.B.Neck; if(!H||!targetW||!(w>0)) return;
+    H.updateWorldMatrix(true,false); _m4.copy(u.model.matrixWorld).invert();
+    _ka.setFromMatrixPosition(H.matrixWorld).applyMatrix4(_m4); _kt.copy(targetW).applyMatrix4(_m4);
+    const dx=_kt.x-_ka.x, dy=_kt.y-_ka.y, dz=_kt.z-_ka.z, hz=Math.hypot(dx,dz)||1e-6;
+    let yaw=Math.atan2(dx,dz)-(u.torsoYaw||0);            // + = to his left (model +x)
+    while(yaw>Math.PI) yaw-=2*Math.PI; while(yaw<-Math.PI) yaw+=2*Math.PI;
+    yaw=Math.max(-1.25,Math.min(1.25,yaw))*w;
+    const pitch=Math.max(-0.5,Math.min(0.6,-Math.atan2(dy,hz)))*w - (u.headPitch||0)*w;   // + = chin down
+    _kq0.setFromEuler(_te.set(pitch*0.35,yaw*0.4,0)); if(N) N.quaternion.multiply(_kq0);
+    _kq0.setFromEuler(_te.set(pitch*0.65,yaw*0.6,0)); H.quaternion.multiply(_kq0);
+  }
+  // Rotate the foot so its sole lies flat, whatever the leg above it is doing.
+  function footFlat(u, sd, w){
+    const F=u.B[sd==='L'?'LeftFoot':'RightFoot'], T=u.B[sd==='L'?'LeftToeBase':'RightToeBase']; if(!F||!T) return;
+    T.updateWorldMatrix(true,false); _m4.copy(u.model.matrixWorld).invert();
+    _ka.setFromMatrixPosition(F.matrixWorld).applyMatrix4(_m4); _kb.setFromMatrixPosition(T.matrixWorld).applyMatrix4(_m4);
+    const r=u.rest; const rise=(_kb.y-_ka.y)-((r.toeDy!=null)?r.toeDy:-0.05);
+    const len=Math.hypot(_kb.x-_ka.x,_kb.z-_ka.z)||0.1;
+    const a=Math.atan2(rise,len)*(w==null?1:w);           // + = toes too high
+    _kq0.setFromAxisAngle(_axX, -a); F.quaternion.multiply(_kq0);  // X+ on the foot lifts the toes
+  }
+
+  // ---- the poses ----------------------------------------------------------------------
+  // Measured axes on this rig (rotate a bone, look at where the limb goes):
+  //   thigh  X+ swings forward       Z+ out to the side on the left, Z- on the right
+  //   shin   X- bends the knee       foot X+ lifts the toes
+  //   arm    X- raises it out to the side (both sides)   Z+ forward on the left, Z- on the right
+  //   elbow  Z+ flexes on the left, Z- on the right
+  //   hips / spine / head: X+ pitches forward, Y+ turns to his left, Z+ leans to his right
+  // The model faces +Z; his left is +X.
+  const POSE_BLEND={ run:0.16, carry:0.14, reach:0.12, throw:0.06, tackle:0.10, getup:0.12, celebrate:0.25, idle:0.35,
+    stanceOL:0.30, stanceDL:0.30, stanceC:0.30, stanceQB:0.30, stanceGun:0.30, stanceRB:0.30, stanceWR:0.30, stanceLB:0.30, stanceDB:0.30,
+    passPro:0.16, engage:0.12, drive:0.14, backpedal:0.16, shuffle:0.18, qbDrop:0.14, qbSet:0.16, wrap:0.08, dive:0.08, kick:0.06, handoff:0.10, catchSecure:0.10, signal:0.2, hipsHands:0.4 };
+  function applyPose(u, st, spy, P){
+    const B=u.B; if(!B) return; P=P||{};
+    poseReset(u); u.torsoYaw=0; u.headPitch=0; u.ikQueue=null; u.flat=0;
+    const J=(k,x,y,z)=>setBoneE(B[k],x,y,z);
+    const LEG=(sd,flex,knee,abd,toe,ankle)=>{ const l=sd==='L'; J(l?'LeftUpLeg':'RightUpLeg', flex, toe||0, l?(abd||0):-(abd||0)); J(l?'LeftLeg':'RightLeg', -(knee||0),0,0); J(l?'LeftFoot':'RightFoot', ankle||0,0,0); };
+    const ARM=(sd,flex,abd,twist,elbow)=>{ const l=sd==='L'; J(l?'LeftArm':'RightArm', -(abd||0), l?(twist||0):-(twist||0), l?flex:-flex); J(l?'LeftForeArm':'RightForeArm', 0,0, l?(elbow||0):-(elbow||0)); };
+    const SPINE=(bend,twist,lean)=>{ twist=twist||0; lean=lean||0; J('Spine',bend*0.30,twist*0.25,lean*0.3); J('Spine1',bend*0.34,twist*0.35,lean*0.35); J('Spine2',bend*0.36,twist*0.40,lean*0.35); u.torsoYaw=twist; };
+    const HEAD=(nod,turn,tilt)=>{ J('Neck',nod*0.45,(turn||0)*0.45,(tilt||0)*0.4); J('Head',nod*0.55,(turn||0)*0.55,(tilt||0)*0.6); u.headPitch=nod; };
+    const HIPS=(pitch,yaw,roll)=>{ J('Hips',pitch,yaw||0,roll||0); };
+    const other=sd=>sd==='L'?'R':'L';
+    const breath=Math.sin((u.phase||0)*0.9)*0.012;
+    // A gait cycle: stride locked to ground speed so the feet never skate, the step
+    // lengthening as he opens up. back=true runs the cycle in reverse (backpedal, drop).
+    const cycle=(spy,strideK,back)=>{ const A=Math.min(0.78, 0.22+spy*0.062)*(strideK||1);
+      const stride=Math.max(0.92, 2*0.92*Math.sin(A)*1.62);
+      u.phase += (back?-1:1)*(Math.max(0.6,spy)*lastDt/stride)*Math.PI; return A; };
+    const runLegs=(A,lean,lift)=>{ const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI);
+      LEG('L', lean+sn*A,  0.18+Math.max(0,-sn )*A*(lift||1.05), 0.04, 0.05, 0.06+sn *0.16);
+      LEG('R', lean+sn2*A, 0.18+Math.max(0,-sn2)*A*(lift||1.05), 0.04, 0.05, 0.06+sn2*0.16); };
+    const k=P.k||0;
+    switch(st){
+    case 'run': case 'carry': {
+      const A=cycle(spy), p=u.phase, sn=Math.sin(p), cs=Math.cos(p);
+      const lean=Math.min(0.30, 0.06+spy*0.024);                    // sprinters lean ~15 degrees
+      HIPS(lean*0.55, -cs*0.12*A, 0);
+      runLegs(A, lean*0.55);
+      SPINE(lean*0.9, cs*0.22*A, 0);
+      HEAD(-lean*1.1, -cs*0.10*A, 0);
+      const armFwd=-sn*A*1.05;
+      J('LeftShoulder', 0,0, armFwd*0.18); J('RightShoulder', 0,0, armFwd*0.18);
+      ARM('L',  armFwd, 0.16, 0, 1.25+Math.max(0,sn )*0.35);
+      ARM('R', -armFwd, 0.16, 0, 1.25+Math.max(0,-sn)*0.35);
+      if(st==='carry'){
+        // high and tight: the ball arm locks the ball against the ribs, the free arm
+        // pumps harder to make up for it
+        const ba=P.ballArm||'R', fr=other(ba), sg=(fr==='L'?1:-1);
+        ARM(ba, 0.30+armFwd*(ba==='L'?0.08:-0.08), 0.26, 0.35, 1.95);
+        J(ba==='L'?'LeftHand':'RightHand', 0.35, 0, 0);
+        ARM(fr, armFwd*sg*1.25, 0.18, 0, 1.2+Math.max(0,sn*sg)*0.4);
+        if(P.pocket>0){ ARM('L', 0.95, 0.55, 0, 1.95); ARM('R', 0.45, 0.10, 0, 1.70); }
+        else if(P.stiff>0){                                            // stiff-arm the man closing on him
+          const s=P.stiff; ARM(P.stiffArm||fr, 1.35*s+armFwd*(1-s)*0.3, 0.30*s+0.1, 0, 0.15*s+1.1*(1-s)); SPINE(lean*0.9, (P.stiffArm==='L'?-0.25:0.25)*s, 0);
+        }
+      }
+      break; }
+    case 'backpedal': {       // defensive back: low, eyes on the quarterback, chopping backwards
+      const A=cycle(spy,0.62,true), p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI);
+      HIPS(0.42,0,0);
+      LEG('L', 0.72+sn*A, 0.95+Math.max(0,sn)*A*0.8, 0.10, 0.10, 0);
+      LEG('R', 0.72+sn2*A, 0.95+Math.max(0,sn2)*A*0.8, 0.10, 0.10, 0);
+      SPINE(0.05,0,0); HEAD(-0.55,0,0);
+      ARM('L', 0.55-sn*0.55, 0.22, 0, 1.45); ARM('R', 0.55-sn2*0.55, 0.22, 0, 1.45);
+      break; }
+    case 'shuffle': {         // linebacker scraping sideways, square to the line
+      u.phase += Math.max(0.6,spy)*lastDt*4.2; const p=u.phase, sn=Math.sin(p), o=Math.abs(sn);
+      const dir=P.dir||1;
+      HIPS(0.36,0,0);
+      LEG('L', 0.78, 0.95, 0.16+(dir>0? o:(1-o))*0.22, 0.12, 0);
+      LEG('R', 0.78, 0.95, 0.16+(dir>0?(1-o): o)*0.22, 0.12, 0);
+      SPINE(0.12,0,0); HEAD(-0.45,0,0);
+      ARM('L', 0.55, 0.25, 0, 1.55); ARM('R', 0.55, 0.25, 0, 1.55);
+      break; }
+    case 'stanceOL': case 'stanceC': case 'stanceDL': {
+      // three-point stance: flat back, hips level with the shoulders, weight forward on
+      // the down hand, the other forearm across the thigh. Defensive linemen sit lower
+      // and further forward, coiled. (The thigh angle from vertical is flex - pitch.)
+      const dl=st==='stanceDL', sd=P.side==null?'R':(P.side>0?'R':'L'), up=other(sd), T=P.tune||{};
+      const pitch=T.pitch!=null?T.pitch:(dl?1.42:1.38);
+      HIPS(pitch,0,0);
+      LEG(sd, pitch+(T.fb!=null?T.fb:(dl?1.00:1.10)), T.kb!=null?T.kb:(dl?1.70:1.75), 0.22, 0.16, 0);   // down-hand side foot back
+      LEG(up, pitch+(T.ff!=null?T.ff:(dl?1.25:1.25)), T.kf!=null?T.kf:(dl?1.95:1.85), 0.22, 0.16, 0);
+      SPINE(T.sp!=null?T.sp:(dl?0.40:0.34), 0, 0); HEAD(T.hd!=null?T.hd:-1.30,0,0);
+      ARM(sd, 1.20, 0.10, 0, 0.25);
+      if(st==='stanceC') ARM(up, 1.05, 0.10, 0, 0.30);
+      else if(dl && P.four) ARM(up, 1.20, 0.10, 0, 0.25);
+      else ARM(up, 0.70, 0.12, 0.2, 1.65);
+      J(sd==='L'?'LeftHand':'RightHand', -0.9,0,0);
+      const hx=(sd==='L'?1:-1), hz=T.hz!=null?T.hz:(dl?0.80:0.72);
+      if(st==='stanceC') u.ikQueue=[['hand',sd,P.handT||[hx*0.04,0.30,hz-0.08]]];
+      else u.ikQueue=[['hand',sd,P.handT||[hx*0.20,0.08,hz]], P.four?['hand',up,P.handT2||[-hx*0.20,0.08,hz]]:null];
+      u.flat=T.flat!=null?T.flat:0.8;
+      break; }
+    case 'stanceQB': {        // under centre: knees flexed, hands low under the centre
+      HIPS(0.26,0,0); LEG('L',0.98,1.10,0.12,0.12,0); LEG('R',0.98,1.10,0.12,0.12,0);
+      SPINE(0.30,0,0); HEAD(-0.50,0,0);
+      ARM('L',0.95,0.14,0,0.75); ARM('R',0.95,0.14,0,0.75);
+      u.ikQueue=[['hand','L',P.handT||[0.03,0.78,0.42]],['hand','R',P.handT2||[-0.03,0.76,0.44]]];
+      u.flat=0.8;
+      break; }
+    case 'stanceGun': {       // shotgun: set, hands out to take the snap
+      HIPS(0.18,0,0); LEG('L',0.44,0.52,0.12,0.12,0); LEG('R',0.44,0.52,0.12,0.12,0);
+      SPINE(0.22+breath,0,0); HEAD(-0.30,0,0);
+      ARM('L',0.80,0.22,0,1.05); ARM('R',0.80,0.22,0,1.05);
+      break; }
+    case 'stanceRB': {        // hands on the thighs, eyes up — or a fullback's three-point
+      HIPS(0.52,0,0); LEG('L',0.95,0.95,0.14,0.14,0); LEG('R',0.95,0.95,0.14,0.14,0);
+      SPINE(0.32+breath,0,0); HEAD(-0.80,0,0);
+      ARM('L',0.70,0.30,0.5,0.45); ARM('R',0.70,0.30,0.5,0.45);
+      break; }
+    case 'stanceWR': {        // two-point, staggered, inside foot up
+      const sd=P.side==null?'L':(P.side>0?'L':'R'), bk=other(sd);
+      HIPS(0.48,0,0);
+      LEG(sd, 0.78, 0.82, 0.05, 0.05, 0); LEG(bk, 0.12, 0.62, 0.06, 0.05, 0);
+      SPINE(0.34+breath,0,0); HEAD(-0.75, P.look||0, 0);
+      ARM(sd, -0.35, 0.12, 0, 1.30); ARM(bk, 0.75, 0.12, 0, 1.35);
+      break; }
+    case 'stanceLB': {        // square, hips down, hands up and ready to take on a block
+      HIPS(0.44,0,0); LEG('L',0.86,0.98,0.22,0.16,0); LEG('R',0.86,0.98,0.22,0.16,0);
+      SPINE(0.16+breath,0,0); HEAD(-0.55,0,0);
+      ARM('L',0.62,0.26,0,1.75); ARM('R',0.62,0.26,0,1.75);
+      break; }
+    case 'stanceDB': {        // off coverage: staggered, weight forward, hands loose
+      const sd=P.side==null?'L':(P.side>0?'L':'R'), bk=other(sd);
+      HIPS(0.40,0,0);
+      LEG(sd, 0.74, 0.82, 0.10, 0.08, 0); LEG(bk, 0.22, 0.70, 0.12, 0.10, 0);
+      SPINE(0.20+breath,0,0); HEAD(-0.50,0,0);
+      ARM(sd, 0.30, 0.26, 0, 1.25); ARM(bk, 0.45, 0.26, 0, 1.30);
+      break; }
+    case 'passPro': case 'engage': case 'drive': {
+      // Pass set: sitting in a chair, hands cocked at the chest to punch. Engaged: both
+      // men leaning into each other, hands locked on the chest, feet churning. Drive
+      // block: lower, legs driving forward.
+      const eng=st!=='passPro', dr=st==='drive';
+      if(spy>0.6 || eng){ u.phase += (0.9+Math.min(3,spy))*lastDt*(dr?5.2:4.0); }
+      const p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI), ch=eng?(dr?0.20:0.12):Math.min(0.14,spy*0.06);
+      const lean=dr?0.62:(eng?0.44:0.30);
+      HIPS(lean,0,0);
+      LEG('L', lean+0.62+sn*ch, 1.05+Math.max(0,-sn)*ch*2, 0.24, 0.12, 0);
+      LEG('R', lean+0.62+sn2*ch-(eng?0.40:0), 1.05+Math.max(0,-sn2)*ch*2, 0.24, 0.12, 0);
+      SPINE(eng?0.18:0.02, 0, 0); HEAD(-(lean+0.2),0,0);
+      if(eng){ ARM('L',1.25,0.16,0,0.55+sn*0.06); ARM('R',1.25,0.16,0,0.55+sn2*0.06);
+        u.ikQueue=[['hand','L',P.handT],['hand','R',P.handT2]]; }
+      else { ARM('L',0.72,0.30,0,1.70); ARM('R',0.72,0.30,0,1.70); }
+      u.flat=0.6;
+      break; }
+    case 'qbDrop': {          // dropping back, ball held high at the chest in both hands
+      const A=cycle(spy,0.75,true), p=u.phase, sn=Math.sin(p), sn2=Math.sin(p+Math.PI);
+      HIPS(0.08,0,0);
+      LEG('L', 0.12+sn*A, 0.22+Math.max(0,sn)*A*0.9, 0.06, 0.06, 0);
+      LEG('R', 0.12+sn2*A, 0.22+Math.max(0,sn2)*A*0.9, 0.06, 0.06, 0);
+      SPINE(0.05,0.10,0); HEAD(-0.10,-0.10,0);
+      ARM('L',0.72,0.18,0,1.95); ARM('R',0.62,0.30,0,1.95);
+      break; }
+    case 'qbSet': {           // in the pocket: feet alive, ball up by the numbers
+      u.phase += lastDt*(3.0+spy*2);
+      const b=Math.sin(u.phase)*0.05;
+      HIPS(0.10,0,0); LEG('L',0.28+b,0.40,0.14,0.10,0); LEG('R',0.28-b,0.40,0.14,0.10,0);
+      SPINE(0.06,0.18,0); HEAD(-0.12,-0.18+(P.look||0),0);
+      ARM('L',0.78,0.16,0,2.00); ARM('R',0.55,0.40,0,2.05);
+      break; }
+    case 'throw': {
+      // Cocked (k 0-0.18): shoulders turned away, front shoulder pointing at the target,
+      // ball behind the ear with the elbow up. Release (0.18-0.48): hips then shoulders
+      // whip round, the upper arm rotates over and the elbow snaps straight. Follow-
+      // through (0.48-1): the arm finishes across the body, the back foot swings through.
+      const r=Math.max(0,Math.min(1,(k-0.18)/0.30)), rs=r*r*(3-2*r), f=Math.max(0,Math.min(1,(k-0.48)/0.52)), fs=f*f*(3-2*f);
+      const hy=-0.40+rs*0.70+fs*0.15, tw=-0.60+rs*1.05+fs*0.30;
+      HIPS(0.05+rs*0.10+fs*0.10, hy, 0);
+      LEG('L', 0.42-rs*0.25, 0.20+rs*0.10, 0.10, -0.15+rs*0.2, 0);
+      LEG('R', -0.28+rs*0.15+fs*0.62, 0.32+fs*0.70, 0.12, 0.35-rs*0.2, 0.15*fs);
+      SPINE(0.04+rs*0.26+fs*0.18, tw, -0.14+rs*0.22);
+      HEAD(-0.12+rs*0.10, -(hy+tw)*0.9, 0);
+      ARM('R', -0.25+rs*1.45+fs*(-0.15), 1.45-rs*0.35-fs*0.75, -1.65+rs*1.45+fs*0.35, 1.70-rs*1.40+fs*0.45);
+      ARM('L', 1.20-rs*0.55-fs*0.35, 0.35+rs*0.25, 0, 0.30+rs*0.90+fs*0.4);
+      break; }
+    case 'handoff': {         // quarterback reaching the ball into the back's belly
+      HIPS(0.16,0,0); LEG('L',0.55,0.70,0.14,0,0); LEG('R',0.30,0.60,0.14,0,0);
+      SPINE(0.30,0,0); HEAD(-0.25,0,0);
+      ARM('R',0.95,0.30,0,0.45); ARM('L',0.70,0.25,0,1.30);
+      if(P.handT) u.ikQueue=[['hand','R',P.handT]];
+      break; }
+    case 'reach': {           // tracking the ball in: legs still striding, hands to the ball
+      if(spy>1.2){ const A=cycle(spy,0.85); HIPS(0.10,0,0); runLegs(A,0.08); }
+      else { HIPS(0.12,0,0); LEG('L',0.30,0.40,0.12,0.1,0); LEG('R',0.12,0.30,0.12,0.1,0); u.flat=0.6; }
+      SPINE(0.02-(P.high||0)*0.12,0,0); HEAD(-0.1,0,0);
+      ARM('L', 1.45+(P.high||0)*1.1, 0.12, 0.3, 0.55); ARM('R', 1.45+(P.high||0)*1.1, 0.12, 0.3, 0.55);
+      u.ikQueue=[['hand','L',P.handT],['hand','R',P.handT2]];
+      break; }
+    case 'catchSecure': {     // pulling it into the chest
+      const A=cycle(Math.max(spy,0.8)); HIPS(0.16,0,0); runLegs(A,0.10);
+      SPINE(0.30,0,0); HEAD(0.15,0,0);
+      ARM('L',0.55,0.30,0.6,2.05); ARM('R',0.55,0.30,0.6,2.05);
+      break; }
+    case 'wrap': case 'dive': {
+      // Tackling form: head up, chest down, arms wrapping the man. A dive is the same
+      // thing launched horizontally with the arms out as far as they go.
+      const dv=st==='dive';
+      if(!dv){ u.phase += lastDt*9; }
+      const p=u.phase, sn=Math.sin(p)*(dv?0:0.18);
+      HIPS(dv?0.45:0.78,0,0);
+      LEG('L', dv?0.05:0.95+sn, dv?0.15:1.05, 0.14, 0.06, dv?0.6:0); LEG('R', dv?-0.35:0.45-sn, dv?0.35:0.95, 0.14, 0.06, dv?0.6:0);
+      SPINE(dv?0.10:0.30,0,0); HEAD(dv?-0.95:-0.90,0,0);
+      ARM('L', dv?2.6:1.55, dv?0.35:0.75, 0, dv?0.15:1.15); ARM('R', dv?2.6:1.55, dv?0.35:0.75, 0, dv?0.15:1.15);
+      if(!dv) u.ikQueue=[['hand','L',P.handT],['hand','R',P.handT2]];
+      break; }
+    case 'tackle': {          // wrapped up and going to ground (the body pitch is set by the caller)
+      HIPS(0.30,0,0); LEG('L',0.85,1.30,0.12,0,0); LEG('R',0.20,0.95,0.12,0,0);
+      SPINE(0.75,0,0); HEAD(0.25,0,0);
+      ARM('L',1.35,0.40,0,1.05); ARM('R',1.35,0.40,0,1.05);
+      break; }
+    case 'getup': {           // hands and knees, then up: P.k runs 0 -> 1
+      const a=1-k*k*(3-2*k);
+      HIPS(0.35*a,0,0); SPINE(0.22+0.55*a,0,0);
+      ARM('L',0.95*a,0.18,0,0.35+0.45*a); ARM('R',0.95*a,0.18,0,0.35+0.45*a);
+      LEG('L',0.10+1.05*a,0.12+1.45*a,0.08,0,0); LEG('R',0.05+0.75*a,0.10+1.10*a,0.08,0,0);
+      HEAD(-0.25*a,0,0);
+      break; }
+    case 'celebrate': {
+      u.phase += lastDt*5.4; const p=u.phase, v=(P.v||0)%4, bob=Math.sin(p);
+      if(v===0){          // both arms up
+        ARM('L', 2.5+bob*0.12, 0.35, 0, 0.30); ARM('R', 2.5-bob*0.12, 0.35, 0, 0.30); SPINE(-0.15,0,0); HEAD(-0.35,0,0);
+        LEG('L',0.05+Math.max(0,bob)*0.35,0.10+Math.max(0,bob)*0.6,0.05,0,0); LEG('R',0.05+Math.max(0,-bob)*0.35,0.10+Math.max(0,-bob)*0.6,0.05,0,0);
+      } else if(v===1){   // flexing, chest out
+        ARM('L', 0.15, 1.50, -0.6, 2.2+bob*0.1); ARM('R', 0.15, 1.50, -0.6, 2.2-bob*0.1); SPINE(-0.20,0,0); HEAD(-0.30,0,0);
+        LEG('L',0.08,0.20,0.20,0.25,0); LEG('R',0.08,0.20,0.20,0.25,0);
+      } else if(v===2){   // pointing to the sky
+        ARM('R', 2.85, 0.20, 0, 0.05); ARM('L', 0.30+bob*0.2, 0.20, 0, 0.9); SPINE(-0.18,0.2,0); HEAD(-0.60,0.2,0);
+        LEG('L',0.10,0.20,0.08,0,0); LEG('R',0.10,0.20,0.08,0,0);
+      } else {            // airplane
+        ARM('L', 0.10, 1.50, 0, 0.10); ARM('R', 0.10, 1.50, 0, 0.10); SPINE(0.05,0,bob*0.25); HEAD(-0.2,0,-bob*0.15);
+        const A=cycle(Math.max(spy,2)); runLegs(A,0.05);
+      }
+      break; }
+    case 'kick': {            // plant, swing through, follow the ball up
+      const s=Math.min(1,k/0.35), f=Math.max(0,(k-0.35)/0.65);
+      HIPS(-0.05+f*0.1,0.10,0);
+      LEG('R', -0.9+s*1.3+f*0.9, 1.45-s*1.35, 0.05, 0.05, 0.4); LEG('L', 0.28, 0.25, 0.10, 0.1, 0);
+      SPINE(-0.10+f*0.15,0.15,0); HEAD(0.25,0,0);
+      ARM('L', 0.35, 1.05, 0, 0.3); ARM('R', -0.25+s*0.6, 0.65, 0, 0.3);
+      break; }
+    case 'signal': {          // fair catch: one arm up and waving
+      u.phase += lastDt*9;
+      LEG('L',0.05,0.10,0.10,0,0); LEG('R',0.05,0.10,0.10,0,0); HEAD(-0.55,0,0);
+      ARM('L', 2.75, 0.30+Math.sin(u.phase)*0.35, 0, 0.1); ARM('R', 0.3, 0.2, 0, 0.9);
+      break; }
+    case 'hipsHands': {       // blowing after a long play
+      u.phase += lastDt*1.6; const b=Math.sin(u.phase)*0.03;
+      LEG('L',0.02,0.06,0.14,0.2,0); LEG('R',0.02,0.06,0.14,0.2,0); SPINE(0.12+b,0,0); HEAD(0.10+b,0,0);
+      ARM('L',-0.35,0.62,-0.6,1.75); ARM('R',-0.35,0.62,-0.6,1.75);
+      break; }
+    default: {                // idle without a clip: breathe
+      u.phase += 0.025*(u.gait||1); J('Spine2', 0.02*Math.sin(u.phase),0,0);
+    }}
+    // planted feet lie flat before the body is grounded on them
+    const fl=P.flatFeet!=null?P.flatFeet:u.flat;
+    if(fl>0){ footFlat(u,'L',fl); footFlat(u,'R',fl); }
+  }
+  // Second half of a pose, after the body has been grounded: reach the targets the pose
+  // asked for, flatten the feet of a planted stance, and turn the head.
+  // IK targets are world points, or [x,y,z] in the player's own frame (+z ahead of him,
+  // +x to his left, y up from the turf) so a stance can plant a hand without the
+  // caller working out where the ground in front of him is.
+  const _tg=new THREE.Vector3();
+  function ikTarget(u,t){ if(!t) return null; if(t.isVector3) return t; return u.model.parent.localToWorld(_tg.set(t[0],t[1],t[2])); }
+  function poseFinish(u, st, P){
+    P=P||{};
+    if(!u.ikQueue && !P.lookT) return;
+    if(u.ikQueue) for(const q of u.ikQueue){ if(q && q[2]) ikArm(u, q[1], ikTarget(u,q[2]), P.ikW); }
+    if(P.lookT) headLook(u, P.lookT, P.lookW==null?1:P.lookW);
+  }
+  /*POSE-LIB-END*/
   function loadPlayers(){
     new THREE.GLTFLoader().load('assets/gridiron_player.glb', (gltf)=>{
       playerProto=gltf;
@@ -2742,10 +3024,51 @@
   // Ball in the carrier's right hand: palm centre in the hand bone's frame (y runs to
   // the fingers, +z faces the palm on the right hand), long axis along the hand.
   const _ballLocal=new THREE.Vector3(0.0,0.075,0.055), _handQ=new THREE.Quaternion(), _alignQ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.PI/2);
+  // What a man plays, for posing him: from his defensive role, or from the number
+  // he wears on offence (the formations number by position: 60s-70s line, 86 the tight
+  // end, 44 the fullback, 20s the backs, 80s the receivers, 12 the quarterback).
+  function poseRole(e, kind){
+    if(e.role==='qb') return 'QB';
+    if(kind==='def'){ const r=e.role; return (r==='DE'||r==='DT')?'DL':((r==='LB'||r==='MLB')?'LB':'DB'); }
+    const n=e.n|0;
+    if(n===60) return 'C'; if(n>=50&&n<=79) return 'OL';
+    if(n>=85&&n<=89) return 'TE'; if(n>=40&&n<=49) return 'FB';
+    if(n>=20&&n<=39) return 'RB'; if(n>=80&&n<=84) return 'WR'; if(n>=1&&n<=19) return 'QB';
+    return 'WR';
+  }
+  const _ikA=new THREE.Vector3(), _ikB=new THREE.Vector3(), _look=new THREE.Vector3();
+  // Hands to the ball: out in front of the chest on the line the ball is coming in on,
+  // at the height it is at (last frame's ball), eyes on it.
+  function reachFor(e,P,w){
+    const ex=WX(e.x), ez=WZ(e.y), bx=ballMesh.position.x, bz=ballMesh.position.z;
+    let dx=bx-ex, dz=bz-ez; const dl=Math.hypot(dx,dz)||1; dx/=dl; dz/=dl;
+    // hands wait at the chest and only go up for it in the last instant
+    const hy=Math.min(w>0.6?2.05:1.55, Math.max(1.05, ballMesh.position.y)), r=0.40;
+    P.handT=_ikA.set(ex+dx*r+dz*0.09, hy, ez+dz*r-dx*0.09); P.handT2=_ikB.set(ex+dx*r-dz*0.09, hy, ez+dz*r+dx*0.09);
+    P.high=Math.max(0,Math.min(1,(hy-1.35)/0.7)); P.ikW=w; P.lookT=_look.copy(ballMesh.position);
+  }
+  // Where the ball sits on the man carrying it. Tucked: along the forearm of the ball
+  // arm, pressed into the ribs, nose forward. Held (a quarterback in the pocket, a
+  // receiver pulling it in): between both hands at the chest. Throwing: in the palm.
+  const _bh=new THREE.Vector3(), _be=new THREE.Vector3(), _bc=new THREE.Vector3(), _bd=new THREE.Vector3(), _bl=new THREE.Vector3(), _bq=new THREE.Quaternion();
   function carryBall(g){
-    const hb=g.userData.B && g.userData.B.RightHand;
+    const u=g.userData, B=u.B||{}, st=u.poseState;
     ballMesh.visible=true;
-    if(!hb){ ballMesh.position.copy(_tuckV.set(0.24,0.95,0.16).applyMatrix4(g.matrixWorld)); ballMesh.rotation.set(0.35,g.rotation.y+0.5,0.2); return; }
+    if(st==='qbDrop'||st==='qbSet'||st==='catchSecure'||st==='stanceGun'||st==='handoffRecv'){
+      if(B.LeftHand && B.RightHand && B.Spine2){ _bh.setFromMatrixPosition(B.LeftHand.matrixWorld); _be.setFromMatrixPosition(B.RightHand.matrixWorld);
+        _bc.addVectors(_bh,_be).multiplyScalar(0.5);
+        _bd.setFromMatrixPosition(B.Spine2.matrixWorld); _bl.subVectors(_bc,_bd); _bl.y=0; if(_bl.lengthSq()>1e-6) _bl.normalize();
+        ballMesh.position.copy(_bc).addScaledVector(_bl,0.05);
+        _bl.y=0.9; _bl.normalize(); ballMesh.quaternion.setFromUnitVectors(_spinAxis,_bl); return; } }
+    const arm=(u.ballArm==='L'&&st!=='throw'&&st!=='handoff')?'Left':'Right', hb=B[arm+'Hand'], fb=B[arm+'ForeArm'];
+    if(!hb||!fb){ ballMesh.position.copy(_tuckV.set(0.24,0.95,0.16).applyMatrix4(g.matrixWorld)); ballMesh.rotation.set(0.35,g.rotation.y+0.5,0.2); return; }
+    if(st==='carry'||st==='tackle'||st==='getup'||st==='celebrate'||st==='wrap'||st==='dive'){
+      _bh.setFromMatrixPosition(hb.matrixWorld); _be.setFromMatrixPosition(fb.matrixWorld);
+      _bc.copy(_bh).lerp(_be,0.30);
+      if(B.Spine2){ _bd.setFromMatrixPosition(B.Spine2.matrixWorld); _bl.subVectors(_bd,_bc); _bl.y=0; const l=_bl.length(); if(l>1e-4) _bc.addScaledVector(_bl, 0.05/l); }
+      ballMesh.position.copy(_bc);
+      _bl.subVectors(_bh,_be); if(_bl.lengthSq()>1e-6){ _bl.normalize(); ballMesh.quaternion.setFromUnitVectors(_spinAxis,_bl); }
+      return; }
     ballMesh.position.copy(hb.localToWorld(_tuckV.copy(_ballLocal)));
     hb.getWorldQuaternion(_handQ); ballMesh.quaternion.copy(_handQ).multiply(_alignQ);
   }
@@ -2799,10 +3122,10 @@
     if(G.carrier) ents.unshift({e:G.carrier, jc:off==='user'?0x13284a:0x7a1d22, hc:0xffd24a, ring:0xffd24a, def:false, kind:(G.fumble||G.pile)?'rec':'carry'});
     }
     let ringI=0; for(const r of ringPool) r.visible=false;
-    _frameNo++; _carrierG=null;
+    _frameNo++; _carrierG=null; _runQBG=null;
     for(let i=0;i<pPool.length;i++){ const g=pPool[i], u=g.userData;
       if(i<ents.length){ const o=ents[i], e=o.e; g.visible=true;
-        if(o.kind==='carry') _carrierG=g;
+        if(o.kind==='carry') _carrierG=g; if(!repFrame && e===G.runQB) _runQBG=g;
         const sp=Math.hypot(e.vx||0,e.vy||0), spy=sp/PPY;
         // LOD by distance: far players update their pose every other frame and stop
         // casting shadows — that reclaims most of their cost so the near players can
@@ -2811,13 +3134,157 @@
         const far = dxc>qd.poseDist;
         if(u.shadowOn!==(dxc<qd.shadowDist)){ u.shadowOn=dxc<qd.shadowDist;
           u.model.traverse(o=>{ if(o.isMesh) o.castShadow=u.shadowOn; }); }
-        const qbDrop = (e===G.carrier && e.role==='qb' && G.passState==='drop');
-        if(qbDrop){ g.rotation.y=Math.PI/2; u.heading=Math.PI/2; u.bank*=0.85; }   // eyes downfield
+        // ---- what is this man doing? -------------------------------------------------
+        // The pose is chosen from his position and the moment in the play; the heading,
+        // the IK targets (a man's chest, the ball, the ground) and the head's target come
+        // with it. Replays play back the pose each man had when it was recorded.
+        const role = repFrame ? (e.pr||poseRole(e,o.kind)) : poseRole(e,o.kind);
+        const pre = !repFrame && G.phase==='presnap' && !G._koFlight;
+        const live = !repFrame && G.phase==='live';
+        const onDead = !repFrame && G.phase==='dead' && !G._td && !G._fg;
+        const P = u.P || (u.P={});
+        P.k=0; P.pocket=0; P.side=null; P.handT=null; P.handT2=null; P.lookT=null; P.lookW=1; P.stiff=0; P.v=0; P.four=false; P.high=0; P.dir=1; P.ikW=null; P.look=0; P.flatFeet=null;
+        let want='idle', face=null, pitchTo=null;
+        const toward=(t)=>Math.atan2(WX(t.x)-WX(e.x), WZ(t.y)-WZ(e.y));
+        const isCarrier = o.kind==='carry';
+        if(isCarrier && u.carryOf!==e){ u.carryOf=e;
+          // a receiver who has just caught it pulls it in before he runs
+          u.secureT = (!repFrame && G.playType==='pass' && role!=='QB' && G.phase==='live') ? 0.30 : 0;
+          // the ball goes in the arm nearer the sideline, away from the traffic inside
+          const h=Math.atan2(e.vx||1,e.vy||0), lz=-Math.sin(h), sideZ=(WZ(e.y)<WZ(fieldMid))?-1:1;
+          u.ballArm = (lz*sideZ>=0)?'L':'R'; }
+        P.ballArm=u.ballArm||'R';
+        if(repFrame){ want=e.st||(spy>1.4?'run':'idle'); P.k=e.pk||0; P.ballArm=e.ba||'R';
+          if(want==='passPro'||want==='qbSet'||want==='qbDrop'||want==='throw') face=Math.PI/2;
+          else if(want==='backpedal'||want==='shuffle') face=-Math.PI/2; }
+        else if(G._fgFlight && e===G.carrier){ want='kick'; P.k=Math.min(1,(G.ball&&G.ball.active?G.ball.t:1)/0.55+0.3); face=Math.PI/2; }
+        else if(e===G.koKicker && (G.koKickT||0)>0){ want='kick'; P.k=Math.max(0,Math.min(1,1-G.koKickT/0.5)); }
+        else if(G._td && G.phase==='dead'){
+          // the scorer celebrates his way; teammates close by join in; the defence sags
+          if(!u.celebSet){ u.celebSet=true; u.celebV=(Math.random()*4)|0; }
+          if(isCarrier){ want='celebrate'; P.v=u.celebV; }
+          else if(!o.def && G.carrier && dist(e,G.carrier)<yd(22)){ want = spy>1.6 ? 'run' : 'celebrate'; P.v=u.celebV===2?0:(u.celebV===1?1:0); P.lookT=_look.set(WX(G.carrier.x),1.5,WZ(G.carrier.y)); }
+          else if(o.def){ want='hipsHands'; P.lookT=_look.set(WX(G.carrier.x),1.2,WZ(G.carrier.y)); }
+        }
+        else if(onDead && ((G.pile ? dist(e,G.pile)<yd(1.6) : ((isCarrier && spy<3.5) || (o.kind==='def' && G.carrier && dist(e,G.carrier)<yd(3.0)))) || u.downT>0)){
+          // Down, and then back UP, each man on his own beat: the tacklers roll off
+          // first, the ball carrier a moment later. The man who made the tackle wraps
+          // him up for an instant before they go down together.
+          if(!(u.downT>0)){ u.downT=1e-4; u.upT=0; u.getUpAt=(isCarrier?0.55:0.28)+Math.random()*0.35; }
+          u.downT+=lastDt;
+          if(e===G.lastTackler && u.downT<0.14 && G.carrier){ want='wrap'; face=toward(G.carrier);
+            const cx=WX(G.carrier.x), cz=WZ(G.carrier.y), hx=Math.sin(face), hz=Math.cos(face);
+            P.handT=_ikA.set(cx+hx*0.2+hz*0.26,1.0,cz+hz*0.2-hx*0.26); P.handT2=_ikB.set(cx+hx*0.2-hz*0.26,1.0,cz+hz*0.2+hx*0.26); }
+          else want = u.downT<u.getUpAt ? 'tackle' : 'getup';
+        }
+        else if(onDead){
+          // between the whistle and the huddle: some men blow, everyone watches the ball
+          if(u.restPose==null){ u.restPose=Math.random()<0.3; u.restT=0; } u.restT+=lastDt;
+          want = spy>1.4 ? 'run' : (u.restPose && u.restT>0.6 ? 'hipsHands' : 'idle');
+          if(G.carrier) P.lookT=_look.set(WX(G.carrier.x),1.2,WZ(G.carrier.y));
+        }
+        else if(pre){
+          if(o.def){ face=-Math.PI/2;
+            want = role==='DL' ? 'stanceDL' : role==='LB' ? 'stanceLB' : 'stanceDB';
+            P.four = role==='DL' && e.role==='DT' && (e.n&1)===0; P.side=(e.y>fieldMid)?-1:1;
+            if(G.carrier) P.lookT=_look.set(WX(G.carrier.x),1.0,WZ(G.carrier.y));
+          } else { face=Math.PI/2;
+            if(role==='C') want='stanceC';
+            else if(role==='OL'||role==='TE'||role==='FB') want='stanceOL';
+            else if(role==='QB') want = (e===G.runQB) ? 'stanceQB' : 'stanceGun';
+            else if(role==='RB') want='stanceRB';
+            else { want='stanceWR'; P.side=(e.y>fieldMid)?1:-1; P.look=(e.y>fieldMid)?0.5:-0.5; }
+            if(role==='OL'||role==='TE') P.side=(e.y<fieldMid-yd(2))?-1:1;
+          }
+        }
+        else if(live && !G._koFlight){
+          if(isCarrier){
+            if(role==='QB' && G.playType==='pass' && G.passState==='drop'){
+              if(spy>2.8 && (e.vx||0)>-PPY*0.5) want='carry';                 // scrambling
+              else if(spy>1.1 && (e.vx||0)<0){ want='qbDrop'; face=Math.PI/2; }
+              else { want='qbSet'; face=Math.PI/2; }
+            } else if(role==='QB' && (G.throwT||0)>0){ want='throw'; face=Math.PI/2; P.k=0.22+0.78*(1-Math.max(0,Math.min(1,G.throwT/0.42))); }
+            else if(role==='QB' && G.passState==='air'){ want='idle'; face=Math.PI/2; if(G.ball&&G.ball.active) P.lookT=_look.set(WX(G.ball.x),1.5,WZ(G.ball.y)); }
+            else if((u.secureT||0)>0){ u.secureT-=lastDt; want='catchSecure'; }
+            else if(G.handoff && e!==G.runQB && role!=='QB'){ want='carry'; P.pocket=1; }
+            else {
+              want='carry';
+              // stiff-arm whoever is closing on the free-arm side
+              let nd=1e9, nearD=null; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd){nd=dd;nearD=d;} }
+              let tgt=0;
+              if(nearD && nd<yd(2.4) && !(u.spinT>0)){ const h=g.rotation.y, lx=Math.cos(h), lz=-Math.sin(h);
+                const dx=WX(nearD.x)-WX(e.x), dz=WZ(nearD.y)-WZ(e.y), onLeft=(dx*lx+dz*lz)>0, free=P.ballArm==='L'?'R':'L';
+                if((onLeft?'L':'R')===free){ tgt=1; P.stiffArm=free; } }
+              u.stiffW=(u.stiffW||0)+(tgt-(u.stiffW||0))*Math.min(1,lastDt*9); P.stiff=u.stiffW;
+            }
+          }
+          else if(e===G.runQB){
+            if(G.handoff && G.carrier){ want='handoff'; face=toward(G.carrier);
+              P.handT=_ikA.set(WX(G.carrier.x)-0.10, 1.05, WZ(G.carrier.y)); }
+            else { want = spy>1.4?'run':'idle'; if(G.carrier) P.lookT=_look.set(WX(G.carrier.x),1.2,WZ(G.carrier.y)); }
+          }
+          else if(o.kind==='block' && !e.noblock){
+            let nd=1e9, nearD=null; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd){nd=dd;nearD=d;} }
+            if(nearD && nd<yd(1.7)){
+              // locked up: hands on his chest, leaning into him
+              want = G.playType==='run' ? 'drive' : 'engage'; face=toward(nearD);
+              const dx=WX(nearD.x)-WX(e.x), dz=WZ(nearD.y)-WZ(e.y), dl=Math.hypot(dx,dz)||1, ux=dx/dl, uz=dz/dl, r=Math.max(0.25,dl-0.36);
+              const cx=WX(e.x)+ux*r, cz=WZ(e.y)+uz*r;
+              P.handT=_ikA.set(cx+uz*0.17,1.10,cz-ux*0.17); P.handT2=_ikB.set(cx-uz*0.17,1.10,cz+ux*0.17);
+            }
+            else if(G.playType==='pass' && role!=='WR'){ want='passPro'; face=Math.PI/2; }
+            else want = spy>1.4?'run':'idle';
+          }
+          else if(o.kind==='rec'){
+            const b=G.ball;
+            if(G.passState==='air' && b && b.active && b.rec===e && (b.dur-b.t)<0.55){
+              // eyes and hands to the ball as it arrives
+              want='reach'; reachFor(e,P,Math.min(1,1.25-(b.dur-b.t)/0.55));
+            } else { want = spy>1.4?'run':'idle';
+              if(G.passState==='air' && b && b.active && b.rec===e) P.lookT=_look.set(WX(b.x),1.6,WZ(b.y)); }
+          }
+          else if(o.def){
+            if((e.diveT||0)>0){ want='dive'; pitchTo=1.25; }
+            else {
+              u.engW=Math.max(0,Math.min(1,(u.engW||0)+(((e.blocked||0)>0)?lastDt*10:-lastDt*5)));
+              let nb=null, nbd=1e9; if(u.engW>0.3) for(const b of G.blockers){ if(b.noblock) continue; const dd=dist(b,e); if(dd<nbd){nbd=dd;nb=b;} }
+              if(nb && nbd<yd(1.8)){
+                want='engage'; face=toward(nb);
+                const dx=WX(nb.x)-WX(e.x), dz=WZ(nb.y)-WZ(e.y), dl=Math.hypot(dx,dz)||1, ux=dx/dl, uz=dz/dl, r=Math.max(0.25,dl-0.36);
+                const cx=WX(e.x)+ux*r, cz=WZ(e.y)+uz*r;
+                P.handT=_ikA.set(cx+uz*0.17,1.12,cz-ux*0.17); P.handT2=_ikB.set(cx-uz*0.17,1.12,cz+ux*0.17);
+              }
+              else if(G.playType==='pass' && G.passState==='drop' && (role==='DB'||role==='LB') && (e.vx||0)>PPY*0.8 && spy<6.5 && (G.playT||0)<1.8){ want='backpedal'; face=-Math.PI/2; }
+              else if(role==='LB' && spy>0.8 && spy<4 && Math.abs(e.vy||0)>Math.abs(e.vx||0)*1.4){ want='shuffle'; face=-Math.PI/2; P.dir=(e.vy||0)>0?1:-1; }
+              else want = spy>1.4?'run':'idle';
+              if(want!=='engage'){ const t=(G.ball&&G.ball.active&&!G.ball.ko)?G.ball:G.carrier;
+                if(t) P.lookT=_look.set(WX(t.x),1.3,WZ(t.y)); }
+            }
+          }
+          else want = spy>1.4?'run':'idle';
+        }
+        else if(!repFrame && G._koFlight){
+          if(isCarrier && G.fairCatch) want='signal';
+          else if(isCarrier && G.ball && G.ball.active && G.ball.ko && (G.ball.dur-G.ball.t)<0.5 && spy<4){
+            want='reach'; reachFor(e,P,Math.min(1,1.2-(G.ball.dur-G.ball.t)/0.5)); }
+          else want = spy>1.4 ? (isCarrier?'carry':'run') : 'idle';
+          if(isCarrier && G.ball && G.ball.active) P.lookT=_look.set(WX(G.ball.x),6,WZ(G.ball.y));
+        }
+        else want = spy>1.4 ? (isCarrier?'carry':'run') : 'idle';
+        if(!onDead){ u.downT=0; u.upT=0; }
+        if(!(G._td && G.phase==='dead')) u.celebSet=false;
+        if(!onDead) u.restPose=null;
+        if(want==='getup'){ u.upT=(u.upT||0)+lastDt; u.upK=Math.min(1,u.upT/GETUP_SECS); P.k=u.upK; if(u.upK>=1) want='idle'; }
+        if(!repFrame){ e.st=want; e.pk=P.k; e.ba=P.ballArm; e.pr=role; }
+        // ---- heading ------------------------------------------------------------------
+        if(face!=null){ let d=face-(u.heading==null?face:u.heading); while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
+          u.heading=(u.heading==null?face:u.heading)+d*Math.min(1,lastDt*12); g.rotation.y=u.heading; u.bank*=0.85; }
         else if(sp>6){ const h=Math.atan2(e.vx,e.vy);
           let d=h-(u.heading==null?h:u.heading); while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
           u.heading=(u.heading==null?h:u.heading)+d*Math.min(1,lastDt*22);   // smoothed facing, snappy enough to track cuts
           g.rotation.y=u.heading; u.bank += (Math.max(-0.16,Math.min(0.16,-d*1.6))-u.bank)*0.18;  // gentle lean into the cut
-        } else { g.rotation.y=o.def?-Math.PI/2:Math.PI/2; u.bank*=0.85; }
+        } else { const h=o.def?-Math.PI/2:Math.PI/2; let d=h-(u.heading==null?h:u.heading); while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
+          u.heading=(u.heading==null?h:u.heading)+d*Math.min(1,lastDt*6); g.rotation.y=u.heading; u.bank*=0.85; }
         // hard body lean through a juke, on top of the normal cut bank
         let jl=0; if(G.jukeT>0 && (e===G.carrier||e===G.ctrlBlocker)) jl=(G.jukeDir||0)*Math.sin(Math.min(1,G.jukeT/0.34)*Math.PI)*0.5;
         if(u.model) u.model.rotation.z=u.bank+jl;
@@ -2827,16 +3294,15 @@
         let bob=0;
         if(u.spinT>0){ u.spinT-=lastDt; const k=Math.max(0,u.spinT/0.5); g.rotation.y+=k*Math.PI*2; bob=-Math.sin(k*Math.PI)*0.12; }
         g.position.set(WX(e.x), 0, WZ(e.y));
-        // Body types by position — everyone used to be the same lean build. Linemen are
-        // heavy and wide, skill players are lean, defenders in between.
+        // Body types by position: linemen heavy and wide, backs and receivers lean.
         if(u.baseS){
-          const wide = o.kind==='block' ? 1.20 : (o.kind==='def' ? 1.02 : 0.95);
-          const tall = o.kind==='block' ? 1.01 : (o.kind==='def' ? 1.00 : 1.01);
+          const wide = (role==='OL'||role==='C') ? 1.20 : (role==='DL' ? 1.12 : (role==='TE'||role==='FB') ? 1.08 : (role==='LB' ? 1.04 : 0.96));
+          const tall = (role==='OL'||role==='C'||role==='DL') ? 1.01 : 1.0;
           u.model.scale.set(u.baseS*u.buildVg*wide, u.baseS*u.buildVh*tall, u.baseS*u.buildVg*wide);
         }
         // team identity: ground ring + full colourway. The jersey/helmet/trim maps are
         // desaturated at load, so these tints land as the actual team colours.
-        const team = o.def ? other(G.offense) : G.offense;
+        const team = o.def ? other(off) : off;
         u.ring.visible=true; u.ring.material.color.setHex(team==='user'?0x3a86ff:0xff5340);
         if(u.team!==team){ u.team=team;
           // Two colourways that stay apart at broadcast distance: home royal and gold on a
@@ -2855,32 +3321,22 @@
             const man=manOn(team,nn), tex=jerseyNumberTex(nn, TEAM_KIT[team].trim), nt=nameplateTex(man?man.name:'');
             for(const m of (u.mats['Numbers']||[])){ m.map=tex; m.needsUpdate=true; }
             for(const m of (u.mats['NameBar']||[])){ m.map=nt; m.needsUpdate=true; } } }
-        // pose state machine
-        const onDead = !repFrame && G.phase==='dead' && !G._td && !G._fg;
-        let want;
-        if(G._fgFlight && e===G.carrier) want='kick';
-        else if(e===G.koKicker && (G.koKickT||0)>0) want='kick';
-        else if(e===G.carrier && e.role==='qb' && (G.passState==='air'||(G.throwT||0)>0)) want='throw';
-        else if(G._td && G.phase==='dead' && e===G.carrier) want='celebrate';
-        else if(onDead && ((G.pile ? dist(e,G.pile)<yd(1.6) : ((e===G.carrier && spy<3.5) || (o.kind==='def' && G.carrier && dist(e,G.carrier)<yd(3.0)))) || u.downT>0)){
-          // Down, and then back UP. Players used to lie on the turf for the whole dead
-          // ball and pop upright at the next snap. Each man gets his own beat: the
-          // tacklers roll off first, the ball carrier a moment later.
-          if(!(u.downT>0)){ u.downT=1e-4; u.upT=0; u.getUpAt=(o.kind==='carry'?0.55:0.28)+Math.random()*0.35; }
-          u.downT+=lastDt;
-          want = u.downT<u.getUpAt ? 'tackle' : 'getup';
-        }
-        else if(o.kind==='rec' && G.passState==='air' && G.ball && G.ball.rec===e) want='reach';   // target receiver reaches for the ball
-        else if(G.phase==='presnap' && spy<1 && (o.kind==='block' || (o.kind==='def' && G.carrier && Math.abs(e.x-G.los)<yd(3.4)))) want='set';
-        else want = spy>1.4 ? 'run' : 'idle';
-        if(!onDead){ u.downT=0; u.upT=0; }
-        if(want==='getup'){ u.upT=(u.upT||0)+lastDt; u.upK=Math.min(1,u.upT/GETUP_SECS); if(u.upK>=1) want='idle'; }
-        if(want==='idle' && u.mixer){ u.mixer.update(lastDt);      // real mocap idle
-          // the clip drives 11 finger bones, so restore the closed grip it just overwrote
-          if(u.gripBones) for(const f of u.gripBones) if(f.userData.grip) f.quaternion.copy(f.userData.grip); }
-        else if(!far || (_frameNo&1)===0) applyPose(u, want, spy);
+        // ---- pose: cross-fade into the new state, pose, ground, reach ------------------
+        const falling = (want==='tackle'||want==='getup'||want==='dive');
+        if(want!==u.poseState){ poseBlendFrom(u, POSE_BLEND[want]||0.15); u.poseState=want; }
+        const doPose = !far || (_frameNo&1)===0 || u.blendT<u.blendDur;
+        if(want==='idle' && u.mixer){ poseReset(u); u.mixer.update(lastDt);      // the model's own idle clip
+          if(u.gripBones) for(const f of u.gripBones) if(f.userData.grip) f.quaternion.copy(f.userData.grip);
+          poseBlendApply(u); u.ikQueue=null; }
+        else if(doPose){ applyPose(u, want, spy, P); poseBlendApply(u); }
+        if(!falling && doPose){
+          u.model.position.y=u.baseY; g.position.y=0;
+          const gr=poseGround(u, !!u.ikQueue);
+          u.gOff = (u.gOff==null||u.blendT<u.blendDur) ? gr : u.gOff+(gr-u.gOff)*Math.min(1,lastDt*30);
+          u.model.position.y=u.baseY+u.gOff;
+          if(!far) poseFinish(u, want, P);
+        } else if(falling) u.model.position.y=u.baseY;
         // Going to ground: a tackled player pitches over AND drops toward the turf.
-        // Previously he only leaned ~30deg and stayed upright, so nobody ever fell.
         if(u.model && want==='getup'){
           // Rise out of whatever fall he took: pitch, roll and drop all unwind together,
           // eased, over GETUP_SECS — not the 0.34-per-frame snap that read as a pop.
@@ -2892,23 +3348,21 @@
           u.wasDown=false;
         }
         else if(u.model){
-          const goingDown = (want==='tackle');
-          // Every tackle used to look identical — same pitch, same rate, no roll. At the
-          // size a player actually renders, motion is the only thing the eye reads, so
-          // identical falls are what made tackles look canned. Roll the dice once as he
-          // starts to go down and keep it for the whole fall.
+          const goingDown = (want==='tackle'||want==='dive');
+          // Every tackle used to look identical — same pitch, same rate, no roll. Roll
+          // the dice once as he starts to go down and keep it for the whole fall.
           if(goingDown && !u.wasDown){
             u.wasDown=true;
-            u.fallRoll = (Math.random()-0.5)*1.05;                 // twists as he lands
-            u.fallRate = 0.20+Math.random()*0.22;                  // some drop hard, some fold
+            u.fallRoll = want==='dive' ? 0 : (Math.random()-0.5)*1.05;   // twists as he lands
+            u.fallRate = want==='dive' ? 0.30 : 0.20+Math.random()*0.22; // some drop hard, some fold
             u.fallMul  = 0.80+Math.random()*0.45;
             // a ball carrier pitches the way he was already going, which is what selling
             // the hit looks like
-            const sp=Math.hypot(e.vx||0,e.vy||0);
-            u.fallLean = (o.kind==='carry' && sp>1) ? Math.max(-0.5,Math.min(0.5,(e.vy||0)/sp*0.5)) : 0;
+            const sp2=Math.hypot(e.vx||0,e.vy||0);
+            u.fallLean = (isCarrier && sp2>1) ? Math.max(-0.5,Math.min(0.5,(e.vy||0)/sp2*0.5)) : 0;
           } else if(!goingDown) u.wasDown=false;
           const rate = goingDown ? (u.fallRate||0.3) : 0.34;
-          const pt = goingDown ? (o.kind==='carry'?1.25:0.85)*(u.fallMul||1) : 0;
+          const pt = want==='dive' ? (pitchTo||1.25) : goingDown ? (isCarrier?1.25:0.85)*(u.fallMul||1) : 0;
           u.model.rotation.x += (pt-u.model.rotation.x)*rate;
           // NB: the running lean writes model.rotation.z every frame further up, so the
           // roll has to be tracked separately and then OWN the axis while he is going
@@ -2916,37 +3370,10 @@
           const rz = goingDown ? ((u.fallRoll||0)+(u.fallLean||0)) : 0;
           u.fallZ = (u.fallZ||0) + (rz-(u.fallZ||0))*rate;
           if(goingDown || Math.abs(u.fallZ)>0.004) u.model.rotation.z = u.fallZ;
-          const drop = goingDown ? (o.kind==='carry'?0.62:0.34)*(u.fallMul||1) : 0;
+          const drop = want==='dive' ? 0.55 : goingDown ? (isCarrier?0.62:0.34)*(u.fallMul||1) : 0;
           u.fall = (u.fall||0) + (drop-(u.fall||0))*rate;
         } else u.fall=0;
-        // contextual overrides: stiff-arm (carrier) and blocking engagement (linemen)
-        if(u.B && !repFrame){
-          if(o.kind==='carry' && want==='run'){ let nd=1e9, nearD=null;
-            for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd){nd=dd;nearD=d;} }
-            if(nd<yd(2.5) && !(u.spinT>0) && nearD){
-              // stiff-arm with whichever arm is on the defender's side
-              const side=(nearD.y>=e.y)?'Right':'Left';
-              setBone(u.B[side+'Arm'],_axX,-1.45); setBone(u.B[side+'ForeArm'],_axX,-0.05); } }
-          else if(o.kind==='block' && !e.noblock && (G.phase==='live')){ let nd=1e9; for(const d of G.defenders){ const dd=dist(d,e); if(dd<nd)nd=dd; }
-            if(nd<yd(1.7)){
-              // A block is a struggle, not a statue. The pose was frozen, so the whole
-              // line of scrimmage — which is in almost every frame — stood dead still.
-              u.shove=(u.shove||Math.random()*6)+lastDt*7.5;
-              const sh=Math.sin(u.shove)*0.10;
-              setBone(u.B.Spine2,_axX,0.5+sh*0.6);
-              setBone(u.B.LeftArm,_axX,-1.15-sh); setBone(u.B.RightArm,_axX,-1.15+sh);
-              setBone(u.B.LeftForeArm,_axX,-0.5-sh*0.5); setBone(u.B.RightForeArm,_axX,-0.5+sh*0.5); } }
-          else if(o.def && (e.blocked||0)>0 && G.phase==='live'){
-            // The man BEING blocked had no engaged pose at all — he ran on the spot
-            // against a blocker. Give him the other half of the same struggle.
-            u.shove=(u.shove||Math.random()*6)+lastDt*7.5;
-            const sh=Math.sin(u.shove+Math.PI)*0.10;
-            setBone(u.B.Spine2,_axX,-0.30+sh*0.6);
-            setBone(u.B.LeftArm,_axX,-1.02+sh); setBone(u.B.RightArm,_axX,-1.02-sh);
-            setBone(u.B.LeftForeArm,_axX,-0.62); setBone(u.B.RightForeArm,_axX,-0.62); }
-        }
-        // vertical stride bounce while running, dip into hard cuts, plus any spin dip
-        g.position.y = (want==='run' ? Math.abs(Math.sin(u.phase))*Math.min(0.05, 0.01+spy*0.005) : 0) + bob - Math.abs(u.bank)*0.22 - (u.fall||0);
+        g.position.y = bob - Math.abs(u.bank)*0.22 - (u.fall||0);
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
@@ -2999,9 +3426,12 @@
       } }
     else if(G.handoff && G.runQB && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE);
       const p=Math.min(1,G.handoff.t/0.34), e=p*p*(3-2*p);
-      const qx=WX(G.runQB.x), qz=WZ(G.runQB.y), cx2=WX(G.carrier.x), cz2=WZ(G.carrier.y);
-      ballMesh.position.set(qx+(cx2-qx)*e, 1.08-Math.sin(e*Math.PI)*0.06, qz+(cz2-qz)*e);
-      ballMesh.rotation.set(0.3, Math.atan2(cx2-qx,cz2-qz), 0.5); }
+      // from the quarterback's hand into the back's pocket, at the height they meet
+      const qh=_runQBG && _runQBG.userData.B && _runQBG.userData.B.RightHand;
+      if(qh){ _runQBG.updateMatrixWorld(true); qh.getWorldPosition(_bh); } else _bh.set(WX(G.runQB.x),1.08,WZ(G.runQB.y));
+      const cx2=WX(G.carrier.x), cz2=WZ(G.carrier.y);
+      ballMesh.position.set(_bh.x+(cx2-_bh.x)*e, _bh.y+(1.08-_bh.y)*e, _bh.z+(cz2-_bh.z)*e);
+      ballMesh.rotation.set(0.3, Math.atan2(cx2-_bh.x,cz2-_bh.z), 0.5); }
     else if(_carrierG && (G.phase==='live'||G.phase==='dead') && !G._fgFlight && G.passState!=='air'){
       // In the palm, not beside it. The hand bone sits at the wrist; the ball's centre
       // is measured out along the hand toward the fingers and in toward the palm, and
@@ -3064,6 +3494,7 @@
     if(sunLight){ const fx=camLook.x, fz=camLook.z;
       sunLight.target.position.set(fx,0,fz); sunLight.target.updateMatrixWorld();
       sunLight.position.set(fx+10,95,fz-8.65); }
+    if(window.__gbNoDraw) return;          // test harnesses run the pose logic without drawing
     renderer.render(scene,camera);
   }
   // Four quarters instead of one running clock. Same total football (QTR_SECS*4),
