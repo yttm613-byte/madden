@@ -16,6 +16,8 @@
   .sb-cell{position:relative; background:linear-gradient(180deg,rgba(32,44,60,.92),rgba(16,22,32,.92)); border:1px solid #2a3a52; border-radius:10px; padding:7px 12px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0; backdrop-filter:blur(6px);}
   .sb-cell .lbl{font-size:9.5px; letter-spacing:.18em; color:var(--muted); text-transform:uppercase; white-space:nowrap;}
   .sb-cell .val{font-family:'Anton',sans-serif; font-size:clamp(16px,3.3vw,27px); line-height:1; letter-spacing:.01em;}
+  .sb-cell .tos{font-size:7px; letter-spacing:3px; line-height:1; margin-top:3px; color:#ffd24a; opacity:.85; white-space:nowrap;}
+  #sb-clock{cursor:pointer;}
   #sb-you,#sb-cpu{flex:0 0 auto; min-width:62px; border-radius:10px; overflow:hidden;}
   #sb-you{background:linear-gradient(180deg,#15335c,#0a182b);} #sb-you .val{color:#8fc4ff;} #sb-you::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:#3a86ff;}
   #sb-cpu{background:linear-gradient(180deg,#3a1620,#160a0e);} #sb-cpu .val{color:#ff9a8a;} #sb-cpu::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:#ff5340;}
@@ -114,11 +116,11 @@
 <body>
 <div id="app">
   <div id="scoreboard">
-    <div class="sb-cell" id="sb-you"><span class="lbl">You</span><span class="val" id="v-you">0</span></div>
-    <div class="sb-cell" id="sb-cpu"><span class="lbl">CPU</span><span class="val" id="v-cpu">0</span></div>
+    <div class="sb-cell" id="sb-you"><span class="lbl">You</span><span class="val" id="v-you">0</span><span class="tos" id="to-you"></span></div>
+    <div class="sb-cell" id="sb-cpu"><span class="lbl">CPU</span><span class="val" id="v-cpu">0</span><span class="tos" id="to-cpu"></span></div>
     <div class="sb-cell you" id="sb-dd"><span class="lbl" id="dd-lbl">Your Ball</span><span class="val" id="v-dd">1st &amp; 10</span></div>
     <div class="sb-cell" id="sb-on"><span class="lbl">Ball On</span><span class="val" id="v-on">OWN 25</span></div>
-    <div class="sb-cell" id="sb-clock"><span class="lbl">Clock</span><span class="val" id="v-clock">5:00</span></div>
+    <div class="sb-cell" id="sb-clock" title="Timeout (T)"><span class="lbl">Clock</span><span class="val" id="v-clock">5:00</span></div>
   </div>
 
   <div id="stage" tabindex="0">
@@ -176,6 +178,7 @@
       <div class="keys">
         <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · <b>Q·E juke</b> · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> change announcer voice.<br>
         <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down, and <b>Q/E dives</b> for the tackle (extra reach; miss it and you're on the floor). Blocked? <b>Q/E rips free</b> of the blocker instead.<br>
+        <b>Clock &amp; kicks:</b> <b>T</b> (or tap the clock) calls a timeout, three a half · Space while a punt comes down to you = fair catch · behind in the fourth quarter, Space on your kickoff = onside kick.<br>
         Call your plays, stop the CPU's drives, win on the scoreboard before time runs out.
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
@@ -302,6 +305,7 @@
         fx:[], shake:0, flash:0, trail:[], rec:[], replay:null, fumble:null, _td:false, _fg:false, _turn:false, _spot:0,
         _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false, clockStop:false, flag:null };
     G.rosters={ user:makeRoster(), cpu:makeRoster() };
+    G.timeouts={user:3,cpu:3}; G.stats={user:blankStats(),cpu:blankStats()};
     G._openingRecv='user'; startKickoff('user');
   }
   const other = o => o==='user'?'cpu':'user';
@@ -316,6 +320,7 @@
   function startKickoff(recv){
     G.offense=recv; G.playType='run'; G.passState='caught';
     G.flag=null;
+    G.fairCatch=false;
     G._returning=true; G._retKind='kick'; G._turn=false; G._td=false; G._fg=false; G._safety=false; G.conv=null;
     G.los=yd(25); G.firstX=yd(35); G.down=1;
     const W=fieldBot-fieldTop;
@@ -331,6 +336,15 @@
     for(let i=0;i<5;i++){ const yy=fieldTop+W*((i+0.5)/5);      G.blockers.push(mk(yd(34)+kj(), yy+kj(), 60+i)); }
     for(let i=0;i<4;i++){ const yy=fieldTop+W*((i+0.5)/4*0.7+0.15); G.blockers.push(mk(yd(21)+kj(), yy+kj(), 70+i)); }
     G.blockers.push(mk(yd(15), fieldMid-yd(3), 75)); G.blockers.push(mk(yd(15), fieldMid+yd(3), 76));
+    // Late and behind, the kicking team may try an onside kick — and the receiving team
+    // knows it, so its hands team comes up to a dozen yards from the tee. Only then:
+    // the return unit normally sets up forty yards away, and an onside kick against that
+    // would be a free possession every time.
+    const kickTeam=other(recv), klead=kickTeam==='user'?G.userScore-G.cpuScore:G.cpuScore-G.userScore;
+    G.onsideOK = G.qtr===4 && klead<0 && klead>=-16;
+    G.onside = kickTeam==='cpu' && G.onsideOK && gameLeft()<55 && Math.random()<0.9;
+    G.koTeeT = (kickTeam==='user' && G.onsideOK) ? 1.5 : 0.85;     // time to make the call
+    if(G.onsideOK) G.blockers.forEach((b,i)=>{ if(i<5) b.x=kx-yd(12)+kj(); else if(i<9) b.x=kx-yd(19)+kj(); });
     // coverage team lined up ON the kick line, they sprint down under the ball
     G.defenders=[];
     for(let i=0;i<10;i++){ const yy=fieldTop+W*((i+0.5)/10);
@@ -347,7 +361,7 @@
     G._koFlight=true; G._koPhase='tee'; G._koT=0; G._koTee={x:kx,y:fieldMid};
     G.ball={active:false};
     G.userDef = (G.offense==='cpu')? nearestDefToBall(): null;
-    setMsg('KICKOFF!',1.2); crowdSwell(0.12,2.5);
+    setMsg(G.koTeeT>1?'KICKOFF — SPACE FOR AN ONSIDE KICK':'KICKOFF!',1.4); crowdSwell(0.12,2.5);
     G.phase='live'; G.snapTime=performance.now(); G.playT=0;
   }
   function updateKickoffFlight(dt){
@@ -359,11 +373,20 @@
       if(k){ const tx=tee.x+yd(0.9); k.vx=(tx-k.x)*3.2; k.vy=0; k.x+=k.vx*dt; }
       if(G.offense==='user') moveEntity(G.carrier, dt, S.carrier, S.sprint);   // returner can settle under it
       G.cam+=(clampCam(tee.x-yd(12))-G.cam)*Math.min(1,dt*4);
-      if(G._koT>=0.85){                                    // strike it
+      if(G._koT>=(G.koTeeT||0.85)){                                    // strike it
         G._koPhase='flight'; G._koT=0; SFX.kick(); crowdSwell(0.2,3);
-        const dur=3.2;                                     // real kickoff hang time
-        G.ball={active:true, ko:true, x:tee.x, y:tee.y, fromX:tee.x, fromY:tee.y,
-                tx:G.carrier.x, ty:G.carrier.y, t:0, dur:dur};
+        if(G.onside){
+          // short and skidding into the hands team: it must go ten yards before the
+          // kicking team may touch it, and after that it is anybody's ball
+          const side=Math.random()<0.5?-1:1;
+          G.ball={active:true, ko:true, onside:true, x:tee.x, y:tee.y, fromX:tee.x, fromY:tee.y,
+                  tx:tee.x-yd(10.5+Math.random()*3.5), ty:Math.max(fieldTop+yd(3),Math.min(fieldBot-yd(3),tee.y+side*yd(3+Math.random()*9))), t:0, dur:0.95};
+          setMsg('ONSIDE KICK!',1.0); crowdSwell(0.3,3);
+        } else {
+          const dur=3.2;                                   // real kickoff hang time
+          G.ball={active:true, ko:true, x:tee.x, y:tee.y, fromX:tee.x, fromY:tee.y,
+                  tx:G.carrier.x, ty:G.carrier.y, t:0, dur:dur};
+        }
         G.koKickT=0.45;
       }
       return;
@@ -409,14 +432,18 @@
     // They used to stand frozen for the whole flight and only start blocking on the
     // catch, by which point they were 9 yards off their man and could never close the
     // 1.8-yard engage radius: measured 0.2 of 12 coverage defenders ever blocked.
-    blockNearest(dt, G.defenders);
+    if(b.onside){
+      // the hands team goes for the ball; nobody is blocking for a return
+      for(const bl of G.blockers){ const dx=b.tx-bl.x, dy=b.ty-bl.y, dd=Math.hypot(dx,dy);
+        if(dd>yd(0.8) && dd<yd(20)){ bl.vx=dx/dd*S.blocker*1.15; bl.vy=dy/dd*S.blocker*1.15; bl.x+=bl.vx*dt; bl.y+=bl.vy*dt; } else { bl.vx=0; bl.vy=0; } }
+    } else blockNearest(dt, G.defenders);
     const capX=G.carrier.x+yd(22);                     // don't abandon the returner
-    for(const bl of G.blockers) if(bl.x>capX){ bl.x=capX; bl.vx=Math.min(bl.vx,0); }
+    if(!G.onsideOK) for(const bl of G.blockers) if(bl.x>capX){ bl.x=capX; bl.vx=Math.min(bl.vx,0); }
     // The ball used to HOME on the returner — its target was dragged onto him every
     // frame, so it was caught no matter where he was (measured 0.00 yd between ball
     // and man at the catch). A kick lands where it was struck; you have to be there.
     // Only a small lateral drift remains, which reads as the kicker's hang and wind.
-    b.ty += (G.carrier.y-b.ty)*Math.min(1,dt*0.15);
+    if(!b.onside) b.ty += (G.carrier.y-b.ty)*Math.min(1,dt*0.15);
     b.x=b.fromX+(b.tx-b.fromX)*p; b.y=b.fromY+(b.ty-b.fromY)*p;
     // Punt coverage has to beat a jam at the line and run further than kickoff
     // coverage does. Unjammed at full sprint they covered the whole 36-yard gap in
@@ -432,6 +459,8 @@
       // spanning 18.3 to 24.7 yards, which is the "returns are always the same"
       // complaint exactly. They cover in lanes, at their own speeds, and are jammed for
       // different lengths of time — that is what opens a seam on one kick and not the next.
+      if(b.onside){ const a=Math.atan2(b.ty-d.y,b.tx-d.x), sp=S.defSprint*0.95*(d.spd||1);
+        d.vx=Math.cos(a)*sp; d.vy=Math.sin(a)*sp; d.x+=d.vx*dt; d.y+=d.vy*dt; continue; }
       if(b.t < jam*(0.5+(d.ang||0)*0.5+0.5)){ d.vx=0; d.vy=0; continue; }
       const lane=(d.ang||0)*yd(3.4);
       const a=Math.atan2((G.carrier.y+lane)-d.y,(G.carrier.x+yd(4))-d.x);
@@ -445,10 +474,26 @@
       // the kick was fielded even with the returner nowhere near the ball.
       const miss=Math.hypot(b.x-G.carrier.x, b.y-G.carrier.y);
       G.ball={active:false};
+      if(b.onside){
+        // it skids on toward the hands team taking odd hops, and both sides dive for it
+        // Who comes up with it is rolled here, at about the rate expected onside kicks
+        // were recovered in the NFL; the scramble then shows the man on that side nearest
+        // the ball falling on it. Left to proximity alone, ten coverage men converging on
+        // a five-man hands team came up with it 44-57% of the time.
+        G.fumble={ x:b.x, y:b.y, vx:-yd(2)-Math.random()*yd(3), vy:(Math.random()-0.5)*yd(6), t:0, dur:1.15, by:G.offense, spot:b.x, onside:true, kickWin:Math.random()<0.22 };
+        G.phase='live'; G.snapTime=performance.now(); G.playT=0; G.shake=0.15;
+        SFX.tackle(); setMsg('LOOSE BALL!',1.0); crowdSwell(0.3,2.5);
+        return;
+      }
       if(miss<=S.catchR*1.4){
+        // a returner with the coverage on top of him calls for the fair catch
+        if(b.punt && G.offense==='cpu' && !G.fairCatch){ let nd=1e9; for(const d of G.defenders) nd=Math.min(nd,dist(d,G.carrier));
+          if(Math.random() < (nd<yd(9)?0.85:nd<yd(14)?0.35:0)) G.fairCatch=true; }
+        if(G.fairCatch){ G.fairCatch=false; SFX.catch(); endPlay('FAIR CATCH', G.carrier.x); G.clockStop=true; return; }
         SFX.catch(); G.snapTime=performance.now(); G.playT=0;
         setMsg('FIELDED — RUN IT BACK!',1.0); crowdSwell(0.16,2);
       } else {
+        G.fairCatch=false;
         // muffed: it hits the turf live and both teams can fall on it
         G.fumble={ x:b.x, y:b.y, vx:(Math.random()-0.5)*yd(9), vy:(Math.random()-0.5)*yd(9),
                    t:0, dur:1.6, by:G.offense, spot:b.x };
@@ -480,22 +525,31 @@
     const p=PLAYS[id]; setMsg(p.label+(p.kind==='pass'?' — Space throws':' — Space hikes'),1.1);
   }
   function cpuChoosePlay(){
+    // Clock football. Behind late — or driving before the half — the CPU hurries to the
+    // line and throws, which stops the clock on every incompletion; ahead late it runs
+    // the ball and takes its time; behind by more than a field goal with the game
+    // ending, it goes for it on fourth down instead of punting the game away.
+    const lead=G.cpuScore-G.userScore, late=(G.qtr===2||G.qtr===4) && G.clock<45;
+    const hurry=late && (G.qtr===2 || lead<=0), milk=G.qtr===4 && G.clock<60 && lead>0;
+    const desperate=G.qtr===4 && G.clock<60 && lead<0;
     if(G.down>=4){
       const fy=fgYards();
       // A coach's willingness to kick falls off with distance rather than stopping dead
       // at 45. Now that the kicker makes 82% from the forties and 71% from fifty, the
       // long attempt is a real decision instead of an automatic punt.
-      const want = fy<=38 ? 0.90 : fy<=46 ? 0.76 : fy<=53 ? 0.46 : 0;
+      let want = fy<=38 ? 0.90 : fy<=46 ? 0.76 : fy<=53 ? 0.46 : 0;
+      if(desperate && lead<-3) want=0;                     // three points do not save it
       if(Math.random()<want){ return cpuKick(fy); }
       const need=(G.firstX-G.los)/PPY;
-      if(need>2 && G.los<yd(80)){ return cpuPunt(); }
+      if(need>2 && G.los<yd(80) && !desperate){ return cpuPunt(); }
     }
     const need=(G.firstX-G.los)/PPY;
-    const pool = Math.random()<(need>7?0.64:0.42) ? PASS_PLAYS : RUN_PLAYS;
+    const passP = hurry ? 0.78 : milk ? 0.2 : (need>7?0.64:0.42);
+    const pool = Math.random()<passP ? PASS_PLAYS : RUN_PLAYS;
     const id = pool[Math.floor(Math.random()*pool.length)];
-    setupPlay(id); G.phase='presnap'; G.defCall='balanced'; G.autoSnap=2.8;
+    setupPlay(id); G.phase='presnap'; G.defCall='balanced'; G.autoSnap = hurry ? 1.6 : milk ? 4.0 : 2.8;
     document.getElementById('defcall').classList.remove('hidden');
-    setMsg('CPU BALL — pick your D',1.0);
+    setMsg(hurry?'CPU HURRY-UP — pick your D':'CPU BALL — pick your D',1.0);
   }
   function chooseDef(call){
     applyDefCall(call); document.getElementById('defcall').classList.add('hidden'); G.autoSnap=0.7;
@@ -746,6 +800,7 @@
     if(k===' ') action(); if(k==='shift') sprintHeld=true;
     if(k==='q') juke(-1); if(k==='e') juke(1);   // hard lateral cut (defense: dive tackle)
     if(k==='f') toggleFullscreen();
+    if(k==='t') callTimeout('user');       // stop the clock between plays
     if(k==='b') toggleBlockerControl();   // run plays: take control of a lineman and block
     if((k==='1'||k==='2'||k==='3') && G.offense==='user'){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
     keys[k]=true;
@@ -755,6 +810,12 @@
   function action(){
     audioInit();
     if(G.phase==='fg'){ fgLock(); return; }
+    // Kicks. Space on your own kickoff when you are behind late is the onside kick;
+    // Space while a punt is coming down to you signals for a fair catch.
+    if(G.phase==='live' && G._koFlight){
+      if(G.offense==='cpu' && G._koPhase==='tee' && G.onsideOK && !G.onside){ G.onside=true; setMsg('ONSIDE KICK!',1.0); return; }
+      if(G.offense==='user' && (G._koPhase==='punt' || (G.ball && G.ball.punt))){ callFairCatch(); return; }
+    }
     if(G.offense==='cpu'){ // defense
       if(G.phase==='presnap'||G.phase==='live') switchDef();
       return;
@@ -779,7 +840,7 @@
       if(Math.random()<0.025){ return deadBallFoul('falseStart'); }
       if(Math.random()<0.018){ return deadBallFoul('offside'); }
     }
-    G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
+    G.lastTackler=null; G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
     G.rec=[]; G._recT=0; stopReplay();   // fresh replay buffer each snap
     if((GOAL_X-G.los)/PPY<=22 || G.down>=3) crowdSwell(crowdBase+0.05,1.4);   // anticipation on tense downs / red zone
     if(G.playType==='run'&&G.runQB) G.handoff={t:0, draw:G.playId==='draw'}; snapCall(); }
@@ -1149,6 +1210,7 @@
     if(G.msgT>0){ G.msgT-=dt; if(G.msgT<=0) setMsg('',0); }
     if(G.selLock>0) G.selLock-=dt;
 
+    if(G.phase==='dead' && !G.clockStop && G.clock>2 && G.deadT<0.9 && G.timeouts && G.timeouts.cpu>0) cpuTimeoutCheck();
     if(G.phase==='dead'){ G.deadT-=dt; G.cam+=(clampCam(G.carrier.x)-G.cam)*Math.min(1,dt*4);
       gangTackle(dt);
       if(G.deadT<=0) finishDead(); syncHUD(); return; }
@@ -1573,6 +1635,7 @@
     let pick=null,pd=1e9; for(const d of G.defenders){ if(d.job==='rush'||d.fill) continue; const dd=dist(d,pt); if(dd<pd){pd=dd;pick=d;} }
     if(!pick) for(const d of G.defenders){ if(d.job==='rush') continue; const dd=dist(d,pt); if(dd<pd){pd=dd;pick=d;} }
     if(!pick) return endPlay('INTERCEPTED', G.ball.tx, true);
+    if(G.stats && !G.conv){ const st=G.stats[G.offense]; st.passAtt++; st.ints++; statP(other(G.offense),pick.n).ints++; }
     G.ball.active=false;
     const newOff=other(G.offense);
     const oldOffense=[G.carrier,...G.receivers,...G.blockers];      // become the new defenders
@@ -1804,17 +1867,19 @@
     if(f.t<f.dur) return;
     // nearest man wins it
     let best=null,bd=1e9,bySide=null;
-    const test=(e,side)=>{ const dd=Math.hypot(e.x-f.x,e.y-f.y); if(dd<bd){bd=dd;best=e;bySide=side;} };
+    const only=f.onside?(f.kickWin?'def':'off'):null;          // an onside kick: see where it lands
+    const test=(e,side)=>{ if(only && side!==only) return; const dd=Math.hypot(e.x-f.x,e.y-f.y); if(dd<bd){bd=dd;best=e;bySide=side;} };
     test(G.carrier,'off'); for(const b of G.blockers) if(!b.noblock) test(b,'off');
     for(const d of G.defenders) test(d,'def');
     const spot=Math.max(OWN_GOAL, Math.min(GOAL_X-yd(1), f.x));
     G.fumble=null;
     if(bySide==='def'){                                        // defence recovers: turnover
-      setMsg('FUMBLE RECOVERED — TURNOVER!',1.6); SFX.whistle(); crowdSwell(0.24,3);
+      if(G.stats && !f.onside) G.stats[G.offense].fumLost++;
+      setMsg(f.onside?(G.offense==='user'?'CPU RECOVERS THE ONSIDE KICK!':'YOU RECOVER THE ONSIDE KICK!'):'FUMBLE RECOVERED — TURNOVER!',1.6); SFX.whistle(); crowdSwell(0.24,3);
       G.phase='dead'; G.deadT=1.5; G._td=false; G._fg=false; G._safety=false; G._turn=true; G._spot=spot;
       if(startReplay()) G.deadT=3.4;
     } else {                                                   // offence falls on it
-      setMsg('RECOVERED BY THE OFFENSE',1.3); SFX.whistle();
+      setMsg(f.onside?(G.offense==='user'?'YOU FALL ON THE ONSIDE KICK':'CPU FALLS ON THE ONSIDE KICK'):'RECOVERED BY THE OFFENSE',1.3); SFX.whistle();
       G.phase='dead'; G.deadT=1.2; G._td=false; G._fg=false; G._safety=false; G._turn=false; G._spot=spot;
     }
   }
@@ -1911,7 +1976,8 @@
       if(Math.random() < 0.030*Math.min(1.6, 0.5+held*0.22)) throwFlag('holding', G.los);
       else if(reason!=='INCOMPLETE' && Math.random()<0.008) throwFlag('facemask', spot);
     }
-    if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT'){
+    recordPlay(reason, spot);
+    if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT' && reason!=='FAIR CATCH'){
       // hit impact scales with how fast he was going when he got hit
       const hitSp=Math.hypot(G.carrier.vx||0,G.carrier.vy||0)/PPY;
       spawnBurst(G.carrier.x,G.carrier.y,'#fff5d6', 12+Math.round(hitSp*1.6), hitSp>6);
@@ -1921,9 +1987,12 @@
     }
     else SFX.whistle();
     if(turnover) spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',16,true);
-    const gain=(spot-G.los)/PPY; if(G.offense==='user' && !G._returning) G.longest=Math.max(G.longest,Math.round(gain));
-    if(gain>=25 && reason!=='INCOMPLETE' && startReplay()){ G.deadT=3.4; color(pick(["Let's see that one again.","Roll it back — look at this.","Watch him here, this is beautiful."])); }
+    // a return is measured from where it was caught (G.los is a placeholder on returns,
+    // which replayed a 3-yard return caught at midfield as a 25-yard gain)
+    const gain=(spot-(G._returning?(G._retStart||G.los):G.los))/PPY; if(G.offense==='user' && !G._returning) G.longest=Math.max(G.longest,Math.round(gain));
+    if(gain>=25 && reason!=='INCOMPLETE' && reason!=='FAIR CATCH' && startReplay()){ G.deadT=3.4; color(pick(["Let's see that one again.","Roll it back — look at this.","Watch him here, this is beautiful."])); }
     if(reason==='INCOMPLETE') setMsg('INCOMPLETE',1.0);
+    else if(reason==='FAIR CATCH') setMsg(G.offense==='user'?'FAIR CATCH':'CPU FAIR CATCH',1.2);
     else if(G._returning){ const ry=Math.max(0,Math.round((spot-(G._retStart||G.los))/PPY));
       setMsg(G._retKind==='int'?('INTERCEPTION — '+ry+' YD RETURN'):(G._retKind==='punt'?('PUNT RETURN — '+ry+' YDS'):('KICK RETURN — '+ry+' YDS')),1.3); }
     else if(!turnover){
@@ -1941,7 +2010,7 @@
       setMsg(G.conv==='user'?'TWO-POINT — GOOD!':'CPU TWO-POINT — GOOD',1.5); SFX.roar(); G.shake=0.28; G.flash=0.4; spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',22,true);
       G.conv=null; G.twoPt=false; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false; G.phase='dead'; G.deadT=1.4; syncHUD(); return;
     }
-    if(G._td) return; G.phase='dead'; G.deadT=1.6; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false;
+    if(G._td) return; recordPlay('TD', GOAL_X); G.phase='dead'; G.deadT=1.6; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false;
     if(startReplay()) G.deadT=3.4;   // hold the whistle so the replay can run
     spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',26,true); G.shake=0.3; G.flash=0.5; SFX.roar();
     crowdSwell(G.offense==='user'?0.34:0.18, 4.5);   // huge home roar (muted for a CPU score)
@@ -1969,6 +2038,7 @@
     const kickX=Math.min(WORLD_W-yd(5), Math.max(retX+yd(22), flipLos(G.los)));
     G.offense=recv; G.playType='run'; G.passState='caught';
     G.flag=null;
+    G.fairCatch=false; G.onside=false; G.onsideOK=false;
     G._returning=true; G._retKind='punt'; G._turn=false; G._td=false; G._fg=false; G._safety=false; G.conv=null;
     G.los=yd(25); G.firstX=yd(35); G.down=1;
     const W=fieldBot-fieldTop;
@@ -1989,7 +2059,7 @@
     G._koFlight=true; G._koPhase='punt'; G._koT=0; G._koTee={x:kickX,y:fieldMid};
     G.ball={active:false};
     G.userDef=(G.offense==='cpu')? nearestDefToBall(): null;
-    setMsg('PUNT IS UP!',1.2); crowdSwell(0.08,2);
+    setMsg(G.offense==='user'?'PUNT IS UP! — SPACE FOR A FAIR CATCH':'PUNT IS UP!',1.4); crowdSwell(0.08,2);
     G.phase='live'; G.snapTime=performance.now(); G.playT=0;
   }
   function userPunt(){ startPunt(); }
@@ -2125,6 +2195,8 @@
     possessionWatch();
     document.getElementById('v-you').textContent=G.userScore;
     document.getElementById('v-cpu').textContent=G.cpuScore;
+    if(G.timeouts){ const pip=n=>'\u25CF'.repeat(Math.max(0,n))+'\u25CB'.repeat(Math.max(0,3-n));
+      document.getElementById('to-you').textContent=pip(G.timeouts.user); document.getElementById('to-cpu').textContent=pip(G.timeouts.cpu); }
     let dd; if(G.firstX>=GOAL_X && (GOAL_X-G.los)/PPY<=10) dd='Goal'; else dd=Math.max(1,Math.round((G.firstX-G.los)/PPY));
     document.getElementById('v-dd').textContent=ordinal(G.down)+' & '+dd;
     const ddc=document.getElementById('sb-dd'); ddc.classList.toggle('you',G.offense==='user'); ddc.classList.toggle('cpu',G.offense==='cpu');
@@ -2941,6 +3013,7 @@
     if(G.qtr>=4){ gameOver(); return true; }
     G.qtr++; G.clock=QTR_SECS;
     if(G.qtr===3){                       // halftime — kick off to the other team
+      G.timeouts={user:3,cpu:3};         // three more each for the second half
       const recv = (G._openingRecv==='user') ? 'cpu' : 'user';
       setMsg('HALFTIME — '+G.userScore+' to '+G.cpuScore, 2.0);
       say('That is the half. '+(G.userScore>G.cpuScore?'You lead it.':(G.userScore<G.cpuScore?'The CPU leads it.':'All square.')), true);
@@ -2950,13 +3023,93 @@
     setMsg('END OF THE '+(G.qtr===2?'FIRST':'THIRD')+' QUARTER', 1.6);
     syncHUD(); return false;             // play on; possession and spot carry over
   }
+  // ---- clock management ----------------------------------------------------------
+  // Three timeouts a half each. The clock runs between plays unless something stopped
+  // it, so a timeout is what lets a team that is behind get the ball back — or drive
+  // the field — with time still on the clock.
+  function callTimeout(team){
+    if(!G.timeouts || !(G.phase==='dead'||G.phase==='presnap'||G.phase==='playcall') || G.clock<=0) return false;
+    if(G.timeouts[team]<=0){ if(team==='user') setMsg('NO TIMEOUTS LEFT',0.9); return false; }
+    if(G.clockStop){ if(team==='user') setMsg('THE CLOCK IS ALREADY STOPPED',0.9); return false; }
+    G.timeouts[team]--; G.clockStop=true; SFX.whistle();
+    setMsg('TIMEOUT — '+(team==='user'?'YOU':'CPU')+' · '+G.timeouts[team]+' LEFT',1.4);
+    say(team==='user'?'Timeout called. That stops the clock.':'The CPU burns a timeout to stop the clock.', true);
+    syncHUD(); return true;
+  }
+  // The CPU runs the clock the way a coach would: behind in the fourth quarter it stops
+  // it after every play the clock would run through; before the half it saves time
+  // when it has the ball.
+  function cpuTimeoutCheck(){
+    const cpuNext=(G.offense==='cpu')!==!!G._turn, lead=G.cpuScore-G.userScore;
+    if(G.qtr===4 && G.clock<45 && lead<=0) callTimeout('cpu');
+    else if(G.qtr===2 && G.clock<30 && cpuNext) callTimeout('cpu');
+  }
+  // Space while a punt is up: the ball is dead where you catch it and nobody can hit
+  // you — the call when the coverage is already on top of you.
+  function callFairCatch(){ if(G.fairCatch) return; G.fairCatch=true; setMsg('FAIR CATCH SIGNAL',1.0); }
+
+  // ---- the box score ---------------------------------------------------------------
+  function blankStats(){ return {passAtt:0,passComp:0,passYds:0,passTD:0,ints:0,rushAtt:0,rushYds:0,rushTD:0,sacked:0,sackYds:0,fumLost:0,players:{}}; }
+  function statP(team,n){ const s=G.stats[team].players; return s[n]||(s[n]={rushAtt:0,rush:0,rec:0,recYds:0,td:0,tkl:0,sacks:0,ints:0}); }
+  // Once as every scrimmage play ends (endPlay, or scoreTD for a touchdown). A play a
+  // flag wiped out, a conversion try and the yards of a return do not count — the same
+  // as in an NFL box score.
+  function recordPlay(reason, spot){
+    if(!G.stats || G.conv || G.flag || !G.carrier) return;
+    const team=G.offense, st=G.stats[team], c=G.carrier, td=spot>=GOAL_X;
+    if(G._returning){ if(td) statP(team,c.n).td++; return; }
+    const gain=(Math.min(spot,GOAL_X)-G.los)/PPY, tk=G.lastTackler, dteam=other(team);
+    if(tk && /TACKL|SACK/.test(reason)) statP(dteam,tk.n).tkl++;
+    if(G.playType==='pass'){
+      if(reason==='INCOMPLETE'){ st.passAtt++; return; }
+      if(/INTERCEPT/.test(reason)){ st.passAtt++; st.ints++; return; }
+      if(c.role==='wr'){ st.passAtt++; st.passComp++; st.passYds+=gain; const p=statP(team,c.n); p.rec++; p.recYds+=gain; if(td){ st.passTD++; p.td++; } return; }
+      if(/SACK/.test(reason)){ st.sacked++; st.sackYds+=gain; if(tk) statP(dteam,tk.n).sacks++; return; }
+    }
+    st.rushAtt++; st.rushYds+=gain; const p=statP(team,c.n); p.rushAtt++; p.rush+=gain; if(td){ st.rushTD++; p.td++; }
+  }
+  function playerOfGame(){
+    const win=G.userScore>=G.cpuScore?'user':'cpu'; let best=null, bs=0;
+    for(const t of ['user','cpu']){
+      const st=G.stats[t], w=t===win?1:0.8, nums=new Set(Object.keys(st.players).map(Number)); if(st.passAtt) nums.add(12);
+      for(const n of nums){
+        const p=st.players[n]||{rushAtt:0,rush:0,rec:0,recYds:0,td:0,tkl:0,sacks:0,ints:0};
+        let sc=(p.rush+p.recYds)/10 + p.td*6 + p.tkl + p.sacks*3 + p.ints*5;
+        if(n===12) sc+=st.passYds/25 + st.passTD*4 - st.ints*2;   // the quarterback
+        sc*=w; if(sc>bs){ bs=sc; best={t,n,p,st}; }
+      }
+    }
+    if(!best) return '';
+    const {t,n,p,st}=best, bits=[];
+    if(n===12 && st.passAtt) bits.push(st.passComp+'/'+st.passAtt+' passing, '+Math.round(st.passYds)+' yds'+(st.passTD?', '+st.passTD+' TD':''));
+    if(p.rushAtt) bits.push(p.rushAtt+' carries, '+Math.round(p.rush)+' yds');
+    if(p.rec) bits.push(p.rec+' catches, '+Math.round(p.recYds)+' yds');
+    if(p.td && n!==12) bits.push(p.td+' TD');
+    if(p.tkl) bits.push(p.tkl+' tackles'); if(p.sacks) bits.push(p.sacks+' sacks'); if(p.ints) bits.push(p.ints+' INT');
+    return tag(t,n)+' ('+(t==='user'?'YOU':'CPU')+') — '+bits.join(' · ');
+  }
+  function boxScoreHTML(){
+    if(!G.stats) return '';
+    const s=t=>G.stats[t], cell=v=>'<td style="padding:0 14px;text-align:center">'+v+'</td>';
+    const row=(lbl,f)=>'<tr><td style="text-align:left;opacity:.75">'+lbl+'</td>'+cell(f('user'))+cell(f('cpu'))+'</tr>';
+    let h='<table style="margin:10px auto 6px;border-collapse:collapse;font-size:13px;line-height:1.7">'
+      +'<tr style="opacity:.6;font-size:10px;letter-spacing:.14em"><td></td>'+cell('YOU')+cell('CPU')+'</tr>'
+      +row('Passing',t=>s(t).passComp+'/'+s(t).passAtt+' · '+Math.round(s(t).passYds)+' yds')
+      +row('Rushing',t=>s(t).rushAtt+' · '+Math.round(s(t).rushYds)+' yds')
+      +row('Total yards',t=>Math.round(s(t).passYds+s(t).sackYds+s(t).rushYds))
+      +row('Turnovers',t=>s(t).ints+s(t).fumLost)
+      +row('Sacked',t=>s(t).sacked)
+      +'</table>';
+    const pog=playerOfGame(); if(pog) h+='<div style="margin:4px 0 2px">Player of the game: <b>'+pog+'</b></div>';
+    return h;
+  }
   function gameOver(){
     if(G.phase==='final') return; G.phase='final';
     const u=G.userScore,c=G.cpuScore;
     document.getElementById('over-title').textContent = u>c?'YOU WIN':(u<c?'CPU WINS':'TIE GAME');
     document.getElementById('over-title').style.color = u>c?'#9cff9c':(u<c?'#ff8a7a':'#ffd24a');
     document.getElementById('final-line').textContent='YOU '+u+'  –  '+c+' CPU';
-    document.getElementById('final-sub').textContent='Longest play '+G.longest+' yds';
+    document.getElementById('final-sub').innerHTML=boxScoreHTML()+'<div style="opacity:.7;margin-top:4px">Longest play '+G.longest+' yds</div>';
     document.getElementById('over').classList.remove('hidden');
     say(u>c?'That\u2019s the ballgame — you win it!':(u<c?'And that\u2019s the final whistle. The CPU takes it.':'We end in a tie! What a battle!'), true);
   }
@@ -2971,6 +3124,7 @@
   const muteBtn=document.getElementById('mute');
   muteBtn.addEventListener('click',()=>{ muted=!muted; muteBtn.textContent=muted?'🔇':'🔊'; if(!muted){ audioInit(); startCrowd(); } crowdSetMute(); });
   const qBtn=document.getElementById('qtog'); if(qBtn) qBtn.addEventListener('click',cycleQuality);
+  document.getElementById('sb-clock').addEventListener('click',()=>{ audioInit(); callTimeout('user'); });
   // Available voices differ wildly per machine, so let the user audition them and keep
   // their pick. Shift-click (or long-press) the mic to cycle.
   let voiceIdx=-1;
