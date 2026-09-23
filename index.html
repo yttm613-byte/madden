@@ -2423,13 +2423,13 @@
     // Helmet shell, facemask and uniform stay team-uniform; randomising those is what
     // made an earlier build look like a pickup game. Visor, gloves and cleats vary.
     const pickOf=a=>a[(Math.random()*a.length)|0];
-    const wearsVisor=Math.random()<0.38;
+    const wearsVisor=Math.random()<0.30;   // fewer tinted visors: faces read by their eyes
     for(const o of (parts['Visor']||[])){ o.visible=wearsVisor; o.renderOrder=3; }
     if(wearsVisor){ const v=pickOf([[0x0b0d12,0.86],[0x0b0d12,0.86],[0x2a1a08,0.72],[0xa8b4c8,0.32]]);
       each('Visor',m=>{ setSRGB(m,v[0]); m.opacity=v[1]; m.transparent=true; m.roughness=0.06; m.metalness=0.5; m.envMapIntensity=1.4; m.depthWrite=false; }); }
     const gloveHex=pickOf([0x121317,0x121317,0xf0f1f4,-1]);      // -1: team colour, set with the kit
     const cleatHex=pickOf([0x111216,0x111216,0xf2f2f4,-1]);
-    const chinHex=pickOf([0xf0f1f4,0x15171d]);
+    const chinHex=pickOf([0x15171d,0x15171d,0x15171d,0xf0f1f4]);   // mostly dark: a white cup reads as bared teeth at a distance
     if(gloveHex>=0) each('Gloves',m=>setSRGB(m,gloveHex));
     if(cleatHex>=0) each('Cleats',m=>setSRGB(m,cleatHex));
     each('ChinStrap',m=>setSRGB(m,chinHex));

@@ -31,16 +31,16 @@ export function buildBody(rig) {
   const head = (() => {
     const cranium = ellipsoid([0, 1.772, -0.020], [0.077, 0.097, 0.100]);
     const face = ellipsoid([0, 1.728, 0.030], [0.066, 0.084, 0.072]);
-    const jaw = ellipsoid([0, 1.689, 0.022], [0.063, 0.045, 0.066]);
+    const jaw = ellipsoid([0, 1.689, 0.022], [0.066, 0.046, 0.066]);
     const jawAngle = mirrorX(ellipsoid([0.051, 1.681, -0.004], [0.018, 0.029, 0.030]));
     const chin = ellipsoid([0, 1.659, 0.073], [0.025, 0.019, 0.019]);
     const cheek = mirrorX(ellipsoid([0.049, 1.752, 0.056], [0.021, 0.015, 0.020]));
-    const brow = ellipsoid([0, 1.787, 0.076], [0.054, 0.013, 0.021]);
+    const brow = ellipsoid([0, 1.787, 0.075], [0.052, 0.011, 0.019]);
     const noseBridge = roundCone([0, 1.776, 0.088], [0, 1.735, 0.110], 0.0075, 0.0105);
     const noseTip = sphere([0, 1.729, 0.114], 0.0118);
     const alae = mirrorX(sphere([0.0135, 1.722, 0.100], 0.0092));
-    const upperLip = ellipsoid([0, 1.702, 0.096], [0.024, 0.0072, 0.0105]);
-    const lowerLip = ellipsoid([0, 1.690, 0.094], [0.021, 0.0075, 0.0100]);
+    const upperLip = ellipsoid([0, 1.702, 0.096], [0.025, 0.0082, 0.0110]);
+    const lowerLip = ellipsoid([0, 1.6895, 0.0945], [0.022, 0.0090, 0.0108]);
     const ear = mirrorX(ellipsoid([0.075, 1.763, -0.012], [0.011, 0.030, 0.019]));
     let h = sunionK([[cranium, 0], [face, 0.035], [jaw, 0.03], [jawAngle, 0.02], [chin, 0.018], [cheek, 0.02], [brow, 0.018],
       [noseBridge, 0.012], [noseTip, 0.008], [alae, 0.006], [upperLip, 0.008], [lowerLip, 0.008], [ear, 0.01]]);
@@ -57,7 +57,7 @@ export function buildBody(rig) {
   const neck = sunionK([
     [roundCone([0, 1.440, -0.036], [0, 1.668, -0.012], 0.082, 0.067), 0],
     [mirrorX(capsule([0.050, 1.702, -0.020], [0.021, 1.500, 0.052], 0.019)), 0.03],   // sternocleidomastoid
-    [ellipsoid([0, 1.545, -0.066], [0.070, 0.075, 0.040]), 0.045],                    // back of the neck / traps
+    [ellipsoid([0, 1.535, -0.066], [0.066, 0.068, 0.036]), 0.045],                    // back of the neck / traps
   ]);
   const torso = sunionK([
     [ellipsoid([0, 1.370, 0.004], [0.182, 0.172, 0.126]), 0],
@@ -221,7 +221,7 @@ export function buildBody(rig) {
   // ============================ JERSEY OVER SHOULDER PADS ============================
   const padsL = (() => {
     // arch plate over each shoulder: flat on top, sloping gently out
-    const arch = roundBox([0.122, 1.530, -0.014], [0.138, 0.040, 0.158], 0.036, frameEuler(0, 0, -0.14));
+    const arch = roundBox([0.122, 1.522, -0.014], [0.138, 0.040, 0.158], 0.036, frameEuler(0, 0, -0.10));
     // cap: a slab over the deltoid, face turned outward-up, following the arm's A-pose angle
     const capC = add(add(S, mul(latU, 0.052)), mul(aU, 0.006));
     const capFr = [latU, aU, antU];
@@ -285,31 +285,35 @@ export function buildBody(rig) {
   const STRIPE_W = 0.024;
   let STRIPE_BED;
   const HC = [0, 1.773, -0.014];
+  // The back of a real shell drops almost straight from its widest point to a rim at
+  // the base of the skull. The first version was an egg-shaped dome with a lobe blended
+  // on underneath: it sagged into a pear at the back, its rim hung to the middle of the
+  // neck, and the stripe — laid on the dome alone — dived under the lobe and stopped
+  // halfway down with a ragged end.
+  const dome = ellipsoid(HC, [0.128, 0.140, 0.158]);
+  const skirt = smax2(intersect((x, y, z) => (Math.hypot(x/0.121, (z-HC[2])/0.151) - 1)*0.121, (x, y, z) => y - HC[1]),
+    (x, y, z) => z - HC[2] - 0.02, 0.05);
+  const shellOuter = sunionK([[dome, 0], [skirt, 0.03]]);
   const helmetFill = sunionK([
-    [ellipsoid(HC, [0.128, 0.140, 0.158]), 0],
+    [shellOuter, 0],
     [mirrorX(ellipsoid([0.099, 1.684, 0.036], [0.031, 0.078, 0.074])), 0.05],   // jaw flaps
-    [ellipsoid([0, 1.688, -0.118], [0.100, 0.070, 0.052]), 0.05],               // rear flare
   ]);
   const faceHole = ellipsoid([0, 1.702, 0.160], [0.079, 0.089, 0.180]);
-  {
-    const outer = ellipsoid(HC, [0.128, 0.140, 0.158]);
-    STRIPE_BED = intersect((x, y, z) => Math.abs(x) - STRIPE_W, offset(outer, 0.004),
-      (x, y, z) => -outer(x, y, z) - 0.0025, plane([0, 1.70, 0], [0, -1, 0.3]), (x, y, z) => -faceHole(x, y, z) + 0.012);
-  }
+  const RIM = plane([0, 1.652, 0], [0, -1, 0.2]);        // base of the skull behind, over the jaw at the sides
+  STRIPE_BED = intersect((x, y, z) => Math.abs(x) - STRIPE_W, offset(shellOuter, 0.004),
+    (x, y, z) => -shellOuter(x, y, z) - 0.0025, plane([0, 1.657, 0], [0, -1, 0.2]), (x, y, z) => -faceHole(x, y, z) + 0.012);
   const helmet = (() => {
     const inner = sunionK([[ellipsoid(HC, [0.108, 0.120, 0.138]), 0], [mirrorX(ellipsoid([0.082, 1.684, 0.036], [0.022, 0.072, 0.064])), 0.05]]);
     let h = cut(helmetFill, inner, 0.004);
     h = cut(h, faceHole, 0.01);
-    h = smax2(h, plane([0, 1.641, 0], [0, -1, 0.42]), 0.008);
+    h = smax2(h, RIM, 0.008);
     h = cut(h, mirrorX((x, y, z) => Math.hypot(y-1.734, z+0.008) - 0.011 + 0*x), 0.003);     // ear holes
     h = cut(h, STRIPE_BED, 0.0015);                                                       // bed for the stripe
-    for (const [vx, vz] of [[0.045, -0.02], [-0.045, -0.02], [0.03, -0.075], [-0.03, -0.075]])
-      h = cut(h, roundBox([vx, 1.911, vz], [0.010, 0.03, 0.022], 0.008), 0.003);
-    return h;
+    return h;   // no crown vents: at game distance they read as holes punched in the shell
   })();
-  const helmetOuter = ellipsoid(HC, [0.128, 0.140, 0.158]);
-  const stripe = intersect(offset(helmetOuter, 0.0012), (x, y, z) => Math.abs(x) - (STRIPE_W - 0.0004), (x, y, z) => -helmetOuter(x, y, z) - 0.0032,
-    (x, y, z) => -faceHole(x, y, z) + 0.0124, plane([0, 1.7003, 0], [0, -1, 0.3]));
+  // the stripe runs from above the face opening, over the crown, down to the rim
+  const stripe = intersect(offset(shellOuter, 0.0012), (x, y, z) => Math.abs(x) - (STRIPE_W - 0.0004), (x, y, z) => -shellOuter(x, y, z) - 0.0032,
+    (x, y, z) => -faceHole(x, y, z) + 0.0124, plane([0, 1.6573, 0], [0, -1, 0.2]));
   const facemask = (() => {
     const r = 0.0056;
     const arc = pts => sunion(0.002, ...pts.slice(0, -1).map((p, i) => capsule(p, pts[i+1], r)));
