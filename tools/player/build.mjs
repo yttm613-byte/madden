@@ -44,7 +44,7 @@ const PARTS = [
   // Jersey + belt + pants: one surface, cut exactly into three materials (and the trim
   // bands) along planes and the trim contour. Weighted like the jersey above the belt
   // and like the legs below it.
-  { name: 'Jersey', key: 'uniform', f: body.uniform, lo: [-0.42, 0.38, -0.22], hi: [0.42, 1.60, 0.21], h: 0.0032, target: 14800, albedo: 0.80,
+  { name: 'Jersey', key: 'uniform', f: body.uniform, lo: [-0.46, 0.38, -0.25], hi: [0.46, 1.665, 0.23], h: 0.0032, target: 15600, albedo: 0.80,
     w: (x, y, z) => y < 1.10 ? 'noArms' : 'jersey',
     hide: inside(body.socks, 0.002),
     cuts: [(x, y, z) => y - 1.089, (x, y, z) => y - 1.0815, (x, y, z) => 1.0525 - y, body.TRIM_D],
@@ -213,6 +213,37 @@ if (!only || only.has('decals')) {
   log(`decals: ${DEF.length}`);
 }
 
+// ---- heavy build: a morph target, not a second model ----------------------------------------
+// A lineman carries 60-80 lb more than a receiver: a belly, a thick neck, a wide seat,
+// heavy thighs and arms. One field, sampled on every body-covering surface and pushed
+// out along the surface normal, so the jersey, the pants under it, the numbers on it
+// and the arms coming out of it all move together and nothing pokes through anything.
+// The game dials it in per position (morphTargetInfluences[0]).
+const RP = n => { const p = rig.byName[n].bindPos; return [p.x, p.y, p.z]; };
+const SA = RP('LeftArm'), WR = RP('LeftHand'), HPJ = RP('LeftUpLeg'), ANK = RP('LeftFoot');
+const sst = (a, b, x) => { const t = Math.max(0, Math.min(1, (x-a)/(b-a))); return t*t*(3-2*t); };
+function segT(q, a, b) {
+  const ab = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], aq = [q[0]-a[0], q[1]-a[1], q[2]-a[2]];
+  let t = (aq[0]*ab[0]+aq[1]*ab[1]+aq[2]*ab[2])/(ab[0]*ab[0]+ab[1]*ab[1]+ab[2]*ab[2]); t = Math.max(0, Math.min(1, t));
+  return [Math.hypot(aq[0]-ab[0]*t, aq[1]-ab[1]*t, aq[2]-ab[2]*t), t];
+}
+function heavyAt(x, y, z) {
+  const ax = Math.abs(x), q = [ax, y, z];
+  const [dA, tA] = segT(q, SA, WR), armW = sst(0.125, 0.080, dA)*sst(0.02, 0.12, tA);
+  const [dL, tL] = segT(q, HPJ, ANK), legW = sst(0.16, 0.105, dL)*sst(0.05, 0.15, tL);
+  const bodyW = Math.max(0, 1 - armW - legW);
+  const belly = 0.050*Math.exp(-(((y-1.14)/0.13)**2) - (ax/0.15)**2)*sst(-0.02, 0.10, z);
+  const torso = 0.016*sst(0.94, 1.04, y)*sst(1.62, 1.52, y);
+  const waist = 0.016*Math.exp(-(((y-1.07)/0.10)**2) - ((ax-0.15)/0.07)**2);
+  const seat = 0.024*Math.exp(-(((y-0.94)/0.09)**2) - ((ax-0.08)/0.10)**2)*sst(0.0, -0.10, z);
+  const neck = 0.010*sst(1.44, 1.50, y)*sst(1.67, 1.60, y)*sst(0.12, 0.08, ax);
+  const arm = armW*(0.014*(1-tA) + 0.007*tA);
+  const leg = legW*(0.020*(1-tL) + 0.008*tL)*sst(0.10, 0.30, y);
+  const head = (y > 1.60 && ax < 0.13) ? sst(1.66, 1.60, y) : 1;     // the face stays the face
+  return (bodyW*(belly + torso + waist + seat + neck) + arm + leg)*head;
+}
+const HEAVY = new Set(['Skin', 'Jersey', 'JerseyTrim', 'Pants', 'Belt', 'Socks', 'Numbers', 'NameBar']);
+
 // ---- merge per material and export --------------------------------------------------------
 const MAT = {
   Skin:        { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.58 },
@@ -284,7 +315,19 @@ for (const [name, list] of [...Object.entries(meshes), ...Object.entries(decals)
     POSITION: G.accessor(pos, 'VEC3', { minmax: true, target: 34962 }), NORMAL: G.accessor(nrm, 'VEC3', { target: 34962 }),
     COLOR_0: G.accessor(col, 'VEC3', { target: 34962 }), JOINTS_0: G.accessor(jo, 'VEC4', { target: 34962 }), WEIGHTS_0: G.accessor(we, 'VEC4', { target: 34962 }) };
   if (uv) attributes.TEXCOORD_0 = G.accessor(uv, 'VEC2', { target: 34962 });
-  const mesh = G.mesh({ name, primitives: [{ attributes, indices: G.accessor(idx, 'SCALAR', { target: 34963 }), material: mat }] });
+  let targets = null;
+  if (HEAVY.has(name)) {
+    const d = new Float32Array(nv*3);
+    for (let v = 0; v < nv; v++) {
+      const nx = nrm[3*v], ny = nrm[3*v+1], nz = nrm[3*v+2], nl = Math.hypot(nx, ny, nz) || 1;
+      const h = heavyAt(pos[3*v], pos[3*v+1], pos[3*v+2]);
+      d[3*v] = nx/nl*h; d[3*v+1] = ny/nl*h; d[3*v+2] = nz/nl*h;
+    }
+    targets = [{ POSITION: G.accessor(d, 'VEC3', { minmax: true, target: 34962 }) }];
+  }
+  const prim = { attributes, indices: G.accessor(idx, 'SCALAR', { target: 34963 }), material: mat };
+  if (targets) prim.targets = targets;
+  const mesh = G.mesh({ name, primitives: [prim], ...(targets ? { weights: [0], extras: { targetNames: ['heavy'] } } : {}) });
   G.json.nodes[root].children.push(G.node({ name, mesh, skin }));
   log(`mesh ${name}: ${nt/3} tris, ${nv} verts`);
 }
