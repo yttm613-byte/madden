@@ -2516,7 +2516,10 @@
       idleAct=mixer.clipAction(playerProto.animations[0]);
       idleAct.play(); mixer.setTime(Math.random()*playerProto.animations[0].duration);
     }
-    grp.userData={ring,mats,parts,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3};
+    // the model carries a 'heavy' morph target (belly, neck, seat, thighs, arms): the
+    // game dials it in per position so linemen are big men, not stretched receivers
+    const morphs=[]; model.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetInfluences.length) morphs.push(o); });
+    grp.userData={ring,mats,parts,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, morphs, heavy:-1};
     initRig(grp.userData, model);
     grp.visible=false; scene.add(grp); return grp;
   }
@@ -3294,9 +3297,12 @@
         let bob=0;
         if(u.spinT>0){ u.spinT-=lastDt; const k=Math.max(0,u.spinT/0.5); g.rotation.y+=k*Math.PI*2; bob=-Math.sin(k*Math.PI)*0.12; }
         g.position.set(WX(e.x), 0, WZ(e.y));
-        // Body types by position: linemen heavy and wide, backs and receivers lean.
+        // Body types by position: linemen are big men (the model's heavy morph: belly,
+        // neck, seat, thighs), backs and receivers lean. A little width on top of it.
         if(u.baseS){
-          const wide = (role==='OL'||role==='C') ? 1.20 : (role==='DL' ? 1.12 : (role==='TE'||role==='FB') ? 1.08 : (role==='LB' ? 1.04 : 0.96));
+          const hv = (role==='OL'||role==='C') ? 1.0 : (role==='DL' ? 0.85 : (role==='TE'||role==='FB') ? 0.45 : (role==='LB' ? 0.25 : 0));
+          if(hv!==u.heavy){ u.heavy=hv; for(const m of u.morphs) m.morphTargetInfluences[0]=hv; }
+          const wide = (role==='OL'||role==='C') ? 1.07 : (role==='DL' ? 1.05 : (role==='TE'||role==='FB') ? 1.03 : (role==='LB' ? 1.02 : 0.97));
           const tall = (role==='OL'||role==='C'||role==='DL') ? 1.01 : 1.0;
           u.model.scale.set(u.baseS*u.buildVg*wide, u.baseS*u.buildVh*tall, u.baseS*u.buildVg*wide);
         }

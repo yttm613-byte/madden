@@ -46,6 +46,7 @@ window.__load=(url, opts)=>new Promise((res,rej)=>{
     const m=g.scene; tint(m, opts.team||'home', opts.skin);
     if(opts.novisor) m.traverse(o=>{ if(o.material && o.material.name==='Visor') o.visible=false; });
     if(opts.chin!==undefined) m.traverse(o=>{ if(o.material && o.material.name==='ChinStrap') o.material.color.setHex(opts.chin); });
+    if(opts.heavy!=null) m.traverse(o=>{ if(o.morphTargetInfluences) o.morphTargetInfluences[0]=opts.heavy; });
     m.position.set(opts.x||0,0,opts.z||0); m.rotation.y=opts.ry||0;
     if(opts.scale) m.scale.setScalar(opts.scale);
     if(opts.fitHeight){ const b=new THREE.Box3().setFromObject(m); const h=b.max.y-b.min.y; m.scale.setScalar(opts.fitHeight/h); const b2=new THREE.Box3().setFromObject(m); m.position.y-=b2.min.y; }

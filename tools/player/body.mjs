@@ -219,20 +219,25 @@ export function buildBody(rig) {
   const cleats = mirrorX(cleatL);
 
   // ============================ JERSEY OVER SHOULDER PADS ============================
+  // Real pads make the silhouette: the shoulders of a player in pads are nearly three
+  // helmets wide, flat across the top with a hard shelf at each edge, and the arch
+  // rises toward the neck so the helmet sits down into them. The first pads were a
+  // modest bump on natural shoulders and read as a man in a T-shirt.
   const padsL = (() => {
-    // arch plate over each shoulder: flat on top, sloping gently out
-    const arch = roundBox([0.122, 1.522, -0.014], [0.138, 0.040, 0.158], 0.036, frameEuler(0, 0, -0.10));
-    // cap: a slab over the deltoid, face turned outward-up, following the arm's A-pose angle
-    const capC = add(add(S, mul(latU, 0.052)), mul(aU, 0.006));
+    // arch plate over each shoulder: flat on top, sloping gently out, riding up at the neck
+    const arch = roundBox([0.154, 1.554, -0.016], [0.168, 0.044, 0.174], 0.040, frameEuler(0, 0, -0.12));
+    const archIn = roundBox([0.100, 1.572, -0.020], [0.060, 0.030, 0.150], 0.030, frameEuler(0, 0, -0.30));
+    // cap (epaulet): a slab over the deltoid, face turned outward-up, following the arm
+    const capC = add(add(S, mul(latU, 0.092)), mul(aU, 0.000));
     const capFr = [latU, aU, antU];
-    const cap = roundBox(capC, [0.030, 0.070, 0.112], 0.028, capFr);
-    const capTop = roundBox(add(capC, add(mul(aU, -0.045), mul(latU, -0.02))), [0.03, 0.04, 0.12], 0.03, capFr);
-    return sunionK([[arch, 0], [cap, 0.05], [capTop, 0.04]]);
+    const cap = roundBox(capC, [0.036, 0.090, 0.132], 0.030, capFr);
+    const capTop = roundBox(add(capC, add(mul(aU, -0.056), mul(latU, -0.026))), [0.036, 0.048, 0.138], 0.032, capFr);
+    return sunionK([[arch, 0], [archIn, 0.04], [cap, 0.05], [capTop, 0.04]]);
   })();
   const pads = sunionK([
     [mirrorX(padsL), 0],
-    [roundBox([0, 1.438, 0.078], [0.198, 0.100, 0.050], 0.045), 0.045],   // front plates
-    [roundBox([0, 1.446, -0.108], [0.206, 0.110, 0.058], 0.048), 0.045],  // back plates
+    [roundBox([0, 1.450, 0.084], [0.214, 0.106, 0.055], 0.048), 0.045],   // front plates
+    [roundBox([0, 1.458, -0.114], [0.224, 0.116, 0.062], 0.050), 0.045],  // back plates
   ]);
   // Where the trim colour goes: a band around the neck opening and one at each sleeve
   // hem. A soft 0..1 mask (1 inside the band) used both for the rib and the split.
