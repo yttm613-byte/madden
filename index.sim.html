@@ -448,6 +448,8 @@
   // Fraction of defenders who will eventually beat their block. Tuned against the
   // full-game sim toward an NFL-ish sack rate (~6-7% of dropbacks).
   const SHED_P = 0.06;
+  // A doubled pass rusher gets to his win time at this share of the pace (see blockNearest).
+  let DBL_RATE = 0.5, DBL_R = 8;
   // Four quarters of this length. 75*4 keeps the same total game length as the
   // single 300-second clock it replaced, so pacing is unchanged.
   // (the default; the start screen's QUARTERS button makes it 2:30 or 5:00 and remembers it)
@@ -1041,10 +1043,26 @@
     // The base 4-3 already plays its safeties deep on a pass (see baseDefense); a call
     // only adds to that. Clearing it here sent both safeties to the same spot ten yards
     // deep in the middle on every balanced or blitz call.
-    ds.forEach(d=>{ d.blitz=false; d.deepX=0; d.zone=null; });
+    ds.forEach(d=>{ d.blitz=false; d.deepX=0; d.zone=null; d.third=false; d.quarter=false; });
     if(call==='blitz'){
       [...ds].sort((a,b)=>dist(a,G.carrier)-dist(b,G.carrier)).slice(0,2).forEach(d=>{ d.blitz=true; if(d.job==='cover'||d.job==='spy') d.job='rush';
         d.winAt=Math.min(d.winAt, 2.1+Math.random()*1.9); });   // a blitz is how early pressure happens
+    } else if(call==='prevent' && G.playType==='pass'){
+      // Prevent: four deep and everyone else under them, all of it zone. It used to be
+      // man coverage with the two deepest men four yards deeper and the corners trailing
+      // 60% further behind: against an empty set one safety was still manned up on the
+      // tight end, a go route caught at 21 yards had nobody within 12, and it was the
+      // worst call in the book against the deep ball (measured, 27 CPU touchdowns in 150
+      // empty-deep dropbacks, 17 in 150 quick-game ones). Now the corners take the deep
+      // outside quarters and the safeties the inside ones, five yards deeper than Cover 3,
+      // over the top of the deepest man in each; the backers and the nickel sit at the
+      // sticks and rally to whatever is thrown in front of them.
+      for(const d of ds){
+        if(d.job==='cover' && d.assign) d.assign=null;
+        if(d.role==='CB' && !d.nickel){ d.job='cover'; d.third=true; d.deepX=yd(5); d.x=Math.min(GOAL_X+yd(8), Math.max(d.x, G.los+yd(11))); }
+        else if(d.role==='S'){ d.job='cover'; d.deep=true; d.mid=false; d.quarter=true; d.deepX=yd(5); d.x=Math.min(GOAL_X+yd(8), Math.max(d.x, G.los+yd(16))); }
+        else if(d.job==='cover') d.deepX=yd(2.5);
+      }                                  // (they line up deep, too: from their usual spots they were still backpedalling when the ball went up)
     } else if(call==='prevent'){
       [...ds].sort((a,b)=>b.x-a.x).slice(0,2).forEach(d=>{ d.deep=true; d.deepX=yd(4); if(d.job==='rush') d.job='spy'; });
       for(const d of ds) if(d.role==='CB' && d.cush) d.cush*=1.6;          // corners play off and keep it all in front
@@ -1376,12 +1394,21 @@
     if(d.third){       // a Cover 3 corner: deep outside third, everything in it kept in front
       let deepest=G.los+yd(6);
       for(const r of G.receivers) if((r.y-fieldMid)*half>yd(7) && r.x>deepest) deepest=r.x;
-      return {x:Math.max(G.los+yd(11)+(d.deepX||0), deepest+yd(3)), y:fieldMid+half*yd(16)};
+      return {x:Math.min(GOAL_X+yd(8.5), Math.max(G.los+yd(11)+(d.deepX||0), deepest+yd(3))), y:fieldMid+half*yd(16)};
     }
     if(d.deep && d.mid){ // the middle third
       let deepest=G.los+yd(6);
       for(const r of G.receivers) if(Math.abs(r.y-fieldMid)<yd(12) && r.x>deepest) deepest=r.x;
-      return {x:Math.max(G.los+yd(13)+(d.deepX||0), deepest+yd(4)), y:fieldMid};
+      return {x:Math.min(GOAL_X+yd(8.5), Math.max(G.los+yd(13)+(d.deepX||0), deepest+yd(4))), y:fieldMid};
+    }
+    if(d.deep && d.quarter){ // prevent's inside quarter: the seam and the post, the corners have the outside
+      // (Given a half, each safety shaded out to the go route on his side and the post
+      // ran into the space between them: measured 63% complete with six yards to spare.)
+      let deepest=G.los+yd(6), dr=null;
+      for(const r of G.receivers){ const o=(r.y-fieldMid)*half; if(o>-yd(4) && o<yd(14) && r.x>deepest){ deepest=r.x; dr=r; } }
+      let ty=fieldMid+half*yd(5.5);
+      if(dr && dr.x>G.los+yd(8)) ty+=(dr.y-ty)*0.5;
+      return {x:Math.min(GOAL_X+yd(8.5), Math.max(G.los+yd(12)+(d.deepX||0), deepest+yd(3.5))), y:ty};
     }
     if(d.deep){
       // a safety takes his half and keeps the deepest man in it in front of him —
@@ -1392,7 +1419,7 @@
       for(const r of G.receivers) if((r.y-fieldMid)*half>-yd(4) && r.x>deepest){ deepest=r.x; dr=r; }
       let ty=fieldMid+half*yd(9.5);
       if(dr && dr.x>G.los+yd(8)) ty+=(dr.y-ty)*0.5;
-      return {x:Math.max(G.los+yd(12)+(d.deepX||0), deepest+yd(3.5)), y:ty};
+      return {x:Math.min(GOAL_X+yd(8.5), Math.max(G.los+yd(12)+(d.deepX||0), deepest+yd(3.5))), y:ty};
     }
     if(d.zone==='robber'){ // the middle hole at ten yards, sinking under whatever crosses it
       const zx=G.los+yd(9.5), zy=fieldMid+(qb.y-fieldMid)*0.5; let rr=null, rb=yd(9);
@@ -1406,7 +1433,7 @@
     }
     if(d.role==='DT') return {x:G.los+yd(2), y:qb.y};     // the spy mirrors the quarterback
     // underneath: a hook or curl zone where he lined up, sinking under the route in it
-    const zx=G.los+yd(7.5), zy=d.homeY; let rr=null, rb=yd(8);
+    const zx=G.los+yd(7.5)+(d.deepX||0), zy=d.homeY; let rr=null, rb=yd(8);
     for(const r of G.receivers){ const dd=Math.hypot(r.x-zx,r.y-zy); if(dd<rb){rb=dd;rr=r;} }
     return rr ? {x:zx+(rr.x-zx)*0.35, y:zy+(rr.y-zy)*0.5} : {x:zx, y:zy};
   }
@@ -1458,7 +1485,9 @@
   // blocker stayed on him, with no way to ever beat the block. Once every rusher got
   // a man assigned, that meant literally zero sacks. Only a minority of rushers win
   // their matchup, and it takes them a beat — winAt is Infinity for the rest.
-  function rushWinP(){ return G && G.offense==='user' ? ((G.diff&&G.diff.rush)||0.10) : 0.11; }
+  // (0.11 against the CPU's passer until backs and tight ends kept in to block started
+  // doubling: that took two points off his sack rate under every coverage call)
+  function rushWinP(){ return G && G.offense==='user' ? ((G.diff&&G.diff.rush)||0.10) : 0.13; }
   function def(x,y,delay,n,job,assign){ return {x,y,vx:0,vy:0,n,react:delay,whiff:0,blocked:0,homeY:y,job,assign,_takenBy:null,
     engT:0, shed:false,
     // Pass rushers ALWAYS beat their block eventually — protection breaks down, and
@@ -2207,12 +2236,34 @@
       if(b.stalk && tg && !tg.shed && (!tg._takenBy || tg._takenBy===b) && pool.includes(tg)) best=tg;   // (a claim lapses beyond 2.4yd, so not "is he mine" but "is he nobody else's")
       else for(const d of pool){ if(d.shed || (d._takenBy&&d._takenBy!==b)) continue;
         const dd = b.stalk ? dist(d,f)*0.35+dist(d,b) : dist(d,f)+dist(d,b)*0.6; if(dd<bd){bd=dd;best=d;} }
+      // A back or tight end kept in with nobody to block helps: he doubles the rusher
+      // nearest him (not whichever one is about to win: helping exactly the man who was
+      // winning took every sack out of the game). Every rusher used to have exactly one
+      // blocker and beat him on his own clock whatever else was going on, so keeping men
+      // in bought nothing: PA MAX, eight blocking three or four, was sacked 26% of the
+      // time. The line itself stays man for man, as the pass rush was calibrated; a spare
+      // lineman doubling too took sacks from 7.8% of dropbacks to 2%.
+      if(!best && b.pos && G.playType==='pass' && G.passState==='drop' && !G._returning && !only){
+        let h=null, hk=1e9;
+        // (one helper to a man: three kept in all doubling the nearest tackle left both
+        // ends one on one)
+        const now=G.playT||0;
+        for(const d of pool){ if(d===G.userDef || d.shed || !d._takenBy || d._takenBy===b) continue; const dd=dist(d,b); if(dd>yd(DBL_R)) continue;
+          const k = dd + ((d.hcl && d.hcl!==b && now-d.hclT<0.1) ? yd(20) : 0);
+          if(k<hk){ hk=k; h=d; } }
+        b.target=null;
+        if(h){ h.hcl=b; h.hclT=now; const gx=h.x*0.62+f.x*0.38, gy=h.y*0.62+f.y*0.38, a=Math.atan2(gy-b.y,gx-b.x);
+          b.vx=Math.cos(a)*S.blocker; b.vy=Math.sin(a)*S.blocker; b.x+=b.vx*dt; b.y+=b.vy*dt;
+          if(dist(b,h)<S.blockR) h.dblT=G.playT||0; }
+        b.y=Math.max(fieldTop,Math.min(fieldBot,b.y)); continue;
+      }
       b.target=best;
       if(best){ best._takenBy=b;
         // Clock the matchup from the moment a blocker picks him up, not from actual
         // contact. Counting contact frames only, the average shed landed at 4.7s —
         // long after the ball was gone, which is why sacks sat near zero.
-        best.engT+=dt;
+        // (doubled, he gets there at half the pace)
+        best.engT += ((G.playT||0)-(best.dblT==null?-9:best.dblT) < 0.1) ? dt*DBL_RATE : dt;
         // On a run (but not a return, where these are coverage men sprinting downfield)
         // a penetrating lineman is on his own much faster clock — see def().
         const wa = (best.pen && G.playType==='run' && !G._returning) ? best.penAt : best.winAt;
