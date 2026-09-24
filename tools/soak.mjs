@@ -24,7 +24,12 @@ await p.goto('http://localhost:' + (process.env.PORT || 8106) + '/index.test.htm
 await p.waitForFunction(() => { try { return window.__gb && window.__gb.ready; } catch (e) { return false; } }, null, { timeout: 90000 });
 await p.evaluate(() => { window.__gbNoDraw = true; window.__gbToss = null; });
 if (MODE === 'exhibition') await p.click('#d-pro');
-else if (MODE === 'season') { await p.click('#d-season'); await p.evaluate(() => { window.__soakNext = true; }); }
+else if (MODE === 'season') {
+  // SEASONAT=n presets n finished games (all wins), so a short run crosses into the title
+  // game, the offseason and the next season
+  const at = +(process.env.SEASONAT || 0);
+  if (at) await p.evaluate((at) => { const opp = ['HCS', 'IVM', 'PRS', 'DSV', 'NSW', 'BCB', 'CAP']; localStorage.setItem('gb-season', JSON.stringify({ results: opp.slice(0, at).map(o => ({ opp: o, you: 21, them: 10 })), over: false })); }, at);
+  await p.click('#d-season'); await p.evaluate(() => { window.__soakNext = true; }); }
 else if (MODE === 'twop') await p.click('#d-2p');
 else if (MODE === 'practice') await p.click('#d-practice');
 await p.evaluate(() => {
@@ -42,6 +47,8 @@ await p.evaluate(() => {
     B.phases[G.phase] = (B.phases[G.phase] || 0) + dt;
     for (const k of ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift']) K[k] = false;
     if (G.paused) { gb.togglePause(false); return; }
+    const off = document.getElementById('offseason');
+    if (off && !off.classList.contains('hidden')) { B.offseasons = (B.offseasons || 0) + 1; const cards = [...off.querySelectorAll('.pro')]; if (cards[1]) cards[1].click(); if (cards[4]) cards[4].click(); document.getElementById('off-go').click(); return; }
     const vis = id => !document.getElementById(id).classList.contains('hidden');
     const humanOff = G.offense === 'user' || TWO, humanDef = G.offense === 'cpu' || TWO;
     const offKeys = (TWO && G.offense === 'cpu') ? ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'] : (TWO ? ['w', 's', 'a', 'd'] : ['arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
@@ -98,7 +105,7 @@ for (let chunk = 0; chunk < 400; chunk++) {
     break; }
   if (st.stuck > 2 || errs.length > 5) break;
 }
-const B = await p.evaluate(() => { const B = window.__bot, G = window.__gb.G; return { progs: B.progs, team: (() => { try { const t = JSON.parse(localStorage.getItem('gb-team')); return { gp: t.gp, season: t.seasonNo, leadersN: Object.keys(t.stats || {}).length }; } catch (e) { return null; } })(), seasonRec: (() => { try { return JSON.parse(localStorage.getItem('gb-season')).results.map(r => r.opp + ' ' + r.you + '-' + r.them).join(', '); } catch (e) { return null; } })(), games: B.games, finals: B.finals, plays: B.plays, punts: B.punts, stuck: B.stuck, nan: B.nan, phases: Object.fromEntries(Object.entries(B.phases).map(([k, v]) => [k, Math.round(v)])), simT: Math.round(B.simT), stats: G.stats && { user: { pass: G.stats.user.passComp + '/' + G.stats.user.passAtt, rush: G.stats.user.rushAtt + '-' + Math.round(G.stats.user.rushYds) }, cpu: { pass: G.stats.cpu.passComp + '/' + G.stats.cpu.passAtt, rush: G.stats.cpu.rushAtt + '-' + Math.round(G.stats.cpu.rushYds) } } }; });
+const B = await p.evaluate(() => { const B = window.__bot, G = window.__gb.G; return { offseasons: B.offseasons || 0, progs: B.progs, team: (() => { try { const t = JSON.parse(localStorage.getItem('gb-team')); return { gp: t.gp, season: t.seasonNo, leadersN: Object.keys(t.stats || {}).length, history: t.history, due: t.offseasonDue }; } catch (e) { return null; } })(), seasonRec: (() => { try { return JSON.parse(localStorage.getItem('gb-season')).results.map(r => r.opp + ' ' + r.you + '-' + r.them).join(', '); } catch (e) { return null; } })(), games: B.games, finals: B.finals, plays: B.plays, punts: B.punts, stuck: B.stuck, nan: B.nan, phases: Object.fromEntries(Object.entries(B.phases).map(([k, v]) => [k, Math.round(v)])), simT: Math.round(B.simT), stats: G.stats && { user: { pass: G.stats.user.passComp + '/' + G.stats.user.passAtt, rush: G.stats.user.rushAtt + '-' + Math.round(G.stats.user.rushYds) }, cpu: { pass: G.stats.cpu.passComp + '/' + G.stats.cpu.passAtt, rush: G.stats.cpu.rushAtt + '-' + Math.round(G.stats.cpu.rushYds) } } }; });
 console.log(MODE, 'seed', SEED, JSON.stringify(B, null, 0));
 console.log('errors', errs.length, errs.slice(0, 5));
 await b.close();
