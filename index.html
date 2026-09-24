@@ -4300,6 +4300,7 @@
     if(!scene) return;
     const f={clear:[0x12203a,75,250], rain:[0x1a222e,36,165], snow:[0x39424f,30,135]}[WEATHER];
     scene.fog.color.setHex(f[0]); scene.fog.near=f[1]; scene.fog.far=f[2];
+    if(_vb && _vb.scr.fog!==(WEATHER!=='clear')){ _vb.scr.fog=WEATHER!=='clear'; _vb.scr.needsUpdate=true; }
     if(wxRain) wxRain.visible=WEATHER==='rain'; if(wxSnow) wxSnow.visible=WEATHER==='snow'; if(wxCover) wxCover.visible=WEATHER==='snow';
     if(wxField){ wxField.material.roughness=WEATHER==='rain'?0.6:0.82; wxField.material.color.setScalar(WEATHER==='rain'?0.8:1); }
     if(wxSky) wxSky.material.color.setHex(WEATHER==='rain'?0x7d8594:WEATHER==='snow'?0xaab3c0:0xffffff);
@@ -4334,6 +4335,49 @@
     const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));
     geo.setAttribute('uv',new THREE.BufferAttribute(uv,2)); geo.setIndex(new THREE.BufferAttribute(idx,1));
     return new THREE.Mesh(geo, mat);
+  }
+  // The video boards: the score, the clock and the down at each open end, and
+  // TOUCHDOWN after a score. Each stands on two legs behind the end-zone seats with its
+  // foot just over their back row, so the chase camera, which always looks up the field,
+  // sees the far one above the stands. One canvas, redrawn only when something on it changes.
+  let _vb=null;
+  function buildVideoBoards(){
+    const c=document.createElement('canvas'); c.width=1024; c.height=300;
+    const tex=new THREE.CanvasTexture(c); if(THREE.sRGBEncoding) tex.encoding=THREE.sRGBEncoding; tex.anisotropy=4;
+    const W=44, H=W*300/1024, y0=15.2, frames=[], screens=[];
+    for(const [x,ry] of [[160.5,-Math.PI/2],[-42.5,Math.PI/2]]){ const back=x>0?0.6:-0.6;
+      const f=new THREE.Mesh(new THREE.BoxGeometry(W+1.6,H+1.6,1)); f.position.set(x+back,y0+H/2,26.65); f.rotation.y=ry; frames.push([f]);
+      for(const s of [-1,1]){ const leg=new THREE.Mesh(new THREE.BoxGeometry(1.4,y0,1.4)); leg.position.set(x+back*2,y0/2,26.65+s*W*0.32); frames.push([leg]); }
+      const m=new THREE.Mesh(new THREE.PlaneGeometry(W,H)); m.position.set(x,y0+H/2,26.65); m.rotation.y=ry; screens.push([m]); }
+    scene.add(mergeMeshes(frames, new THREE.MeshStandardMaterial({color:0x0b1019, roughness:0.6, metalness:0.35})));
+    // unfogged, or the far board 140 yards off washes out on a clear night; in rain and
+    // snow the haze takes it like it takes the seats around it (see applyWeather)
+    const scr=new THREE.MeshBasicMaterial({map:tex, fog:false, toneMapped:false});
+    scene.add(mergeMeshes(screens, scr));
+    _vb={c, g:c.getContext('2d'), tex, scr, key:''};
+  }
+  function drawVideoBoard(){
+    if(!_vb || !G) return;
+    const td = G.phase==='dead' && G._td, you=TWO_P?'P1':teamAbbr(), them=TWO_P?'P2':cpuLabel(), clk=Math.max(0,Math.ceil(G.clock||0));
+    const dn = G.phase==='start'||G.phase==='intro'||G.phase==='final' ? '' : (['1ST','2ND','3RD','4TH'][(G.down||1)-1]||'')+' & '+(G.firstX>=GOAL_X&&(GOAL_X-G.los)/PPY<=10?'GOAL':Math.max(1,Math.round((G.firstX-G.los)/PPY)));
+    const key=[G.userScore,G.cpuScore,G.qtr,clk,dn,td?(G.offense):'',you,them,TEAM_KIT.user.jersey,TEAM_KIT.cpu.jersey,G.phase==='final'].join('|');
+    if(key===_vb.key) return; _vb.key=key;
+    const g=_vb.g, W=1024, H=300;
+    g.fillStyle='#05080e'; g.fillRect(0,0,W,H);
+    if(td){ const who=G.offense==='user'?you:them, col=hexCss(G.offense==='user'?TEAM_KIT.user.jersey:TEAM_KIT.cpu.jersey);
+      g.fillStyle=col; g.fillRect(0,0,W,H); g.fillStyle='rgba(0,0,0,.28)'; g.fillRect(0,H-70,W,70);
+      g.fillStyle='#fff'; g.textAlign='center'; g.textBaseline='middle'; g.font='400 150px Anton, Oswald, sans-serif'; g.fillText('TOUCHDOWN', W/2, 118, W-60);
+      g.font='600 46px Oswald, sans-serif'; g.fillText(who+'  '+(G.offense==='user'?G.userScore:G.cpuScore), W/2, H-35, W-60); }
+    else {
+      const team=(x,abbr,score,kit)=>{ g.fillStyle=hexCss(kit.jersey); g.fillRect(x,40,300,150); g.fillStyle=hexCss(kit.trim); g.fillRect(x,190,300,10);
+        g.fillStyle='#fff'; g.textAlign='center'; g.textBaseline='middle'; g.font='600 58px Oswald, sans-serif'; g.fillText(abbr, x+150, 88, 280);
+        g.font='400 96px Anton, Oswald, sans-serif'; g.fillText(String(score), x+150, 158, 280); };
+      team(28, you, G.userScore, TEAM_KIT.user); team(W-328, them, G.cpuScore, TEAM_KIT.cpu);
+      g.fillStyle='#ffd24a'; g.textAlign='center'; g.textBaseline='middle'; g.font='400 84px Anton, Oswald, sans-serif';
+      g.fillText(G.phase==='final'?'FINAL':Math.floor(clk/60)+':'+String(clk%60).padStart(2,'0'), W/2, 112, 340);
+      g.fillStyle='#cfd8e6'; g.font='600 40px Oswald, sans-serif'; g.fillText(G.phase==='final'?'':'Q'+(G.qtr||1), W/2, 178);
+      g.fillStyle='#8fa3bf'; g.font='600 34px Oswald, sans-serif'; g.fillText(dn, W/2, 250, 360); }
+    _vb.tex.needsUpdate=true;
   }
   function goalpost3D(x){
     const m=new THREE.MeshStandardMaterial({color:0xffe44a,emissive:0x6a560e,emissiveIntensity:0.6,roughness:0.3,metalness:0.35});
@@ -4447,6 +4491,7 @@
     scene.add(mergeMeshes(_towers.poles, new THREE.MeshStandardMaterial({color:0x2a2f3a,roughness:0.8})));
     scene.add(mergeMeshes(_towers.banks, new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff2c0,emissiveIntensity:1.2})));
     nearPosts=goalpost3D(0.5); goalpost3D(119.5);
+    buildVideoBoards();
     ballMesh=new THREE.Mesh(new THREE.SphereGeometry(0.4,20,16), new THREE.MeshStandardMaterial({color:0x3d1f0c,roughness:0.66,metalness:0.02})); ballMesh.scale.set(...BALL_LIVE);
     { const white=new THREE.MeshStandardMaterial({color:0xe8e4d8,roughness:0.58});
       // laces run along the ball's long axis (X); the old box ran across it
@@ -5039,7 +5084,7 @@
     if(sunLight){ const fx=camLook.x, fz=camLook.z;
       sunLight.target.position.set(fx,0,fz); sunLight.target.updateMatrixWorld();
       sunLight.position.set(fx+10,95,fz-8.65); }
-    overlays3D(repFrame);
+    overlays3D(repFrame); drawVideoBoard();
     if(window.__gbNoDraw) return;          // test harnesses run the pose logic without drawing
     renderer.render(scene,camera);
   }
