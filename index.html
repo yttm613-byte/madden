@@ -157,6 +157,7 @@
   #joyhint.on{border-style:solid; border-color:rgba(255,255,255,.38); color:transparent;}
   #joyhint.on #joyknob{display:block;}
   #t-juke{right:190px; bottom:12px; width:62px; height:62px; font-size:11px;}
+  #t-move2{right:196px; bottom:84px; width:56px; height:56px; font-size:10.5px; display:none;}
   @media (hover:none), (pointer:coarse){
     .kbd-only{display:none !important;} .touch-only{display:block;}
     .pc .key{display:none;}
@@ -189,6 +190,7 @@
     .tbtn{width:64px; height:64px;} #t-action{width:76px; height:76px; right:92px; bottom:44px;}
     #t-sprint{right:12px; bottom:12px;} #t-next{right:12px; bottom:92px; width:54px; height:54px;}
     #t-juke{right:176px; bottom:10px; width:56px; height:56px;}
+    #t-move2{right:180px; bottom:72px; width:50px; height:50px;}
     #joyhint{bottom:16px;}
   }
   /* Portrait: the stage takes the whole screen. On a touch screen the field sits on
@@ -207,6 +209,7 @@
     #t-sprint{right:122px; bottom:calc(20% - 74px); width:72px; height:72px;}
     #t-juke{right:122px; bottom:calc(20% + 20px); width:64px; height:64px;}
     #t-next{right:26px; bottom:calc(20% - 88px); width:62px; height:62px;}
+    #t-move2{right:36px; bottom:calc(20% + 90px); width:60px; height:60px;}
     #stamina{bottom:auto; top:calc(60% + 10px);} #spinpip{bottom:auto; top:calc(60% + 7px);}
     #comm{bottom:auto; top:calc(60% - 10px); transform:translate(-50%,-100%); max-width:92%;}
     #poss{top:30%;}
@@ -247,6 +250,7 @@
       <div class="tbtn" id="t-action">HIKE</div>
       <div class="tbtn" id="t-sprint">SPRINT</div>
       <div class="tbtn" id="t-juke">JUKE</div>
+      <div class="tbtn" id="t-move2"></div>
     </div>
 
     <div id="poss"></div>
@@ -296,8 +300,8 @@
     <div class="overlay" id="start">
       <h1 class="title">GRIDIRON<br>BLITZ<small>HEAD TO HEAD</small></h1>
       <div class="keys kbd-only">
-        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · <b>Q·E juke</b> · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> change announcer voice · <b>P</b> pause.<br>
-        <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down, and <b>Q/E dives</b> for the tackle (extra reach; miss it and you're on the floor). Blocked? <b>Q/E rips free</b> of the blocker instead.<br>
+        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · 1–5 pick receiver · <b>tap Space for a touch pass, hold it for a bullet</b> · <b>Q·E juke</b> · <b>R</b> stiff arm · <b>Z</b> dive (a QB slides) · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> announcer voice · <b>P</b> pause.<br>
+        <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down, and <b>Q/E dives</b> for the tackle (extra reach; miss it and you're on the floor). Blocked? <b>Q/E rips free</b> of the blocker instead. Ball in the air? <b>R</b> goes up for it — time it right and it's yours.<br>
         <b>Clock &amp; kicks:</b> <b>T</b> (or tap the clock) calls a timeout, three a half · Space while a punt comes down to you = fair catch · behind in the fourth quarter, Space on your kickoff = onside kick.<br>
         Call your plays, stop the CPU's drives, win on the scoreboard before time runs out.
       </div>
@@ -837,7 +841,7 @@
     const play=PLAYS[playId]||PLAYS.dive; const type=play.kind; const cx=G.los;
     const F=FORMS[play.form]||FORMS.gun;
     G.playId=playId; G.playType=type; G.form=play.form||'gun';
-    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.fumble=null; G.pile=null; G.mesh=null; G.hole=null;
+    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.windup=null; G.diveC=null; G.stiffT=0; G.stiffCd=0; G.fumble=null; G.pile=null; G.mesh=null; G.hole=null;
     G.passState = type==='pass'?'drop':null; G.qbHurry=null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0; G.reads=null; G.hotSel=null;
     document.getElementById('spinpip').textContent='SPIN READY';
     const Y=v=>fieldMid+yd(v);
@@ -1148,7 +1152,9 @@
     if(G && G.paused){ if(k==='p'||k==='escape') togglePause(false); return; }
     if(G && menuKey(k)) return;
     if(k==='p'||(k==='escape'&&G&&G.hotSel==null)){ togglePause(true); return; }
-    if(k===' ') action(); if(k==='shift') sprintHeld=true;
+    if(k===' ' && !e.repeat) action('key'); if(k==='shift') sprintHeld=true;
+    if(k==='r'){ if(G.offense==='cpu') swatBall(); else stiffArm(); }
+    if(k==='z') carrierDive();
     if(k==='q') juke(-1); if(k==='e') juke(1);   // hard lateral cut (defense: dive tackle)
     if(k==='f') toggleFullscreen();
     if(k==='t') callTimeout('user');       // stop the clock between plays
@@ -1156,9 +1162,9 @@
     if(/^[1-5]$/.test(k) && G.offense==='user'){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
     keys[k]=true;
   });
-  addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if(k==='shift') sprintHeld=false; keys[k]=false; });
+  addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if(k==='shift') sprintHeld=false; if(k===' ') releaseThrow('key'); keys[k]=false; });
 
-  function action(){
+  function action(src){
     audioInit();
     if(G.phase==='fg'){ fgLock(); return; }
     // Kicks. Space on your own kickoff when you are behind late is the onside kick;
@@ -1172,7 +1178,7 @@
       return;
     }
     if(G.phase==='presnap') snap();
-    else if(G.phase==='live'){ if(G.playType==='pass'&&G.passState==='drop') throwBall(); else spin(); }
+    else if(G.phase==='live'){ if(G.playType==='pass'&&G.passState==='drop') startThrow(src||'key'); else spin(); }
   }
   function switchDef(){ G.userDef = nearestDefToBall(); }
   // Run plays: press B to take over a blocker (lineman) and block; press again to go back to the runner.
@@ -1270,6 +1276,75 @@
     SFX.throw(); crowdSwell(crowdBase+0.05,1.0);
   }
 
+  // ---- more moves: touch or bullet, stiff arm, dive and slide, playing the ball ----
+  // A throw is a press and a release. Let go quickly and it is a TOUCH pass, lofted
+  // over the underneath defenders; keep holding and it goes as a BULLET, flat and on
+  // him sooner, but a linebacker standing in the lane can get a hand on it.
+  const BULLET_T=0.17;
+  function startThrow(src,btn){ if(!G||G.phase!=='live'||G.offense!=='user'||G.playType!=='pass'||G.passState!=='drop'||G.windup) return; G.windup={t:0,held:true,src,btn}; }
+  function releaseThrow(src,btn){ const w=G&&G.windup; if(w && w.src===src && (btn==null||w.btn===btn)) w.held=false; }
+  function tickWindup(dt){ const w=G.windup; if(!w) return;
+    if(G.passState!=='drop'||G.phase!=='live'){ G.windup=null; return; }
+    w.t+=dt; if(!w.held || w.t>=BULLET_T){ G.windup=null; throwBall(w.held?'bullet':'touch'); } }
+  // Stiff arm: for half a second the next man to reach you from the front or side has
+  // a real chance of being shoved off instead of making the tackle.
+  function stiffArm(){
+    if(!G||G.phase!=='live'||G.offense!=='user'||G.ctrlBlocker||(G.stiffCd||0)>0||G.diveC) return;
+    if(!G.carrier || (G.playType==='pass'&&G.passState==='drop')) return;
+    G.stiffCd=1.5; G.stiffT=0.55; document.getElementById('spinpip').textContent='STIFF ARM!';
+  }
+  // Dive: throw yourself forward for the last yard or two, and the play ends where you
+  // land. A quarterback slides instead: he gives himself up, no hit, no fumble.
+  function carrierDive(){
+    if(!G||G.phase!=='live'||G.offense!=='user'||G.ctrlBlocker||G.diveC||G.handoff) return;
+    const c=G.carrier; if(!c || (G.playType==='pass'&&G.passState==='drop')) return;
+    const qb=c.role==='qb', sp=Math.hypot(c.vx||0,c.vy||0), ux=sp>yd(1)?c.vx/sp:1, uy=sp>yd(1)?c.vy/sp:0;
+    G.diveC={t:0, dur:qb?0.3:0.42, ux, uy, slide:qb, v:qb?yd(3.2):Math.max(sp,yd(6.5))*1.05};
+    SFX.dive(); setMsg(qb?'SLIDES':'DIVES!',0.7);
+  }
+  function diveStep(c,dt){
+    const v=G.diveC; v.t+=dt; const k=Math.max(0,1-v.t/v.dur);
+    c.vx=v.ux*v.v*k; c.vy=v.uy*v.v*k; c.x+=c.vx*dt; c.y+=c.vy*dt;
+    if(c.x>=GOAL_X){ G.diveC=null; scoreTD(); return true; }
+    if(v.t<v.dur) return false;
+    G.diveC=null;
+    if(c.y<fieldTop||c.y>fieldBot){ c.y=Math.max(fieldTop,Math.min(fieldBot,c.y)); endPlay('OUT OF BOUNDS',c.x); return true; }
+    endPlay(v.slide?'SLIDES':'DIVES', c.x); return true;
+  }
+  // Play the ball: your defender goes up for it. Timed as it arrives, or with him in the
+  // throwing lane as it goes by, he can knock it away or pick it off.
+  function swatBall(){
+    if(!G||G.phase!=='live'||G.offense!=='cpu') return;
+    const d=G.userDef; if(!d || (d.swatCd||0)>0 || G.passState!=='air') return;
+    d.swatT=0.5; d.swatCd=1.1; SFX.dive(); document.getElementById('spinpip').textContent='UP FOR IT!';
+  }
+  // Height of a pass above the turf (yards), the same arc the renderer draws.
+  function passH(b,u){ const dyd=Math.hypot(b.tx-b.fromX,b.ty-b.fromY)/PPY, arc=Math.min(6.0,0.7+dyd*0.155)*(b.arcK||1);
+    return 1.75+(1.30-1.75)*u+Math.sin(u*Math.PI)*arc; }
+  // Men in the throwing lane. The CPU's own passes are only contested here by YOUR
+  // defender; its reads already account for the rest, and were calibrated that way.
+  function laneCheck(){
+    const b=G.ball; if(!b.active || b.away) return false;
+    const u=b.t/b.dur; if(u<0.1 || u>0.86) return false;
+    const h=passH(b,u), userThrow=G.offense==='user' && b.kind && b.kind!=='auto';
+    for(const d of G.defenders){
+      if(d.job==='rush' || d.fill) continue;
+      const human=G.offense==='cpu' && d===G.userDef, up=human && (d.swatT||0)>0;
+      if(!human && !userThrow) continue;
+      if(b.tried && b.tried.indexOf(d)>=0) continue;
+      if(h>(up?3.35:2.85) || dist(d,b)>(up?yd(1.3):yd(0.95))) continue;
+      (b.tried=b.tried||[]).push(d);
+      if(Math.random()>=(human?(up?0.85:0.35):0.5)) continue;
+      if(Math.random()<(human?(up?0.42:0.25):0.3)){
+        if(G.conv){ G.ball.active=false; setMsg('PICKED OFF — NO GOOD',1.3); SFX.whistle(); G.conv=null;G.twoPt=false;G._td=true;G._turn=false;G._fg=false;G.phase='dead';G.deadT=1.1; return true; }
+        liveInterception(d); return true; }
+      G.ball.active=false; SFX.tackle(); spawnBurst(b.x,b.y,'#ffffff',9);
+      endPlay('INCOMPLETE', G.los);
+      setMsg(human?'GOT A HAND ON IT!':(d.role==='DE'||d.role==='DT'?'BATTED DOWN':'TIPPED AWAY'),1.1);
+      return true;
+    }
+    return false;
+  }
   const action_btn=document.getElementById('t-action'), sprint_btn=document.getElementById('t-sprint'), next_btn=document.getElementById('t-next'), juke_btn=document.getElementById('t-juke');
   // Floating stick: it starts wherever your thumb lands on the left half of the stage,
   // which in portrait includes the control deck under the field (not part of the canvas).
@@ -1293,7 +1368,11 @@
     const c=G.ctrlBlocker||G.carrier;
     if(!dir && c){ let near=null, nd=1e9; for(const d of G.defenders){ const dd=dist(d,c); if(dd<nd){ nd=dd; near=d; } } dir = near && near.y>c.y ? -1 : 1; }
     juke(dir||1); });
-  action_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); action(); });
+  action_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); action('touch'); });
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=> action_btn.addEventListener(ev,()=>releaseThrow('touch')));
+  const move2_btn=document.getElementById('t-move2');
+  move2_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); audioInit(); const l=move2_btn.textContent;
+    if(l==='SWAT') swatBall(); else if(l==='STIFF') stiffArm(); else if(l) carrierDive(); });
   next_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); if(G.offense==='user'&&G.receivers.length){ G.sel=(G.sel+1)%G.receivers.length; G.selLock=1.4; } });
   sprint_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); sprintHeld=true; });
   ['pointerup','pointerleave','pointercancel'].forEach(ev=> sprint_btn.addEventListener(ev,()=>sprintHeld=false));
@@ -1435,23 +1514,26 @@
       return;
     }
     if(G.phase==='live' && off && G.playType==='pass' && G.passState==='drop'){
-      const k=iconsNow().indexOf(i); if(k>=0){ G.sel=k; G.selLock=1.4; action(); }
+      const k=iconsNow().indexOf(i); if(k>=0 && !G.windup){ G.sel=k; G.selLock=1.4; startThrow('pad',i); }
       return;
     }
     if(G.phase==='live' && off){
-      if(i===PB.A){ action(); return; }                  // spin (or fair catch, onside kick)
+      if(i===PB.A){ action('pad'); return; }             // spin (or fair catch, onside kick)
       if(i===PB.X){ jukeAuto(PAD.lx); return; }
+      if(i===PB.B){ stiffArm(); return; }
+      if(i===PB.Y){ carrierDive(); return; }
       if(i===PB.LT){ toggleBlockerControl(); return; }
       return;
     }
     if(!off){                                            // defense
-      if(i===PB.A||i===PB.B){ action(); return; }        // switch to the man nearest the ball
+      if(i===PB.Y){ swatBall(); return; }                // go up for the ball
+      if(i===PB.A||i===PB.B){ action('pad'); return; }   // switch to the man nearest the ball
       if(i===PB.X){ juke(1); return; }                   // dive, or rip free of a block
       return;
     }
     if(i===PB.A) action();
   }
-  function padRelease(i){}
+  function padRelease(i){ releaseThrow('pad',i); }
   // Pause: P / Esc on the keyboard, Menu on a pad, or the button.
   function togglePause(on){
     if(!G || G.phase==='start' || G.phase==='final') return;
@@ -1459,13 +1541,13 @@
     const el=document.getElementById('pause'); el.classList.toggle('hidden', !G.paused);
     if(G.paused){ document.getElementById('p-help').innerHTML = PAD.used
         ? '<b>Before the snap:</b> '+gb(PB.A)+'hike · '+gb(PB.X)+'audible · '+gb(PB.Y)+'hot route · '+gb(PB.RB)+'flip · '+gb(PB.VIEW)+'timeout<br>'
-          +'<b>Passing:</b> each receiver\u2019s button throws to him · '+gb(PB.RT)+'scramble<br>'
-          +'<b>Running:</b> stick moves · '+gb(PB.RT)+'sprint · '+gb(PB.X)+'juke · flick '+(PAD.ps?'R':'RS')+' to juke · '+gb(PB.A)+'spin<br>'
-          +'<b>Defense:</b> '+gb(PB.B)+'switch · '+gb(PB.X)+'dive, or rip free of a block · '+gb(PB.RT)+'sprint'
+          +'<b>Passing:</b> each receiver\u2019s button throws to him — tap for a touch pass, hold for a bullet · '+gb(PB.RT)+'scramble<br>'
+          +'<b>Running:</b> stick moves · '+gb(PB.RT)+'sprint · '+gb(PB.X)+'juke · flick '+(PAD.ps?'R':'RS')+' to juke · '+gb(PB.B)+'stiff arm · '+gb(PB.Y)+'dive (QB: slide) · '+gb(PB.A)+'spin<br>'
+          +'<b>Defense:</b> '+gb(PB.B)+'switch · '+gb(PB.X)+'dive, or rip free of a block · '+gb(PB.Y)+'go up for the ball · '+gb(PB.RT)+'sprint'
         : '<b>Before the snap:</b> Space hike · C audible · X flip · 1–5 then an arrow = hot route · T timeout<br>'
-          +'<b>Passing:</b> 1–5 pick a receiver · Space throws<br>'
-          +'<b>Running:</b> arrows/WASD · Shift sprint · Q/E juke · Space spin<br>'
-          +'<b>Defense:</b> Space switch · Q/E dive, or rip free of a block · P pause';
+          +'<b>Passing:</b> 1–5 pick a receiver · tap Space for a touch pass, hold it for a bullet<br>'
+          +'<b>Running:</b> arrows/WASD · Shift sprint · Q/E juke · R stiff arm · Z dive (QB: slide) · Space spin<br>'
+          +'<b>Defense:</b> Space switch · Q/E dive, or rip free of a block · R go up for the ball · P pause';
       try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){} }
   }
   function quitToMenu(){
@@ -1484,8 +1566,9 @@
         if(PAD.hot===1) h='HOT ROUTE: press a receiver\u2019s button · '+gb(PB.Y)+'cancel';
         else if(PAD.hot===2) h='✚ ↑ GO · ↓ CURL · ← → SLANT / OUT';
         else h=gb(PB.A)+'HIKE '+gb(PB.X)+'AUDIBLE '+(G.playType==='pass'?gb(PB.Y)+'HOT ROUTE ':'')+gb(PB.RB)+'FLIP';
-      } else if(G.phase==='live' && off && G.playType==='pass' && G.passState==='drop') h='PRESS A RECEIVER\u2019S BUTTON TO THROW · '+gb(PB.RT)+'SCRAMBLE';
-      else if(G.phase==='live' && off) h=gb(PB.RT)+'SPRINT '+gb(PB.X)+'JUKE '+gb(PB.A)+'SPIN · FLICK '+(ps?'R':'RS')+' TO JUKE';
+      } else if(G.phase==='live' && off && G.playType==='pass' && G.passState==='drop') h='RECEIVER\u2019S BUTTON THROWS · TAP = TOUCH · HOLD = BULLET · '+gb(PB.RT)+'SCRAMBLE';
+      else if(G.phase==='live' && off) h=gb(PB.RT)+'SPRINT '+gb(PB.X)+'JUKE '+gb(PB.B)+'STIFF ARM '+gb(PB.Y)+((G.carrier&&G.carrier.role==='qb')?'SLIDE ':'DIVE ')+gb(PB.A)+'SPIN';
+      else if(!off && G.phase==='live' && G.passState==='air') h=gb(PB.Y)+'GO UP FOR IT '+gb(PB.B)+'SWITCH '+gb(PB.RT)+'SPRINT';
       else if(!off && (G.phase==='live'||G.phase==='presnap')) h=gb(PB.B)+'SWITCH '+(G.phase==='live'?gb(PB.X)+((G.userDef&&(G.userDef.blocked||0)>0)?'RIP ':'DIVE ')+gb(PB.RT)+'SPRINT':'');
     }
     if(h!==_padBarKey){ _padBarKey=h; el.innerHTML=h; el.classList.toggle('on',!!h); }
@@ -1755,6 +1838,8 @@
 
     if(G.spinCd>0){ G.spinCd-=dt; if(G.spinCd<=0){ G.spinCd=0; if(G.offense==='user') document.getElementById('spinpip').textContent='SPIN READY'; } }
     if(G.jukeCd>0) G.jukeCd-=dt; if(G.jukeT>0) G.jukeT-=dt; if(G.throwT>0) G.throwT-=dt;
+    if(G.stiffCd>0) G.stiffCd-=dt; if(G.stiffT>0) G.stiffT-=dt;
+    if(G.userDef){ const d=G.userDef; if(d.swatT>0) d.swatT-=dt; if(d.swatCd>0) d.swatCd-=dt; }
     // dive tackle: while diveT runs you have extra reach; if it lapses without a
     // tackle you have committed and missed, so you are slow getting up.
     { const d=G.userDef;
@@ -1762,7 +1847,7 @@
         if(d.shedT>0){ d.shedT-=dt; if(d.shedT<=0) d.shed=false; }   // the line can re-engage you
         if(d.diveT>0){ d.diveT-=dt; if(d.diveT<=0) d.whiff=Math.max(d.whiff||0,0.45); } }
       // the pip is a spin meter on offense; on defense it doubles as the dive meter
-      if(G.offense==='cpu' && !(d&&d.diveT>0)){
+      if(G.offense==='cpu' && !(d&&(d.diveT>0||d.swatT>0))){
         const el=document.getElementById('spinpip'), want=(d&&d.diveCd>0)?'DIVE…':'DIVE READY';
         if(el.textContent!==want) el.textContent=want; } }
     if(G.msgT>0){ G.msgT-=dt; if(G.msgT<=0) setMsg('',0); }
@@ -1840,11 +1925,16 @@
     // A corner or safety meeting a back in space misses more than a lineman in traffic
     // does — that one-on-one is where every long run in football comes from.
     if((d.role==='S'||d.role==='CB') && c.x>G.los+yd(4)) p += 0.09;
-    if(Math.random() >= Math.max(0.02,Math.min(0.34,p))) return false;
+    // a stiff arm only lands on a man in front of or beside you, never from behind
+    let stiff=false;
+    if(G.offense==='user' && (G.stiffT||0)>0){ const sp=Math.hypot(c.vx||0,c.vy||0)||1, dx=d.x-c.x, dy=d.y-c.y, dl=Math.hypot(dx,dy)||1;
+      if(((c.vx||0)*dx+(c.vy||0)*dy)/(sp*dl) > -0.25){ p+=0.40; stiff=true; } }
+    if(Math.random() >= Math.max(0.02,Math.min(stiff?0.64:0.34,p))) return false;
     c.brkN++; c.brkCd=0.7;
     d.whiff=0.75; d.blocked=0;                      // he is beaten, and has to recover
-    SFX.tackle(); G.shake=Math.max(G.shake||0,0.09);
-    setMsg(G.offense==='user'?'BROKE THE TACKLE!':'HE BREAKS FREE!',0.75);
+    if(stiff){ G.stiffT=0; d.whiff=1.0; const a=Math.atan2(d.y-c.y,d.x-c.x); d.x+=Math.cos(a)*yd(0.9); d.y+=Math.sin(a)*yd(0.9); }
+    SFX.tackle(); G.shake=Math.max(G.shake||0,stiff?0.14:0.09);
+    setMsg(stiff?'STIFF ARM!':G.offense==='user'?'BROKE THE TACKLE!':'HE BREAKS FREE!',0.75);
     if(G.offense==='user') crowdSwell(crowdBase+0.16,1.3);
     return true;
   }
@@ -2038,6 +2128,7 @@
 
   function updateDrop(dt,elapsed){
     const c=G.carrier;
+    tickWindup(dt);
     if(G.offense==='user'){
       // The QB takes his drop automatically for the first ~0.75s (like every football
       // game does) — otherwise he stands flat-footed at the snap and gets buried.
@@ -2176,10 +2267,12 @@
     endPlay((G.offense==='user'?'SACKED':'SACK!')+by, G.carrier.x);
   }
 
-  function throwBall(){
+  function throwBall(kind){
     if(G.passState!=='drop') return;
     const r=G.receivers[G.sel]; if(!r) return; const qb=G.carrier;
-    const dur=Math.max(0.3,Math.min(1.5,dist(qb,r)/S.throwSpd));
+    kind=kind||'auto'; G.windup=null;
+    const spd=S.throwSpd*(kind==='bullet'?1.22:kind==='touch'?0.86:1);
+    const dur=Math.max(0.3,Math.min(kind==='touch'?1.9:1.5,dist(qb,r)/spd));
     // lead the receiver to where he will actually be
     let tx=r.x+r.vx*dur, ty=r.y+r.vy*dur;
     // Madden-ish ball placement: throwing under pressure, or deep, costs accuracy
@@ -2188,10 +2281,12 @@
     const deep=Math.min(1, dist(qb,r)/yd(35));
     // a deep ball is thrown with far less margin: the error grows with the square of
     // the distance, so a 40-yard throw lands a yard or two off where a 10-yarder is on it
-    const err=yd(0.35)*pressure*2.2 + yd(0.30)*deep + yd(1.1)*deep*deep;
+    // (touch is thrown with more margin deep; a bullet with less)
+    const err=(yd(0.35)*pressure*2.2 + yd(0.30)*deep + yd(1.1)*deep*deep)*(kind==='touch'?0.85:kind==='bullet'?1.12:1);
     tx += (Math.random()*2-1)*err; ty += (Math.random()*2-1)*err;
     ty=Math.max(fieldTop,Math.min(fieldBot,ty));
-    G.ball={active:true,x:qb.x,y:qb.y,fromX:qb.x,fromY:qb.y,tx,ty,t:0,dur,rec:r};
+    G.ball={active:true,x:qb.x,y:qb.y,fromX:qb.x,fromY:qb.y,tx,ty,t:0,dur,rec:r,kind,arcK:kind==='bullet'?0.5:kind==='touch'?1.75:1};
+    if(G.offense==='user' && kind!=='auto') document.getElementById('spinpip').textContent=kind==='bullet'?'BULLET':'TOUCH';
     G.passState='air'; G.throwT=0.42; SFX.throw();
     if(pressure>0.55) say(pick(["He gets it off under heavy pressure!","Throwing off his back foot!","Hurried throw — he had a man in his face!"]));
   }
@@ -2201,13 +2296,15 @@
     passBlocks(dt);
     stepDefenders(dt,'air'); // movement only (tackle n/a while ball in air toward spot)
     G.cam+=(clampCam(b.x)-G.cam)*Math.min(1,dt*6);
+    if(laneCheck()) return;
     if(p>=1) resolveCatch();
   }
   function mirrorEnt(e){ if(!e) return; e.x=WORLD_W-e.x; e.vx=-(e.vx||0); }
-  function liveInterception(){
+  function liveInterception(by){
     const pt={x:G.ball.tx,y:G.ball.ty};
-    let pick=null,pd=1e9; for(const d of G.defenders){ if(d.job==='rush'||d.fill) continue; const dd=dist(d,pt); if(dd<pd){pd=dd;pick=d;} }
+    let pick=by||null,pd=by?0:1e9; if(!by) for(const d of G.defenders){ if(d.job==='rush'||d.fill) continue; const dd=dist(d,pt); if(dd<pd){pd=dd;pick=d;} }
     if(!pick) for(const d of G.defenders){ if(d.job==='rush') continue; const dd=dist(d,pt); if(dd<pd){pd=dd;pick=d;} }
+    if(pick===G.userDef && G.offense==='cpu'){ SFX.roar&&SFX.roar(); }
     if(!pick) return endPlay('INTERCEPTED', G.ball.tx, true);
     if(G.stats && !G.conv){ const st=G.stats[G.offense]; st.passAtt++; st.ints++; statP(other(G.offense),pick.n).ints++; }
     G.ball.active=false;
@@ -2251,6 +2348,12 @@
       pInt   *= 1 + Math.max(0, Math.min(1.6, (airY-8)*0.06));
       pCatch *= 1 - Math.min(0.45, (rd/PPY)*0.15);
     }
+    // your defender went up for it as it arrived
+    const ud=G.offense==='cpu'?G.userDef:null;
+    if(ud && !overthrown && (ud.swatT||0)>0){ const dd=dist(ud,pt)/PPY;
+      if(dd<1.9){ const k=1-dd/1.9, r2=Math.random();
+        if(r2<0.10+0.24*k){ if(G.conv){ setMsg('PICKED OFF — NO GOOD',1.3); SFX.whistle(); G.conv=null;G.twoPt=false;G._td=true;G._turn=false;G._fg=false;G.phase='dead';G.deadT=1.1; return; } return liveInterception(ud); }
+        if(r2<0.40+0.54*k){ endPlay('INCOMPLETE', G.los); setMsg('SWATTED AWAY!',1.1); SFX.tackle(); return; } } }
     const roll=Math.random();
     if(roll<pInt){ if(G.conv){ setMsg('PICKED OFF — NO GOOD',1.3); SFX.whistle(); G.conv=null;G.twoPt=false;G._td=true;G._turn=false;G._fg=false;G.phase='dead';G.deadT=1.1; return; } return liveInterception(); }
     if(roll<pInt+pCatch){
@@ -2361,7 +2464,8 @@
       if(ub){ moveEntity(ub,dt,S.blocker*1.25,S.blocker*1.55); cpuRunAI(c,dt);   // you block; runner is AI
         ub.y=Math.max(fieldTop,Math.min(fieldBot,ub.y));
         for(const d of G.defenders){ if(dist(d,ub)<S.blockR){ d.blocked=0.2; const a=Math.atan2(d.y-ub.y,d.x-ub.x); d.x+=Math.cos(a)*S.def*0.5*dt; d.y+=Math.sin(a)*S.def*0.5*dt; } }
-      } else moveEntity(c,dt,S.carrier,S.sprint);
+      } else if(G.diveC){ if(diveStep(c,dt)) return; }
+      else moveEntity(c,dt,S.carrier,S.sprint);
     }
     else cpuRunAI(c,dt);
     if(Math.hypot(c.vx,c.vy) > S.carrier*1.03){ G.trail.push({x:c.x,y:c.y}); if(G.trail.length>9) G.trail.shift(); }
@@ -2558,7 +2662,7 @@
       else if(reason!=='INCOMPLETE' && Math.random()<0.008) throwFlag('facemask', spot);
     }
     recordPlay(reason, spot);
-    if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT' && reason!=='FAIR CATCH' && reason!=='KNEEL'){
+    if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT' && reason!=='FAIR CATCH' && reason!=='KNEEL' && reason!=='DIVES' && reason!=='SLIDES'){
       // hit impact scales with how fast he was going when he got hit
       const cvx=G.carrier.vx||0, cvy=G.carrier.vy||0, hitSp=Math.hypot(cvx,cvy)/PPY;
       spawnBurst(G.carrier.x,G.carrier.y,'#fff5d6', 12+Math.round(hitSp*1.6), hitSp>6);
@@ -2820,6 +2924,15 @@
     next_btn.style.display=(G.offense==='user'&&G.phase==='live'&&G.playType==='pass'&&G.passState==='drop')?'flex':'none';
     const jl = G.phase!=='live' ? '' : G.offense==='cpu' ? ((G.userDef&&(G.userDef.blocked||0)>0)?'RIP':'DIVE') : 'JUKE';
     if(juke_btn.textContent!==jl){ juke_btn.textContent=jl; juke_btn.style.display=jl?'flex':'none'; }
+    // one context button: stiff arm in the open field, dive at the sticks or the goal
+    // line, slide for a quarterback, and on defense go up for a ball in the air
+    let m2='';
+    if(G.phase==='live'){
+      if(G.offense==='cpu'){ if(G.passState==='air') m2='SWAT'; }
+      else if(G.carrier && !G.ctrlBlocker && !(G.playType==='pass'&&G.passState==='drop') && !G.handoff){
+        const c=G.carrier, toSticks=(G.firstX-c.x)/PPY, toGoal=(GOAL_X-c.x)/PPY;
+        m2 = c.role==='qb' ? 'SLIDE' : ((toSticks<2.5&&toSticks>-0.3&&!G._returning)||toGoal<3) ? 'DIVE' : 'STIFF'; } }
+    if(move2_btn.textContent!==m2){ move2_btn.textContent=m2; move2_btn.style.display=m2?'flex':'none'; }
   }
 
   // ---- 3D rendering (three.js r128) ----
@@ -3788,12 +3901,15 @@
         }
         else if(live && !G._koFlight){
           if(isCarrier){
-            if(role==='QB' && G.playType==='pass' && G.passState==='drop'){
+            if(role==='QB' && G.playType==='pass' && G.passState==='drop' && G.windup && live){
+              want='throw'; face=Math.PI/2; P.k=0.22*Math.min(1,G.windup.t/BULLET_T); }             // cocking it
+            else if(role==='QB' && G.playType==='pass' && G.passState==='drop'){
               if(spy>2.8 && (e.vx||0)>-PPY*0.5) want='carry';                 // scrambling
               else if(spy>1.1 && (e.vx||0)<0){ want='qbDrop'; face=Math.PI/2; }
               else { want='qbSet'; face=Math.PI/2; }
             } else if(role==='QB' && (G.throwT||0)>0){ want='throw'; face=Math.PI/2; P.k=0.22+0.78*(1-Math.max(0,Math.min(1,G.throwT/0.42))); }
             else if(role==='QB' && G.passState==='air'){ want='idle'; face=Math.PI/2; if(G.ball&&G.ball.active) P.lookT=_look.set(WX(G.ball.x),1.5,WZ(G.ball.y)); }
+            else if(G.diveC && live){ want='dive'; pitchTo=G.diveC.slide?-1.0:1.36; }
             else if((u.secureT||0)>0){ u.secureT-=lastDt; want='catchSecure'; }
             else if(G.handoff && e!==G.runQB && role!=='QB'){ want='carry'; P.pocket=1; }
             else {
@@ -3804,6 +3920,7 @@
               if(nearD && nd<yd(2.4) && !(u.spinT>0)){ const h=g.rotation.y, lx=Math.cos(h), lz=-Math.sin(h);
                 const dx=WX(nearD.x)-WX(e.x), dz=WZ(nearD.y)-WZ(e.y), onLeft=(dx*lx+dz*lz)>0, free=P.ballArm==='L'?'R':'L';
                 if((onLeft?'L':'R')===free){ tgt=1; P.stiffArm=free; } }
+              if(live && (G.stiffT||0)>0 && G.offense==='user'){ tgt=1; P.stiffArm=P.ballArm==='L'?'R':'L'; }   // stiff arm on the button
               u.stiffW=(u.stiffW||0)+(tgt-(u.stiffW||0))*Math.min(1,lastDt*9); P.stiff=u.stiffW;
             }
           }
@@ -3833,7 +3950,8 @@
               if(G.passState==='air' && b && b.active && b.rec===e) P.lookT=_look.set(WX(b.x),1.6,WZ(b.y)); }
           }
           else if(o.def){
-            if((e.diveT||0)>0){ want='dive'; pitchTo=1.25; }
+            if((e.diveT||0)>0){ want='dive'; pitchTo=1.36; }
+            else if(live && e===G.userDef && (e.swatT||0)>0 && G.ball && G.ball.active){ want='reach'; reachFor(e,P,1); P.high=1; }
             else {
               u.engW=Math.max(0,Math.min(1,(u.engW||0)+(((e.blocked||0)>0)?lastDt*10:-lastDt*5)));
               let nb=null, nbd=1e9; if(u.engW>0.3) for(const b of G.blockers){ if(b.noblock) continue; const dd=dist(b,e); if(dd<nbd){nbd=dd;nb=b;} }
@@ -3962,7 +4080,9 @@
           const rz = goingDown ? ((u.fallRoll||0)+(u.fallLean||0)) : 0;
           u.fallZ = (u.fallZ||0) + (rz-(u.fallZ||0))*rate;
           if(goingDown || Math.abs(u.fallZ)>0.004) u.model.rotation.z = u.fallZ;
-          const drop = want==='dive' ? 0.55 : goingDown ? (isCarrier?0.62:0.34)*(u.fallMul||1) : 0;
+          // A dive pitches the whole body over the feet, which already lays it on the
+          // turf; the 0.55 drop the tackles use buried every diver up to his ankles.
+          const drop = want==='dive' ? 0.02 : goingDown ? (isCarrier?0.62:0.34)*(u.fallMul||1) : 0;
           u.fall = (u.fall||0) + (drop-(u.fall||0))*rate;
         } else u.fall=0;
         g.position.y = bob - Math.abs(u.bank)*0.22 - (u.fall||0);
@@ -4004,7 +4124,7 @@
         h = 1+Math.sin(t*Math.PI*k)*a; dh = Math.PI*k*Math.cos(t*Math.PI*k)*a; }
       else { // pass: leaves the QB's hand, arrives at chest height, arc scaled to the throw
         const dyd=Math.hypot(G.ball.tx-G.ball.fromX, G.ball.ty-G.ball.fromY)/PPY;
-        const arc=Math.min(6.0, 0.7+dyd*0.155);
+        const arc=Math.min(6.0, 0.7+dyd*0.155)*(G.ball.arcK||1);
         h  = 1.75 + (1.30-1.75)*t + Math.sin(t*Math.PI)*arc;
         dh = (1.30-1.75) + Math.PI*Math.cos(t*Math.PI)*arc; }
       ballMesh.position.set(WX(G.ball.x),h,WZ(G.ball.y));
