@@ -138,6 +138,10 @@
   .padps #rlabels .rl.g0{background:#8fb4ff;} .padps #rlabels .rl.g1{background:#ff6b6b;} .padps #rlabels .rl.g2{background:#f59bd6;} .padps #rlabels .rl.g3{background:#5fe0b5;}
   #rlabels .rl.sel{box-shadow:0 0 0 3px var(--gold),0 1px 4px rgba(0,0,0,.5);}
   #pause{z-index:20;}
+  #tip{position:absolute; left:50%; top:21%; transform:translateX(-50%); z-index:9; max-width:min(560px,90%); padding:8px 14px 8px 12px; border-radius:9px;
+    background:rgba(8,14,24,.9); border:1px solid #2c3e57; border-left:4px solid var(--gold); color:#dfe8f5; font:500 13px/1.5 'Oswald',sans-serif; letter-spacing:.02em;
+    box-shadow:0 10px 30px rgba(0,0,0,.45); opacity:0; transition:opacity .25s; pointer-events:none;}
+  #tip.show{opacity:1;} #tip b{color:var(--gold); font-weight:600;} #tip .tt{display:block; font:600 10px 'Oswald',sans-serif; letter-spacing:.2em; color:var(--muted); margin-bottom:2px;}
   #intro{position:absolute; left:50%; top:30%; transform:translate(-50%,-50%); z-index:8; min-width:min(560px,92%); text-align:center; pointer-events:none;
     background:linear-gradient(180deg,rgba(10,16,26,.9),rgba(6,10,16,.84)); border:1px solid #2c3e57; border-radius:14px; padding:14px 22px 12px; box-shadow:0 18px 50px rgba(0,0,0,.55);
     opacity:0; transition:opacity .35s, transform .35s;}
@@ -290,6 +294,7 @@
 
     <div id="poss"></div>
     <div id="intro" class="hidden"></div>
+    <div id="tip"></div>
     <div id="replay"><i></i>INSTANT REPLAY</div>
     <div id="fstog" title="Fullscreen (F)">⛶</div>
     <div id="qtog" title="Graphics quality">◆ ULTRA</div>
@@ -589,6 +594,45 @@
   function tag(team, n){ const m=manOn(team,n); return m? ('#'+n+' '+m.initial+'. '+m.name) : ('#'+n); }
   function defenderTag(n){ return tag(other(G.offense), n); }
 
+  // ---- coach tips: the first time each situation comes up, what the buttons do ----
+  // Shown once per device (localStorage gb_tips) and worded for what you are playing
+  // with: keyboard, controller or touch. Nothing else in the game explains the controls
+  // at the moment you need them; the list on the start screen is folded away.
+  let _tipsSeen=null, _tipT=null;
+  function tipsSeen(){ if(_tipsSeen) return _tipsSeen; try{ _tipsSeen=JSON.parse(localStorage.getItem('gb_tips')||'{}')||{}; }catch(e){ _tipsSeen={}; } return _tipsSeen; }
+  function tip(key){
+    if((typeof window!=='undefined' && window.__gbNoTips) || TWO_P) return;   // two players get both players' controls up front instead
+    const seen=tipsSeen(); if(seen[key]) return;
+    const dev = PAD.used ? 'pad' : lastInput==='touch' ? 'touch' : 'key', g=(b)=>gb(b), T=TIPS[key]; if(!T) return;
+    const html=T[dev]||T.key; if(!html) return;
+    seen[key]=1; try{ localStorage.setItem('gb_tips', JSON.stringify(seen)); }catch(e){}
+    const el=document.getElementById('tip'); if(!el) return;
+    el.innerHTML='<span class="tt">COACH</span>'+(typeof html==='function'?html(g):html); el.classList.add('show');
+    clearTimeout(_tipT); _tipT=setTimeout(()=>el.classList.remove('show'), 7000);
+  }
+  const TIPS={
+    kr:{ key:'Kick return: <b>↑ / W</b> runs up the field, <b>← →</b> cut, hold <b>Shift</b> to sprint. The yellow ring is where it comes down.',
+         pad:g=>'Kick return: the <b>left stick</b> runs, hold '+g(PB.RT)+' to sprint. The yellow ring is where it comes down.',
+         touch:'Kick return: drag on the left side to run, hold <b>SPRINT</b>. The yellow ring is where it comes down.' },
+    playcall:{ key:'Call a play: <b>← →</b> change formation, <b>1–9</b> call it (or click a card). Green plays run, blue plays pass.',
+         pad:g=>'Call a play: the stick moves the cursor, '+g(PB.A)+' calls it, '+g(PB.LB)+g(PB.RB)+' change formation.',
+         touch:'Call a play: tap a formation tab, then a play. Green plays run, blue plays pass.' },
+    pass:{ key:'A pass: <b>Space</b> snaps. Each receiver wears a number — press it to pick him, then <b>tap Space</b> for a lofted touch pass or <b>hold it</b> for a bullet.',
+         pad:g=>'A pass: '+g(PB.A)+' snaps. Each receiver wears the button that throws to him — <b>tap</b> for a touch pass, <b>hold</b> for a bullet.',
+         touch:'A pass: tap <b>HIKE</b>, then <b>THROW</b> goes to the gold receiver (<b>REC ▸</b> picks another). Tap for touch, hold for a bullet.' },
+    run:{ key:'A run: <b>Space</b> snaps, then follow your blockers. <b>Q/E</b> juke, <b>R</b> stiff arm, <b>Z</b> dive for the last yard, <b>Space</b> spins.',
+         pad:g=>'A run: '+g(PB.A)+' snaps. '+g(PB.X)+' jukes, '+g(PB.B)+' stiff arm, '+g(PB.Y)+' dive, '+g(PB.RT)+' sprint.',
+         touch:'A run: tap <b>HIKE</b>, drag to run. <b>JUKE</b> cuts, <b>STIFF</b> / <b>DIVE</b> appear when they help.' },
+    defense:{ key:'Defense: you play the man with the gold ring. Run him at the ball; <b>Space</b> switches to whoever is closest, <b>Q/E</b> dives for the tackle, <b>R</b> goes up for a pass.',
+         pad:g=>'Defense: you play the man with the gold ring. '+g(PB.B)+' switches, '+g(PB.X)+' dives, '+g(PB.Y)+' goes up for a pass.',
+         touch:'Defense: drag to steer the man with the gold ring. <b>SWITCH</b> takes the closest man, <b>DIVE</b> lunges for the tackle.' },
+    defcall:{ key:'Pick a coverage with <b>1–6</b> (or click). <b>Blitz</b> sends extra rushers; <b>Prevent</b> keeps it in front of you.',
+         pad:g=>'Pick a coverage: move the cursor, '+g(PB.A)+' calls it. Blitz sends extra rushers; Prevent keeps it in front of you.',
+         touch:'Tap a coverage. Blitz sends extra rushers; Prevent keeps it in front of you.' },
+    fg:{ key:'Kicking: press <b>Space</b> to stop the power bar past the white line, then again to stop the aim inside the green.',
+         pad:g=>'Kicking: '+g(PB.A)+' stops the power bar past the white line, then the aim inside the green.',
+         touch:'Kicking: tap to stop the power bar past the white line, then tap to stop the aim inside the green.' },
+  };
   // ---- the broadcast open: a flyover of the stadium, the matchup, the coin toss ----
   const INTRO_T=5.4;
   function hexCss(h){ return '#'+('000000'+(h>>>0).toString(16)).slice(-6); }
@@ -857,14 +901,14 @@
     // inside the five, open on the goal-line package
     if((GOAL_X-G.los)/PPY<=3 && pcForm!=='goal') pcForm='goal';
     buildPlayCall(); pcSpecials();
-    document.getElementById('playcall').classList.remove('hidden');
+    document.getElementById('playcall').classList.remove('hidden'); tip('playcall');
   }
   function choosePlay(id){
     document.getElementById('playcall').classList.add('hidden'); closeAudible();
     if(id==='punt'){ userPunt(); return; }
     if(id==='fg'){ if(G.convChoice){ G.convChoice=false; G.conv=null; startKick('pat'); return; } startFG(); return; }
     if(G.convChoice){ G.convChoice=false; G.twoPt=true; setupPlay(id); G.phase='presnap'; const p=PLAYS[id]; setMsg('GO FOR 2'+(TWO_P?'':' — '+p.label),1.2); if(TWO_P) showDefCall(); return; }
-    setupPlay(id); G.phase='presnap';
+    setupPlay(id); G.phase='presnap'; tip(PLAYS[id] && PLAYS[id].kind==='pass' ? 'pass' : 'run');
     // two players on one screen: never name the play, and let the other side call its D
     const p=PLAYS[id]; if(TWO_P){ setMsg(tname(G.offense)+' IS SET',1.0); showDefCall(); return; }
     setMsg(p.label+(PAD.used?'':' — '+hintThrow(p.kind==='pass')),1.1);
@@ -904,7 +948,7 @@
   }
   function showDefCall(){
     const h=document.getElementById('dc-head'); if(h) h.textContent=(TWO_P?tname(other(G.offense))+' DEFENSE — ':'')+(G.front==='goal'?'GOAL LINE':G.front==='base'?'BASE 4-3':(G.front||'').toUpperCase())+' vs '+((FORMS[G.form]||{}).label||'');
-    document.getElementById('defcall').classList.remove('hidden');
+    document.getElementById('defcall').classList.remove('hidden'); tip('defcall');
     if(TWO_P){ G.needDef=true; G.defChosen=null; }
   }
   function chooseDef(call){
@@ -2120,6 +2164,7 @@
   function update(dt){
     updateFx(dt);
     if(G.phase==='intro'){ introTick(dt); syncHUD(); return; }
+    if(G.phase==='live'){ if(G._koFlight && humanOff() && !G.fairCatch) tip('kr'); else if(!G._koFlight && humanDef() && G.playType && !G._returning) tip('defense'); }
     if(G.phase==='playcall'){ syncHUD(); return; }
     if(G.phase==='fg'){ updateFG(dt); return; }
 
@@ -3137,7 +3182,7 @@
     const fy = kind==='pat'? 33 : fgYards(); G.phase='fg'; buildFGFormation();
     const req = kind==='pat'? 42 : Math.max(30,Math.min(95,30+(fy-17)*1.45));
     const aimWin = kind==='pat'? 32 : Math.max(12,30-(fy-17)*0.32);
-    G.fg={stage:'power',power:0,pdir:1,aim:0,adir:1,req,lockedP:0,lockedA:0,res:null,t:0,fy,aimWin};
+    G.fg={stage:'power',power:0,pdir:1,aim:0,adir:1,req,lockedP:0,lockedA:0,res:null,t:0,fy,aimWin}; tip('fg');
     document.getElementById('fg-dist').textContent = kind==='pat'? 'EXTRA POINT' : fy+' yards';
     const h2=document.querySelector('#fg h2'); if(h2) h2.textContent = kind==='pat'?'EXTRA POINT':'FIELD GOAL';
     document.getElementById('pwr-req').style.left=req+'%';
@@ -5232,7 +5277,7 @@
   commBtn.addEventListener('click',()=>{ commOn=!commOn; commBtn.classList.toggle('off',!commOn); if(!commOn && typeof window!=='undefined' && window.speechSynthesis){ try{window.speechSynthesis.cancel();}catch(e){} } });
   cv.addEventListener('pointerdown',()=>{ audioInit(); document.getElementById('stage').focus(); });
 
-  window.__gbNoDraw=true; window.__gbRatings=window.__gbRatings||'neutral'; window.__gbWeather=window.__gbWeather||'clear'; window.__gbNoIntro=true; try{ window.AudioContext=undefined; window.webkitAudioContext=undefined; Object.defineProperty(window,'speechSynthesis',{value:undefined,configurable:true}); }catch(e){}
+  window.__gbNoDraw=true; window.__gbRatings=window.__gbRatings||'neutral'; window.__gbWeather=window.__gbWeather||'clear'; window.__gbNoIntro=true; window.__gbNoTips=true; try{ window.AudioContext=undefined; window.webkitAudioContext=undefined; Object.defineProperty(window,'speechSynthesis',{value:undefined,configurable:true}); }catch(e){}
   window.__sim={ get G(){return G;}, update, keys, choosePlay, action, snap, chooseDef,
     startFG, startKick, startKickoff, startConversion, fgLock, juke, spin, setupPlay, startPossession, endPlay, startPunt, callTimeout, throwBall, swatBall, stiffArm, carrierDive, releaseThrow, makeRoster, rateUp, get ready(){return playersReady;}, get pool(){return pPool;} };
   newGame(); G.phase='start';
