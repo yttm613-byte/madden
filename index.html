@@ -149,6 +149,16 @@
   #intro .sub{margin-top:9px; font:600 12px 'Oswald',sans-serif; letter-spacing:.18em; color:#b8c6da;}
   #intro .toss{margin-top:7px; min-height:1.4em; font-family:'Anton',sans-serif; font-size:clamp(15px,2.6vw,21px); letter-spacing:.05em; color:var(--gold);}
   #intro .skip{margin-top:4px; font-size:10px; letter-spacing:.16em; color:var(--muted); opacity:.8;}
+  #offseason{z-index:18; justify-content:flex-start; gap:8px; background:rgba(6,10,16,.96);}
+  #offseason .sec{width:100%; max-width:860px; text-align:left; font-size:12.5px; line-height:1.55; color:#cfe0f5;}
+  #offseason .sec h3{margin:6px 0 2px; font:600 11px 'Oswald',sans-serif; letter-spacing:.2em; color:var(--muted);}
+  #offseason .up{color:#9cff9c;} #offseason .dn{color:#ff9a8a;} #offseason b{color:#fff; font-weight:600;}
+  #offseason .pros{display:flex; flex-wrap:wrap; gap:8px; justify-content:center;}
+  #offseason .pro{width:132px; cursor:pointer; border:1px solid #2c3e57; border-radius:11px; padding:8px 7px; background:rgba(18,26,36,.92); text-align:center; font-size:11px; color:#b8c6da; user-select:none;}
+  #offseason .pro .pp{font:600 11px 'Oswald',sans-serif; letter-spacing:.16em; color:var(--muted);}
+  #offseason .pro .pn{font-size:13px; color:#fff; margin:2px 0;} #offseason .pro .po{font-family:'Anton',sans-serif; font-size:24px; color:var(--gold); line-height:1.1;}
+  #offseason .pro .pr{margin-top:3px;} #offseason .pro .pi{margin-top:4px; font-size:10.5px;}
+  #offseason .pro.on{border-color:#9cff9c; box-shadow:0 0 0 2px #9cff9c inset; background:rgba(30,60,40,.9);}
   #team{z-index:18; justify-content:flex-start; gap:10px; background:rgba(6,10,16,.96);}
   #team .cols{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; align-items:flex-start; width:100%;}
   #team table{border-collapse:collapse; font-size:12px; line-height:1.42; text-align:left;}
@@ -360,6 +370,12 @@
       </div>
       <div class="keys" id="p-help"></div>
     </div>
+    <div class="overlay hidden" id="offseason">
+      <h1 class="title" style="font-size:clamp(26px,5vw,42px)">OFFSEASON</h1>
+      <div class="keys" id="off-sub" style="margin:0;max-width:none"></div>
+      <div id="off-body" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:6px"></div>
+      <button class="btn" id="off-go">Start the season</button>
+    </div>
     <div class="overlay hidden" id="team">
       <h1 class="title" style="font-size:clamp(26px,5vw,42px)">YOUR TEAM</h1>
       <div class="keys" id="team-sub" style="margin:0;max-width:none"></div>
@@ -552,7 +568,8 @@
     return MYTEAM;
   }
   const _oppRosters={};
-  function oppRoster(o){ return _oppRosters[o.abbr] || (_oppRosters[o.abbr]=makeRoster(rng32(hashStr(o.abbr)), Math.round((o.str-0.5)*4))); }
+  function oppRoster(o){ const sn=(MYTEAM&&MYTEAM.seasonNo)||1, key=o.abbr+':'+sn;
+    return _oppRosters[key] || (_oppRosters[key]=makeRoster(rng32(hashStr(o.abbr)+sn*7919), Math.round((o.str-0.5)*4)+Math.min(8,(sn-1)*2))); }
   // points above his position's average in one rating (0 for a man we do not know)
   function rz(man,k){ if(!man) return 0; const m=POS_R[posOf(man.n)]||POS_R.DB; return (man[k]||m[RKEYS.indexOf(k)])-m[RKEYS.indexOf(k)]; }
   // Hand each man on the field his ratings: offense from the team with the ball, the
@@ -1684,6 +1701,7 @@
     const q=id=>document.getElementById(id);
     if(visible(q('pause'))) return [...q('pause').querySelectorAll('button')];
     if(visible(q('team'))) return [q('team-close')];
+    if(visible(q('offseason'))) return [...q('offseason').querySelectorAll('.pro'), q('off-go')];
     if(visible(q('start'))) return [...q('start').querySelectorAll('button.btn')].filter(e=>e.style.display!=='none');
     if(visible(q('over'))) return [...q('over').querySelectorAll('button.btn')].filter(e=>e.style.display!=='none');
     if(visible(q('audible'))) return [...q('audible').querySelectorAll('span')];
@@ -1694,7 +1712,7 @@
   // Two players: the play call and audibles are the offense's to drive, the coverage call
   // the defense's; the rest (start, pause, final) anyone's. One player: all of them yours.
   function menuOwner(){ if(!G||!TWO_P) return null; const q=id=>document.getElementById(id);
-    if(visible(q('pause'))||visible(q('team'))||visible(q('start'))||visible(q('over'))) return null;
+    if(visible(q('pause'))||visible(q('team'))||visible(q('offseason'))||visible(q('start'))||visible(q('over'))) return null;
     if(visible(q('audible'))||visible(q('playcall'))) return G.offense;
     if(visible(q('defcall'))) return other(G.offense);
     return null; }
@@ -4739,7 +4757,9 @@
   }
   function resetOverButtons(){ document.getElementById('again').textContent='Run it back'; document.getElementById('to-menu').style.display='none';
     const t=document.getElementById('over-team'); if(t) t.style.display='none'; }
-  function startSeason(){ let s=loadSeason(); if(!s || s.over){ s={results:[], over:false}; beginTeamSeason(); } SEASON=s; saveSeason(); playSeasonGame(); }
+  function startSeason(){ let s=loadSeason();
+    if((!s || s.over) && myTeam().offseasonDue){ document.getElementById('start').classList.add('hidden'); showOffseason(startSeason); return; }
+    if(!s || s.over){ s={results:[], over:false}; beginTeamSeason(); } SEASON=s; saveSeason(); playSeasonGame(); }
   function playSeasonGame(){
     const s=SEASON, o=seasonOpp(s), wk=s.results.length, title=wk>=REG_WEEKS;
     applyOpponent(o);
@@ -4778,6 +4798,80 @@
     if(st.passAtt>=10 && (st.sacked||0)<=1) up(any([60,64,66,72,76]),'str','kept the pocket clean');
     saveTeam(); return out;
   }
+  // ---- the offseason: a year older, the old guard retires, the kids get better, a draft ----
+  // Without it your men only ever improved and the league stood still: two or three
+  // seasons in, your team outclassed everyone. Now each new season the league gets
+  // better too (see oppRoster), veterans lose a step, and the draft is how you keep up.
+  function ensureAges(T){ for(const k in T.roster){ const m=T.roster[k]; if(m.age==null) m.age=22+Math.floor(Math.random()*6+Math.random()*6); } }
+  const RI=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+  // Rookies and prospects draw from a wider pool than the original rosters (which use
+  // every one of SURNAMES), and never share a name with anyone on the team or in this draft.
+  const NEW_NAMES=['ADEYEMI','BARKLEY','CASTILLO','DOUGLAS','EMERSON','FLETCHER','GRAVES','HAYWOOD','IRVING','JEFFERSON',
+    'KINCAID','LANGSTON','MCCRAY','NWOSU','OSBORNE','PRESCOTT','RAMSEY','SUTTON','THORNTON','UPSHAW','VARGAS','WALLACE',
+    'YOUNGBLOOD','ZELLER','BRISCOE','CARVER','DUNLAP','ELLINGTON','FORBES','GAINES','HOLLOWAY','JENNINGS','KEMP','LOCKHART',
+    'MAYFIELD','NORWOOD','OKONKWO','PENNINGTON','QUARLES','RHODES','SIMMS','TOLIVER','UNDERWOOD','VICK','WINSLOW'];
+  let _draftNames=new Set();
+  function freshName(T){ const used=new Set([...Object.values(T.roster).map(m=>m.name), ..._draftNames]);
+    const pool=[...SURNAMES, ...NEW_NAMES].filter(n=>!used.has(n));
+    const nm = pool.length ? pool[(Math.random()*pool.length)|0] : NEW_NAMES[(Math.random()*NEW_NAMES.length)|0];
+    _draftNames.add(nm); return nm; }
+  function makeRookie(T, n, shift){ const man={ n, name:freshName(T), initial:INITIALS[(Math.random()*INITIALS.length)|0], pos:posFor(n), age:RI(21,22) };
+    Object.assign(man, genRatings(n, Math.random, shift)); man.ovr=ovrOf(man); return man; }
+  const STARTERS=()=>UNITS.flatMap(([pos,ns])=>ns.map(n=>({pos,n})));
+  function runOffseason(){
+    const T=myTeam(); ensureAges(T); _draftNames=new Set();
+    const R=T.roster, rep={retired:[], up:[], down:[]}, starters=new Set(STARTERS().map(x=>x.n)), label={}; for(const x of STARTERS()) label[x.n]=x.pos;
+    for(const k in R){ const m=R[k], n=+k; m.age++;
+      const keys=POS_KEYS[posOf(n)]||['spd','tkl'], a=m.age;
+      const d = a<=23?[1,3] : a<=26?[0,2] : a<=29?[0,1] : a<=31?[-2,0] : [-3,-1];
+      const before={}; for(const x of RKEYS) before[x]=m[x];
+      for(const x of keys) m[x]=Math.max(40,Math.min(99,m[x]+RI(d[0],d[1])));
+      if(a>=30) m.spd=Math.max(40,m.spd-RI(1,2));                       // the first thing to go
+      const o0=m.ovr; m.ovr=ovrOf(m);
+      // a veteran calls it a career; a rookie takes his number
+      if(a>=33 && (a>=36 || Math.random()<0.3+0.2*(a-33))){
+        const nm=makeRookie(T, n, -2); if(starters.has(n)) rep.retired.push({n, pos:label[n]||posOf(n), name:m.initial+'. '+m.name, age:a, ovr:m.ovr, by:nm.initial+'. '+nm.name, byOvr:nm.ovr});
+        R[k]=nm; continue; }
+      if(starters.has(n) && m.ovr!==o0){ const ch=RKEYS.filter(x=>m[x]!==before[x]).map(x=>RLABEL[x]+' '+before[x]+'→'+m[x]).join(', ');
+        (m.ovr>o0?rep.up:rep.down).push({n, name:m.initial+'. '+m.name, age:a, d:m.ovr-o0, ch}); }
+    }
+    rep.up.sort((x,y)=>y.d-x.d); rep.down.sort((x,y)=>x.d-y.d);
+    // six prospects, at the positions the team plays
+    const pool=STARTERS(), pros=[];
+    for(let i=0;i<6;i++){ const st=pool[(Math.random()*pool.length)|0], man=makeRookie(T, st.n, RI(0,6));
+      pros.push({pos:st.pos, n:st.n, man}); }
+    return {rep, pros};
+  }
+  // who a prospect would replace: the weakest starter at his position
+  function draftTarget(T, pos){ const u=UNITS.find(x=>x[0]===pos); let w=null; for(const n of u[1]){ const m=T.roster[n]; if(m && (!w || m.ovr<T.roster[w].ovr)) w=n; } return w; }
+  let _offDone=null, _offPros=[], _offPicks=new Set();
+  function showOffseason(done){
+    const T=myTeam(), o=runOffseason(); _offDone=done; _offPros=o.pros; _offPicks=new Set(); saveTeam();
+    const h=(T.history||[]).slice(-1)[0];
+    document.getElementById('off-sub').textContent='Season '+(T.seasonNo||1)+(h?' ended '+h.w+'–'+h.l+(h.t?'–'+h.t:'')+(h.champ?' — champions!':''):'')+' · everyone is a year older · the league got better too';
+    const R=T.roster, line=x=>'#'+x.n+' <b>'+x.name+'</b> ('+x.age+'): '+x.ch;
+    const ret=o.rep.retired.length ? o.rep.retired.map(x=>'#'+x.n+' <b>'+x.name+'</b> ('+x.pos+', '+x.age+', '+x.ovr+') retires — rookie <b>'+x.by+'</b> ('+x.byOvr+') takes his place').join('<br>') : 'Nobody retires this year.';
+    const cards=o.pros.map((p,i)=>{ const tgt=draftTarget(T,p.pos), cur=R[tgt], diff=p.man.ovr-cur.ovr, k=POS_KEYS[posOf(p.n)]||['spd','tkl'];
+      return '<div class="pro" data-i="'+i+'"><div class="pp">'+p.pos+' · AGE '+p.man.age+'</div><div class="pn">'+p.man.initial+'. '+p.man.name+'</div><div class="po">'+p.man.ovr+'</div>'
+        +'<div class="pr">'+k.map(x=>RLABEL[x]+' <b>'+p.man[x]+'</b>').join(' · ')+'</div>'
+        +'<div class="pi">replaces #'+tgt+' '+cur.name+' ('+cur.ovr+') <span class="'+(diff>=0?'up':'dn')+'">'+(diff>=0?'+':'')+diff+'</span></div></div>'; }).join('');
+    document.getElementById('off-body').innerHTML=
+      '<div class="sec"><h3>RETIREMENTS</h3>'+ret+'</div>'
+      +'<div class="sec"><h3>DEVELOPMENT</h3>'+(o.rep.up.slice(0,4).map(x=>'<span class="up">↑</span> '+line(x)).join('<br>')||'—')
+        +(o.rep.down.length?'<br>'+o.rep.down.slice(0,4).map(x=>'<span class="dn">↓</span> '+line(x)).join('<br>'):'')+'</div>'
+      +'<div class="sec" style="text-align:center"><h3>THE DRAFT — PICK TWO</h3><div class="pros">'+cards+'</div></div>';
+    offGoLabel(); document.getElementById('offseason').classList.remove('hidden');
+  }
+  function offGoLabel(){ const b=document.getElementById('off-go'), n=_offPicks.size; b.textContent = n<2 ? 'Draft '+(2-n)+' more · or start the season' : 'Start season '+((myTeam().seasonNo||1)+1); }
+  function finishOffseason(){
+    const T=myTeam(), taken=new Set();
+    for(const i of _offPicks){ const p=_offPros[i]; if(!p) continue; let tgt=draftTarget(T,p.pos);
+      if(taken.has(tgt)){ const u=UNITS.find(x=>x[0]===p.pos); tgt=u[1].filter(n=>!taken.has(n)).sort((a,b)=>T.roster[a].ovr-T.roster[b].ovr)[0]; }
+      if(tgt==null) continue; taken.add(tgt); const m=p.man; m.n=tgt; m.pos=posFor(tgt); m.ovr=ovrOf(m); T.roster[tgt]=m; }
+    T.offseasonDue=false; saveTeam();
+    document.getElementById('offseason').classList.add('hidden');
+    const f=_offDone; _offDone=null; if(f) f();
+  }
   // a fresh season: the same men, new numbers to chase
   function beginTeamSeason(){ const T=myTeam(); if(T.stats && Object.keys(T.stats).length){ T.seasonNo=(T.seasonNo||1)+1; } T.stats={}; T.gp=0; saveTeam(); }
   function progHTML(list){ if(!list.length) return '';
@@ -4797,7 +4891,7 @@
     const T=myTeam(), R=T.roster, S=T.stats||{};
     const table=(units,title)=>'<table><tr><th>'+title+'</th><th>NAME</th><th>OVR</th><th>RATINGS</th><th>SEASON</th></tr>'+units.map(([pos,ns])=>ns.map(n=>{
         const m=R[n]; if(!m) return ''; const k=POS_KEYS[posOf(n)]||['spd','tkl'], o=m.ovr;
-        return '<tr><td class="pos">'+pos+' <span style="color:#dfe8f5">'+n+'</span></td><td>'+m.initial+'. '+m.name+'</td><td class="ovr'+(o>=82?' hi':o<70?' lo':'')+'">'+o+'</td>'
+        return '<tr><td class="pos">'+pos+' <span style="color:#dfe8f5">'+n+'</span></td><td>'+m.initial+'. '+m.name+(m.age?' <span style="color:var(--muted);font-size:10.5px">'+m.age+'</span>':'')+'</td><td class="ovr'+(o>=82?' hi':o<70?' lo':'')+'">'+o+'</td>'
           +'<td>'+k.map(x=>'<span class="rt">'+RLABEL[x]+' <b>'+m[x]+'</b></span>').join('')+'</td><td class="st">'+statLine(n,S[n])+'</td></tr>'; }).join('')).join('')+'</table>';
     // leaders
     const lead=(k,f)=>{ let best=null,bv=0; for(const n in S){ const v=f(S[n]); if(v>bv){ bv=v; best=+n; } } return best!=null ? '<b>'+k+'</b> #'+best+' '+R[best].name+' '+Math.round(bv) : null; };
@@ -4806,7 +4900,7 @@
     return '<div class="cols">'+table(UNITS.slice(0,6),'OFFENSE')+table(UNITS.slice(6),'DEFENSE')+'</div>'
       +(L.length?'<div class="lead" style="margin-top:8px">Season leaders — '+L.join(' · ')+'</div>':'<div class="lead" style="margin-top:8px;opacity:.7">Play a season and your stat leaders show up here. Men who play well get better.</div>')
       +(hist?'<div class="lead" style="opacity:.8">'+hist+'</div>':''); }
-  function showTeam(){ const T=myTeam(), sp=SEASON||loadSeason();
+  function showTeam(){ const T=myTeam(), sp=SEASON||loadSeason(); ensureAges(T);
     document.getElementById('team-sub').textContent='Season '+(T.seasonNo||1)+(sp&&sp.results&&sp.results.length&&!sp.over?' · '+recStr(seasonRecord(sp))+' after '+sp.results.length+' game'+(sp.results.length>1?'s':''):'')+' · team rating '+teamOvr();
     document.getElementById('team-body').innerHTML=teamHTML();
     document.getElementById('team').classList.remove('hidden'); }
@@ -4823,7 +4917,7 @@
       else { s.over=true; line='Season over at '+recStr(r)+' — four wins get you to the title game.'; }
     } else { line='Record '+recStr(r)+' · next: the '+seasonOpp(s).name; next='NEXT GAME · WEEK '+(s.results.length+1); }
     saveSeason();
-    if(s.over){ const T=myTeam(); T.history=T.history||[]; T.history.push({season:T.seasonNo||1, w:r.w, l:r.l, t:r.t, title, champ:title&&u>c}); saveTeam(); }
+    if(s.over){ const T=myTeam(); T.history=T.history||[]; T.history.push({season:T.seasonNo||1, w:r.w, l:r.l, t:r.t, title, champ:title&&u>c}); T.offseasonDue=true; saveTeam(); }
     const sub=document.getElementById('final-sub');
     sub.innerHTML='<div style="margin:8px 0 2px;font-weight:600;font-size:15px">'+line+'</div>'+sub.innerHTML+progHTML(prog);
     document.getElementById('over-team').style.display='';
@@ -5051,7 +5145,8 @@
   document.getElementById('d-allpro').addEventListener('click',()=>startWith('allpro'));
   document.getElementById('again').addEventListener('click',()=>{
     if(TWO_P){ document.getElementById('over').classList.add('hidden'); startTwoPlayer(); return; }      // a rematch
-    if(SEASON){ if(SEASON.over){ SEASON={results:[], over:false}; saveSeason(); beginTeamSeason(); } playSeasonGame(); return; }
+    if(SEASON){ if(SEASON.over && myTeam().offseasonDue){ document.getElementById('over').classList.add('hidden'); showOffseason(()=>{ SEASON={results:[], over:false}; saveSeason(); beginTeamSeason(); playSeasonGame(); }); return; }
+      if(SEASON.over){ SEASON={results:[], over:false}; saveSeason(); beginTeamSeason(); } playSeasonGame(); return; }
     document.getElementById('over').classList.add('hidden'); document.getElementById('start').classList.remove('hidden'); seasonNote(); });
   document.getElementById('to-menu').addEventListener('click',()=>{ PRACTICE=false; setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons();
     document.getElementById('over').classList.add('hidden'); document.getElementById('start').classList.remove('hidden'); seasonNote(); });
@@ -5059,6 +5154,10 @@
   document.getElementById('d-practice').addEventListener('click',startPractice);
   document.getElementById('d-2p').addEventListener('click',startTwoPlayer);
   document.getElementById('d-team').addEventListener('click',showTeam);
+  document.getElementById('off-body').addEventListener('click',e=>{ const c=e.target.closest('.pro'); if(!c) return; const i=+c.dataset.i;
+    if(_offPicks.has(i)) _offPicks.delete(i); else if(_offPicks.size<2) _offPicks.add(i);
+    document.querySelectorAll('#offseason .pro').forEach(el=>el.classList.toggle('on', _offPicks.has(+el.dataset.i))); offGoLabel(); });
+  document.getElementById('off-go').addEventListener('click',finishOffseason);
   document.getElementById('over-team').addEventListener('click',showTeam);
   document.getElementById('team-close').addEventListener('click',()=>{ document.getElementById('team').classList.add('hidden'); teamNote(); });
   teamNote();
