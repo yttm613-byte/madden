@@ -3575,7 +3575,58 @@
   // is Mixamo-named with Mixamo bone frames, so applyPose below drives it unchanged.
   const SKIN_HEX=[0x3b2219,0x4d2c1c,0x5f3824,0x74462c,0x8c5a3a,0xa86f4c,0xc38c66,0xdcaa86,0xeec4a2];
   const SKIN_W  =[0.10,  0.13,  0.14,  0.14,  0.12,  0.10,  0.09,  0.10,  0.08];
-  const SHADOW_PARTS={Jersey:1,Pants:1,Skin:1,Helmet:1,Socks:1,Cleats:1,Gloves:1}, DETAIL_PARTS={Eyes:1,ChinStrap:1,NameBar:1,Visor:1};
+  const SHADOW_PARTS={Jersey:1,Pants:1,Skin:1,Helmet:1,Socks:1,Cleats:1,Gloves:1,LODBody:1}, DETAIL_PARTS={Eyes:1,ChinStrap:1,NameBar:1,Visor:1};
+  // How each part of the kit takes the light: roughness, metalness, environment intensity.
+  // The shell is glossy, but at envMapIntensity 1.9 + metalness 0.5 it mirrored the bright
+  // stadium and a BLACK helmet rendered silver. The team colour has to win.
+  const PART_RME={ Skin:[0.56,0,0.42], Eyes:[0.14,0,1.0], Jersey:[0.80,0,0.55], JerseyTrim:[0.72,0,0.55], Pants:[0.60,0,0.60],
+    Belt:[0.55,0,0.5], Socks:[0.90,0,0.45], Gloves:[0.55,0,0.6], Cleats:[0.42,0,0.8], ChinStrap:[0.45,0,0.6],
+    Helmet:[0.24,0.22,0.85], HelmetStripe:[0.26,0.22,0.85], Facemask:[0.50,0.15,0.40] };
+  // The light model draws every solid part of the kit as ONE mesh. Sixteen meshes a man
+  // were sixteen draw calls, and the light model is what most of the 22 men on screen
+  // wear: 450 draw calls a frame, which is what a phone chokes on, not the triangles.
+  // Each vertex knows its part (partId): the part's colour comes from a per-player
+  // uniform array, so team tints, skin tone, gloves and cleats all still work, and its
+  // roughness / metalness / environment strength ride along as a vertex attribute. The
+  // decals (numbers, name bar) and the see-through visor stay separate meshes.
+  const LOD_BODY_PARTS=Object.keys(PART_RME);
+  let _lodBody=null;
+  function lodBodyGeometry(lo){
+    if(_lodBody) return _lodBody;
+    const parts=[]; lo.scene.traverse(m=>{ if(m.isSkinnedMesh && m.material && PART_RME[m.material.name]) parts.push(m); });
+    if(!parts.length) return null;
+    parts.sort((a,b)=>LOD_BODY_PARTS.indexOf(a.material.name)-LOD_BODY_PARTS.indexOf(b.material.name));
+    let nv=0, ni=0; for(const m of parts){ nv+=m.geometry.attributes.position.count; ni+=m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count; }
+    if(nv>65535) return null;
+    const pos=new Float32Array(nv*3), nor=new Float32Array(nv*3), col=new Float32Array(nv*3), sw=new Float32Array(nv*4), si=new Uint16Array(nv*4),
+          mph=new Float32Array(nv*3), pid=new Float32Array(nv), rme=new Float32Array(nv*3), idx=new Uint16Array(ni);
+    let v0=0, i0=0;
+    for(const m of parts){ const g=m.geometry, A=g.attributes, n=A.position.count, k=LOD_BODY_PARTS.indexOf(m.material.name), R=PART_RME[m.material.name];
+      const put=(dst,attr,w,def)=>{ for(let v=0;v<n;v++) for(let c=0;c<w;c++) dst[(v0+v)*w+c] = attr ? attr.array[v*attr.itemSize+c] : def; };
+      put(pos,A.position,3,0); put(nor,A.normal,3,0); put(col,A.color,3,1); put(sw,A.skinWeight,4,0); put(si,A.skinIndex,4,0);
+      const mt=g.morphAttributes && g.morphAttributes.position && g.morphAttributes.position[0]; put(mph,mt,3,0);
+      for(let v=0;v<n;v++){ pid[v0+v]=k; rme[(v0+v)*3]=R[0]; rme[(v0+v)*3+1]=R[1]; rme[(v0+v)*3+2]=R[2]; }
+      if(g.index) for(let j=0;j<g.index.count;j++) idx[i0+j]=g.index.array[j]+v0; else for(let j=0;j<n;j++) idx[i0+j]=v0+j;
+      v0+=n; i0+=g.index ? g.index.count : n; }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+    geo.setAttribute('color',new THREE.BufferAttribute(col,3)); geo.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));
+    geo.setAttribute('skinIndex',new THREE.BufferAttribute(si,4)); geo.setAttribute('partId',new THREE.BufferAttribute(pid,1));
+    geo.setAttribute('partRME',new THREE.BufferAttribute(rme,3)); geo.setIndex(new THREE.BufferAttribute(idx,1));
+    geo.morphAttributes.position=[new THREE.BufferAttribute(mph,3)];
+    geo.morphTargetsRelative = parts.some(m=>m.geometry.morphTargetsRelative);
+    _lodBody={geo, src:parts[0]}; return _lodBody;
+  }
+  function lodBodyShader(sh, mat){
+    sh.uniforms.partColor=mat.userData.partColor;
+    sh.vertexShader='attribute float partId;\nattribute vec3 partRME;\nuniform vec3 partColor['+LOD_BODY_PARTS.length+'];\nvarying vec3 vPartColor;\nvarying vec3 vPartRME;\n'
+      + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvPartColor = partColor[ int( partId + 0.5 ) ];\n\tvPartRME = partRME;');
+    sh.fragmentShader='varying vec3 vPartColor;\nvarying vec3 vPartRME;\n'
+      + sh.fragmentShader.replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( vPartColor, opacity );')
+        .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vPartRME.x;')
+        .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vPartRME.y;')
+        .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replace(/envMapIntensity/g,'vPartRME.z'));
+  }
   // Which of a man's meshes are drawn and which cast shadows: full or light model
   // (u.lodOn), small details up close only (u.detailOn), shadows near the camera only.
   function playerVis(u){
@@ -3588,15 +3639,32 @@
   function attachLod(g, lo){
     const u=g.userData; if(!u || u.lod) return;
     const boneBy={}; u.model.traverse(o=>{ if(o.isBone) boneBy[o.name]=o; });
-    const lod=[];
+    const lod=[], body=lodBodyGeometry(lo);
+    let lsk=null;   // and one skeleton for all of his light-model meshes
+    const skelFor=m=>{ if(lsk) return lsk; const bones=m.skeleton.bones.map(b=>boneBy[b.name]); if(bones.some(b=>!b)) return null;
+      return (lsk=new THREE.Skeleton(bones, m.skeleton.boneInverses.map(x=>x.clone()))); };
+    if(body){ const m=body.src, hi=(u.parts[m.material.name]||[])[0], sk=skelFor(m);
+      if(hi && sk){
+        // his colours so far (skin tone, gloves, cleats; the team kit re-tints next frame),
+        // and a stand-in in u.mats for each part so every later tint lands in the array
+        const cols=LOD_BODY_PARTS.map(n=>{ const src=(u.mats[n]||[])[0]; return src ? src.color.clone() : new THREE.Color(1,1,1); });
+        const mat=new THREE.MeshStandardMaterial({vertexColors:true, skinning:true, morphTargets:true, roughness:1, metalness:0});
+        mat.name='LODBody'; mat.userData.partColor={value:cols}; mat.onBeforeCompile=sh=>lodBodyShader(sh,mat);
+        LOD_BODY_PARTS.forEach((n,i)=>{ (u.mats[n]=u.mats[n]||[]).push({color:cols[i]}); });
+        const lm=new THREE.SkinnedMesh(body.geo, mat); lm.name='LOD_Body'; lm.frustumCulled=false;
+        lm.position.copy(m.position); lm.quaternion.copy(m.quaternion); lm.scale.copy(m.scale);
+        hi.parent.add(lm); lm.bind(sk, m.bindMatrix.clone());
+        if(lm.morphTargetInfluences && lm.morphTargetInfluences.length){ u.morphs.push(lm); lm.morphTargetInfluences[0]=Math.max(0,u.heavy); }
+        lod.push(lm); } }
     lo.scene.traverse(m=>{ if(!m.isSkinnedMesh || !m.material) return;
       const name=m.material.name, hi=(u.parts[name]||[])[0], src=(u.mats[name]||[])[0]; if(!hi || !src) return;
-      const bones=m.skeleton.bones.map(b=>boneBy[b.name]); if(bones.some(b=>!b)) return;
+      if(body && lod.length && PART_RME[name]) return;          // drawn by the merged body
+      const sk=skelFor(m); if(!sk) return;
       const mat=src.clone(); mat.morphTargets=!!(m.geometry.morphAttributes && m.geometry.morphAttributes.position); mat.skinning=true;
       u.mats[name].push(mat);
       const lm=new THREE.SkinnedMesh(m.geometry, mat); lm.name='LOD_'+name; lm.frustumCulled=false; lm.renderOrder=hi.renderOrder;
       lm.position.copy(m.position); lm.quaternion.copy(m.quaternion); lm.scale.copy(m.scale);
-      hi.parent.add(lm); lm.bind(new THREE.Skeleton(bones, m.skeleton.boneInverses.map(x=>x.clone())), m.bindMatrix.clone());
+      hi.parent.add(lm); lm.bind(sk, m.bindMatrix.clone());
       if(lm.morphTargetInfluences && lm.morphTargetInfluences.length){ u.morphs.push(lm); lm.morphTargetInfluences[0]=Math.max(0,u.heavy); }
       lod.push(lm); });
     u.lod=lod; u.team=null; u.numKey=null; u.lodOn=undefined;   // re-tint and re-number on the next frame, and re-pick the model
@@ -3604,6 +3672,10 @@
   function makePlayer(){
     const grp=new THREE.Group();
     const model=THREE.SkeletonUtils.clone(playerProto.scene);
+    // One skeleton for all of his meshes. Cloned, every part carried its own copy of the
+    // same 65 bones, and three.js recomputes and re-uploads a skeleton's bone texture for
+    // each copy every frame: sixteen times a man, 300-odd times a frame.
+    { let sk=null; model.traverse(o=>{ if(!o.isSkinnedMesh) return; if(!sk) sk=o.skeleton; else if(o.skeleton.bones.length===sk.bones.length) o.bind(sk, o.bindMatrix); }); }
     const box=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(); box.getSize(sz);
     // scale to ~2 yards tall, with per-player size variants
     const vh=0.96+Math.random()*0.12, vg=1.04-(vh-0.96)*0.8;   // taller players a touch leaner
@@ -3623,13 +3695,7 @@
       o.castShadow=!!SHADOW_PARTS[n]; hiMeshes.push(o);
       (mats[n]=mats[n]||[]).push(o.material); (parts[n]=parts[n]||[]).push(o); });
     const each=(n,f)=>{ for(const m of (mats[n]||[])) f(m); };
-    const surf=(n,r,mt,env)=>each(n,m=>{ m.roughness=r; m.metalness=mt; m.envMapIntensity=env; });
-    surf('Skin',0.56,0,0.42); surf('Eyes',0.14,0,1.0);
-    surf('Jersey',0.80,0,0.55); surf('JerseyTrim',0.72,0,0.55); surf('Pants',0.60,0,0.60); surf('Belt',0.55,0,0.5);
-    surf('Socks',0.90,0,0.45); surf('Gloves',0.55,0,0.6); surf('Cleats',0.42,0,0.8); surf('ChinStrap',0.45,0,0.6);
-    // The shell is glossy, but at envMapIntensity 1.9 + metalness 0.5 it mirrored the
-    // bright stadium and a BLACK helmet rendered silver. The team colour has to win.
-    surf('Helmet',0.24,0.22,0.85); surf('HelmetStripe',0.26,0.22,0.85); surf('Facemask',0.50,0.15,0.40);
+    for(const [n,[r,mt,env]] of Object.entries(PART_RME)) each(n,m=>{ m.roughness=r; m.metalness=mt; m.envMapIntensity=env; });
     // number patches sit a millimetre off the jersey; polygon offset keeps them clean at range
     for(const n of ['Numbers','NameBar']) each(n,m=>{ m.roughness=0.7; m.metalness=0; m.envMapIntensity=0.5;
       m.polygonOffset=true; m.polygonOffsetFactor=-2; m.polygonOffsetUnits=-2; m.alphaTest=0.5; m.transparent=false; });
@@ -3652,12 +3718,9 @@
     if(cleatHex>=0) each('Cleats',m=>setSRGB(m,cleatHex));
     each('ChinStrap',m=>setSRGB(m,chinHex));
     // team ring (reliable team distinction at a glance)
-    const ring=new THREE.Mesh(new THREE.RingGeometry(0.66,0.92,28), new THREE.MeshBasicMaterial({color:0x3a86ff,transparent:true,opacity:0.55,side:THREE.DoubleSide,depthWrite:false,fog:false}));
-    ring.rotation.x=-Math.PI/2; ring.position.y=0.03; grp.add(ring);
-    if(!makePlayer._sh){ const c=document.createElement('canvas'); c.width=c.height=64; const cg=c.getContext('2d');
-      const gr=cg.createRadialGradient(32,32,2,32,32,30); gr.addColorStop(0,'rgba(0,0,0,0.5)'); gr.addColorStop(1,'rgba(0,0,0,0)');
-      cg.fillStyle=gr; cg.fillRect(0,0,64,64); makePlayer._sh=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,fog:false}); }
-    const blob=new THREE.Mesh(new THREE.CircleGeometry(0.62,18), makePlayer._sh); blob.rotation.x=-Math.PI/2; blob.position.y=0.02; grp.add(blob);
+    // (the ring and the soft shadow blob under him are drawn for everyone at once by
+    // groundMarks(); u.ring only holds whether his is showing and in which colour)
+    const ring={visible:false, material:{color:new THREE.Color(0x3a86ff)}};
     // idle: the model's own idle clip for standing players, desynced per player; the
     // procedural poses take over the moment they move
     let mixer=null, idleAct=null;
@@ -4346,6 +4409,33 @@
     const bar=_presnapBar||(_presnapBar=document.getElementById('presnap-bar'));
     if(bar){ const on=!repFrame && G.offense==='user' && G.phase==='presnap'; if(bar.classList.contains('hidden')===on) bar.classList.toggle('hidden',!on); }
   }
+  // Every man's team ring and shadow blob in two instanced draws. As a ring and a blob
+  // parented to each player they were 44 draw calls a frame for two flat circles apiece.
+  let ringsIM=null, blobsIM=null;
+  const _imM=new THREE.Matrix4(), _imQ=new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI/2,0,0)), _imP=new THREE.Vector3(), _imS=new THREE.Vector3(1,1,1);
+  function groundMarks(){
+    if(!pPool.length) return;                         // (render3D runs before the players load)
+    if(!ringsIM){
+      const c=document.createElement('canvas'); c.width=c.height=64; const cg=c.getContext('2d');
+      const gr=cg.createRadialGradient(32,32,2,32,32,30); gr.addColorStop(0,'rgba(0,0,0,0.5)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+      cg.fillStyle=gr; cg.fillRect(0,0,64,64);
+      blobsIM=new THREE.InstancedMesh(new THREE.CircleGeometry(0.62,18), new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,fog:false}), pPool.length);
+      // (r128 only carries a per-instance colour to the pixel when vertex colours are on,
+      // so the ring gets a plain white colour attribute for the instance colour to ride on)
+      const rg=new THREE.RingGeometry(0.66,0.92,28); rg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(rg.attributes.position.count*3).fill(1),3));
+      ringsIM=new THREE.InstancedMesh(rg, new THREE.MeshBasicMaterial({color:0xffffff,vertexColors:true,transparent:true,opacity:0.55,side:THREE.DoubleSide,depthWrite:false,fog:false}), pPool.length);
+      // flat on the turf, under everything else see-through (route ribbons, markers)
+      blobsIM.renderOrder=-2; ringsIM.renderOrder=-1;
+      ringsIM.setColorAt(0, new THREE.Color(0xffffff));     // allocates the colour buffer at full size, so before count drops
+      for(const m of [blobsIM,ringsIM]){ m.frustumCulled=false; m.count=0; scene.add(m); }
+    }
+    let nr=0, nb=0;
+    for(const g of pPool){ if(!g.visible || nb>=blobsIM.instanceMatrix.count) continue; const u=g.userData;
+      _imP.set(g.position.x, g.position.y+0.02, g.position.z); _imM.compose(_imP,_imQ,_imS); blobsIM.setMatrixAt(nb++, _imM);
+      if(u.ring && u.ring.visible){ _imP.y=g.position.y+0.03; _imM.compose(_imP,_imQ,_imS); ringsIM.setMatrixAt(nr, _imM); ringsIM.setColorAt(nr, u.ring.material.color); nr++; } }
+    blobsIM.count=nb; ringsIM.count=nr;
+    blobsIM.instanceMatrix.needsUpdate=true; ringsIM.instanceMatrix.needsUpdate=true; ringsIM.instanceColor.needsUpdate=true;
+  }
   function render3D(){
     if(!renderer) return;
     // broadcast scrimmage/first-down lines (only during normal downs)
@@ -4664,6 +4754,7 @@
         if(o.ring && ringI<ringPool.length){ const r=ringPool[ringI++]; r.visible=true; r.material.color.setHex(o.ring);
           const ps=1+0.07*Math.sin(performance.now()*0.006); r.scale.set(ps,ps,ps); r.position.set(WX(e.x),0.07,WZ(e.y)); }
       } else { g.visible=false; if(u.ring) u.ring.visible=false; } }
+    groundMarks();
     if(repFrame){ // replay: show exactly where the ball was, including a loose one
       const rb=repFrame.b;
       if(rb && rb.loose){ ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE);
