@@ -373,6 +373,14 @@ headless browser and measuring against NFL rates.
   `choosePlay()` and friends, so a harness can drive the game frame by frame
   without rendering.
 
+**Look at it, too:** `SHOTS=dir node tools/soak.mjs exhibition 1 23` saves ~40 real rendered
+frames of a whole game (the open, kickoffs, play calls, pre-snap, mid-play, catches,
+touchdowns, halftime, the final screen); add `VIEW=phone` for a landscape phone with touch.
+The soak runs ~40x real time, and the tips and the possession plate hide on real-time
+timers, so in these frames they linger across plays — that part is the harness, not the
+game. What it did catch: the possession plate landing on the halftime card, and the final
+screen's buttons below the fold on a phone.
+
 **Soak every mode before shipping:** `node tools/soak.mjs exhibition|season|twop|practice
 [games] [seed]` plays whole games through the real UI (seeded, so a failure
 reproduces) and reports page errors, stuck states and NaN positions. The test build

@@ -217,6 +217,7 @@
   }
   /* short landscape (phones): a slimmer scoreboard and compact menus */
   @media (max-height:520px) and (orientation:landscape){
+    #over #over-title{order:0;} #over #final-line{order:1;} #over .btn{order:2;} #over #final-sub{order:3;}
     #app{padding:4px; gap:4px;} #scoreboard{gap:4px;}
     .sb-cell{padding:3px 8px; border-radius:8px;} .sb-cell .lbl{font-size:8px;}
     .sb-cell .val{font-size:clamp(14px,2.4vw,20px); white-space:nowrap;}
@@ -664,7 +665,7 @@
   // Halftime: the same broadcast shot as the open, with the first-half numbers on the card.
   function halftimeCard(recv){
     if(typeof window!=='undefined' && window.__gbNoIntro) return;
-    G.phase='intro'; G.introT=0; G._halftime=true; setMsg('',0);
+    G.phase='intro'; G.introT=0; G._halftime=true; setMsg('',0); hidePoss();
     const st=G.stats, row=(lbl,f)=>'<tr><td style="text-align:left;opacity:.7;padding-right:14px">'+lbl+'</td><td style="padding:0 12px">'+f('user')+'</td><td style="padding:0 12px">'+f('cpu')+'</td></tr>';
     const box = st ? '<table style="margin:8px auto 0;font:500 13px/1.6 Oswald,sans-serif;color:#dfe8f5;border-collapse:collapse">'
       +'<tr style="opacity:.6;font-size:10px;letter-spacing:.14em"><td></td><td>'+tname('user')+'</td><td>'+(TWO_P?'P2':cpuLabel())+'</td></tr>'
@@ -3366,6 +3367,9 @@
   // Rather than instrument every one of those paths, watch the value itself.
   // A broadcast graphic for the big moments: the same plate as the possession banner.
   function hideTip(){ const t=document.getElementById('tip'); if(t) t.classList.remove('show'); }
+  // the possession plate hides on a real-time timer; a card that takes the screen (halftime,
+  // the final score) takes it down at once rather than wearing it for its last second
+  function hidePoss(){ const e=document.getElementById('poss'); if(e) e.classList.remove('show'); }
   function banner(title, sub, team, secs){
     hideTip(); const el=document.getElementById('poss'); if(!el) return;
     el.className=team==='user'?'you':'cpu'; el.innerHTML=title+(sub?'<small>'+sub+'</small>':'');
@@ -3381,6 +3385,9 @@
     if(_lastOff===null){ _lastOff=G.offense; return; }
     if(G.offense===_lastOff) return;
     _lastOff=G.offense;
+    // (not over the open or the halftime card: the second-half kickoff changes hands while
+    // the halftime score is up, and the plate landed on top of it)
+    if(G.phase==='intro') return;
     const el=document.getElementById('poss'); if(!el) return;
     const you=(G.offense==='user');
     el.className=you?'you':'cpu';
@@ -5517,7 +5524,7 @@
     return false;
   }
   function gameOver(){
-    if(G.phase==='final') return; G.phase='final';
+    if(G.phase==='final') return; G.phase='final'; hidePoss(); hideTip();
     const u=G.userScore,c=G.cpuScore;
     document.getElementById('over-title').textContent = SEASON ? (u>c?'VICTORY':(u<c?'DEFEAT':'TIE GAME')) : TWO_P ? (u>c?'P1 WINS':(u<c?'P2 WINS':'TIE GAME')) : (u>c?'YOU WIN':(u<c?'CPU WINS':'TIE GAME'));
     document.getElementById('over-title').style.color = u>c?'#9cff9c':(u<c?'#ff8a7a':'#ffd24a');
