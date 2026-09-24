@@ -99,7 +99,7 @@ loop()           1170   requestAnimationFrame driver
 | `drawPlayArt` / `drawDefArt` | 3236 / 3266 | The diagrams on the play and coverage cards, stepped from the same `makeRoute` data the plays run. |
 | `recordPlay` / `boxScoreHTML` | 3057 / 3091 | The box score: one call as each scrimmage play ends (flags, conversions and return yards excluded), shown with a player of the game on the final screen. |
 | `makeRoute` / `routeSpeed` | 758 / 766 | Routes have a settle depth so receivers stop running away. |
-| `makePlayer` | 2386 | Per-player material instances, skin tone and kit variation (visor, gloves, cleats). Team colours and numbers are applied in `render3D`. |
+| `makePlayer` / `attachLod` / `groundMarks` | 3670 | Per-player material instances, skin tone and kit variation (visor, gloves, cleats), one shared skeleton; the light model as one merged mesh; everyone's rings and blobs in two instanced draws. Team colours and numbers are applied in `render3D`. |
 | `jerseyNumberTex` | 2358 | Paints a player's roster number / surname onto the jersey decals. |
 | Pose library (`/*POSE-LIB-BEGIN*/`) | 2503 | All procedural animation: `applyPose` (30 states — stances for every position, pass set, engaged blocks, drive blocks, backpedal, shuffle, QB drop/set/throw/handoff, carry with a real tuck and stiff-arm, reach and secure, wrap, dive, fall, get-up, celebrations, kick, fair-catch signal), cross-fades between states (`poseBlendFrom`), ground contact (`poseGround`), two-bone IK (`ik2`), `footFlat` and `headLook`. Self-contained so `tools/posebook.html` can render it. |
 | Controllers (`PAD`, `pollPad`, `padPress`) | 1330 | Gamepad API, standard layout, polled once a frame from `loop`. Every menu gets a cursor (`padMenuEls`/`padNavTick`, A clicks the focused element). On a pass each receiver's button comes from `padIcons()` (the back A, widest left X, widest right B, slots Y then RB), frozen at the snap in `G.icons`. `padBar` is the context strip of what the buttons do now. Rumble fires from any rise in `G.shake`. PlayStation pads show their own glyphs (`PAD.ps`). |
@@ -203,19 +203,33 @@ line, safeties, corners); live, it takes the man nearest the ball.
 **Two player models.** `assets/gridiron_player_lod.glb` is the same build at a third of
 the triangles (`LOD=0.3 node tools/player/build.mjs assets/gridiron_player_lod.glb`,
 ~2.5 minutes; same skeleton, parts and morph). It loads after the full model and
-`attachLod` gives every pooled player a second set of meshes on his own bones, with
-copies of his materials pushed into `u.mats` so tints reach both. `playerVis(u)` is
-the one place that decides which set is drawn and which parts cast shadows; players
-beyond `Q().lodDist` from the camera (ULTRA 30, HIGH 20, FAST/LITE everyone) use the
-light model. Measured at HIGH on the same scene: 1.52M → 0.77M triangles a frame. If
-you rebuild the full model, rebuild the light one too.
+`attachLod` gives every pooled player the light model on his own bones. Its thirteen
+solid parts are **one mesh** (`lodBodyGeometry`, built once and shared): each vertex
+carries its part (`partId`) and that part's roughness / metalness / environment strength
+(`partRME`, from the `PART_RME` table `makePlayer` uses too), and the part's colour comes
+from a per-player uniform array (`lodBodyShader` patches the standard shader). Stand-ins
+`{color}` pushed into `u.mats[part]` point at that array, so every `setSRGB` tint — team
+kit, skin tone, gloves, cleats — lands in it unchanged. Numbers, name bar and visor stay
+separate meshes. `playerVis(u)` is the one place that decides which set is drawn and which
+parts cast shadows; players beyond `Q().lodDist` from the camera (ULTRA 30, HIGH 20,
+FAST/LITE everyone) use the light model. Measured at HIGH on the same scene: 1.52M →
+0.77M triangles a frame. If you rebuild the full model, rebuild the light one too.
 
-**Only big parts cast shadows.** A player is 16 meshes and every one is a draw call,
-twice with shadows. `SHADOW_PARTS` (jersey, pants, skin, helmet, socks, cleats,
-gloves) are the only casters, and eyes, chin strap, visor and name bar are hidden past
-26 yards from the camera (`detailParts`; the visor stays off for men who do not wear
-one). Measured on the same seeded scene: 566 → 450 draw calls a frame, 132 → 51
-shadow casters. Toggle `shadowParts`/`detailParts`, never `traverse` every mesh.
+**Draw calls are the budget, not triangles.** The full model is 16 meshes, and every
+one is a draw call, twice with shadows. `SHADOW_PARTS` (jersey, pants, skin, helmet,
+socks, cleats, gloves, and the merged light body) are the only casters, and eyes, chin
+strap, visor and name bar are hidden past 26 yards (`detailParts`; the visor stays off for
+men who do not wear one): 566 → 450 draw calls a frame. Then the light model became one
+mesh a man, the team rings and shadow blobs under everyone became two instanced draws
+(`groundMarks`; `u.ring` is only a `{visible, material.color}` holder now), and each
+player's meshes share **one skeleton** (cloned, every part had its own copy of the 65
+bones, recomputed and re-uploaded as a bone texture every frame — 300-odd a frame):
+450 → 186–224 draw calls on the same seeded scene, triangles about the same. Toggle
+`shadowParts`/`detailParts`, never `traverse` every mesh. Two r128 traps met on the
+way: an `InstancedMesh`'s colour buffer is sized from `count` the first time `setColorAt`
+runs (call it before shrinking `count`), and r128 only carries an instance colour to the
+pixel when the material has `vertexColors` on (the ring geometry has a white `color`
+attribute for exactly that).
 
 **A dive must not drop the body.** Dives pitch the model over its feet, which
 already lays it on the turf; the 0.55 drop the tackle falls use buried every diver
