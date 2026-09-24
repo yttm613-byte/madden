@@ -49,7 +49,7 @@ All line numbers are from the current `index.html`.
 |---|---|
 | Speed and radius constants (`S`) | 210 |
 | Difficulty table (`DIFF`) | 258 |
-| Quarter length (`QTR_SECS = 75`) | 218 |
+| Quarter length (`QTR_SECS`, 75 by default; the start screen's QUARTERS button cycles 1:15 / 2:30 / 5:00 and remembers it in `gb_qtr` — harnesses never set it, so they stay at the calibrated 75) | 425 |
 | Game state object (`G`) built in `newGame()` | 300 |
 | Play definitions (`PLAYS`) | 571 |
 | Formation constants (`OL`, `WR_OUT`, `ROLE_SPEED`) | 602 |
@@ -83,7 +83,7 @@ loop()           1170   requestAnimationFrame driver
 | `makeRoute` / `routeLeg` | 900 | Routes are either the old two-segment kind (`breakT`, `d1`, `d2`, settle `depth`) or a leg list (`legs:[{t,x,y,sp}]`) for routes that stop: curl, hitch, stick, comeback, wheel, bubble. `routeLeg(route, t)` is the one place that says where a receiver is heading; `updateDrop`, the play art and the on-field route ribbons all step it. |
 | `baseDefense` | 780 | Personnel decides the front: base 4-3 against two receivers, nickel against three, dime against four or more, a five-man goal-line front inside the three. Corners align over the widest man each side, nickel and dime backs over the slots. On a pass every route runner gets a man by a cost table (corners outside, nickel in the slot, a backer on the tight end or back, safeties last), whoever is left spies or drops. **Your middle linebacker is never given a man** — he starts free, as he always did. |
 | `applyDefCall` / `cpuDefCall` | 575 | MAN, COVER 2 (corners squat the flats via `zone:'flat'`), COVER 3, BLITZ, FIRE ZONE (a nickel or backer comes, an end drops to the flat, three deep) and PREVENT. `cpuDefCall` picks one against you by down and distance. |
-| Play-call screen | 3900 | `buildPlayCall` draws formation tabs and that formation's cards (art from `drawPlayArt`, stepped from the same route data). Keys: left/right formation, 1-9/0 call. Pre-snap: C audible (same formation), X flip, a receiver's number then an arrow for a hot route (up go, down curl, toward the middle slant, toward the sideline out). `menuKey` handles all of it before the game's keys. Routes are drawn on the turf and numbers float over the receivers (`overlays3D`). |
+| Play-call screen | 3900 | `buildPlayCall` draws formation tabs and that formation's cards (art from `drawPlayArt`, stepped from the same route data). Keys: left/right formation, 1-9/0 call. Pre-snap: C audible (same formation), X flip, a receiver's number then an arrow for a hot route (up go, down curl, toward the middle slant, toward the sideline out), or then M to send him in **motion** (`startMotion`/`stepMotion`/`endMotion`: he jogs across toward the far slot; a man defender goes with him — the man-coverage tell — and a zone lets him go; his route is re-aimed from wherever he is at the snap; touch: MOTION in his tap menu; pad: his button then X). The CPU sends a receiver in motion 1.3s before a third of its unhurried pass plays (`G.cpuMotion`); `passtrace MOTION=1` does it on every CPU snap (no change in the numbers). `menuKey` handles all of it before the game's keys. Routes are drawn on the turf and numbers float over the receivers (`overlays3D`). |
 | `baseDefense` | 669 | The one base 4-3 every snap, reading run or pass **at** the snap: run fits, penetration, safety bites, draw drops; on a pass three rush, a tackle spies, man on the three receivers, zones for the rest. |
 | `zoneSpot` | 733 | Where each zone defender belongs: safeties split the deep halves and cap verticals, backers take hook/curl zones where they lined up. |
 | `stepDefenders` | 1292 | The heart of the defence. Per-defender timers tick here for **everyone**, including the human-controlled defender. Open-field pursuit races at each role's speed on an intercept angle (`interceptT`). Tackle resolution lives at the bottom. |
@@ -350,7 +350,7 @@ Roughly in order of how much they would improve the game.
 4. **Scoring** was 51–63 a game; one full sim now scores 37. Not yet measured
    over enough games to call.
 5. ~~No audibles, no hot routes, no kneel-downs or spikes~~ — done (see the
-   play-call screen). Still no defensive line shifts or pre-snap motion.
+   play-call screen), and pre-snap motion. Still no defensive line shifts.
 6. ~~The player model is a cheap free asset.~~ Replaced by a generated model that
    meets `PLAYER_MODEL_PROMPT.md`'s spec (grade it: `node tools/adopt-model.mjs`).
    Still open: one body type scaled wider for linemen rather than a heavier build.

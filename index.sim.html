@@ -44,6 +44,8 @@
   .keys b{color:var(--txt); font-weight:600;}
   .btn{font-family:'Oswald',sans-serif; font-weight:700; font-size:18px; letter-spacing:.12em; text-transform:uppercase; color:#08101a; background:linear-gradient(180deg,#ffe27a,#ffc12e); border:none; border-radius:10px; padding:13px 34px; cursor:pointer; box-shadow:0 6px 0 #b07f12; transition:transform .06s, box-shadow .06s;}
   .btn:active{transform:translateY(4px); box-shadow:0 2px 0 #b07f12;}
+  .btn.mini{font-size:12px; padding:7px 16px; letter-spacing:.14em; background:linear-gradient(180deg,#2a3a55,#1b2840); color:#dbe6f5; box-shadow:0 4px 0 #0e1626;}
+  .btn.mini:active{box-shadow:0 1px 0 #0e1626;}
   .final{font-family:'Anton',sans-serif; font-size:clamp(24px,6vw,42px);}
   #playcall,#defcall{position:absolute; left:0; right:0; bottom:0; padding:12px; display:flex; flex-wrap:wrap; gap:8px; justify-content:center; align-items:flex-end; background:linear-gradient(0deg,rgba(6,10,16,.94),rgba(6,10,16,0));}
   .pc{flex:1; max-width:200px; cursor:pointer; border:1px solid #2c3e57; border-radius:12px; padding:12px 8px; background:rgba(18,26,36,.92); text-align:center; transition:transform .06s, border-color .12s;}
@@ -278,7 +280,7 @@
     <div class="sb-cell" id="sb-cpu"><span class="lbl">CPU</span><span class="val" id="v-cpu">0</span><span class="tos" id="to-cpu"></span></div>
     <div class="sb-cell you" id="sb-dd"><span class="lbl" id="dd-lbl">Your Ball</span><span class="val" id="v-dd">1st &amp; 10</span></div>
     <div class="sb-cell" id="sb-on"><span class="lbl">Ball On</span><span class="val" id="v-on">OWN 25</span></div>
-    <div class="sb-cell" id="sb-clock" title="Timeout (T)"><span class="lbl">Clock</span><span class="val" id="v-clock">5:00</span></div>
+    <div class="sb-cell" id="sb-clock" title="Timeout (T)"><span class="lbl">Clock</span><span class="val" id="v-clock">1:15</span></div>
   </div>
 
   <div id="stage" tabindex="0">
@@ -309,7 +311,7 @@
     <div id="comm"></div>
 
     <div id="playcall" class="hidden">
-      <div id="pc-head"><div id="pc-tabs"></div><div id="pc-hint" class="kbd-only">← → formation · 1–9 call it · then C audible · X flip · 1–5 + arrow = hot route</div></div>
+      <div id="pc-head"><div id="pc-tabs"></div><div id="pc-hint" class="kbd-only">← → formation · 1–9 call it · then C audible · X flip · 1–5 + arrow = hot route · 1–5 + M = motion</div></div>
       <div id="pc-cards"><div id="pc-list"></div>
         <div class="pc oc kick hidden" id="pb-fg" data-play="fg"><div class="pt">FIELD GOAL</div><div class="ps" id="fg-label">3 points</div></div>
         <div class="pc oc kick hidden" id="pb-punt" data-play="punt"><div class="pt">PUNT</div><div class="ps">flip the field</div></div>
@@ -347,6 +349,7 @@
       <div class="keys kbd-only" id="quickhelp">Arrows/WASD run · <b>Space</b> hikes, throws, spins · <b>Shift</b> sprints · <b>Q/E</b> juke · <a href="#" id="howto" style="color:var(--gold)">How to play ▸</a></div>
       <div class="keys kbd-only hidden" id="fullhelp">
         <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · 1–5 pick receiver · <b>tap Space for a touch pass, hold it for a bullet</b> · <b>Q·E juke</b> · <b>R</b> stiff arm · <b>Z</b> dive (a QB slides) · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> announcer voice · <b>P</b> pause.<br>
+        <b>Before the snap:</b> <b>C</b> audible · <b>X</b> flip the play · a receiver's number then an arrow = hot route (↑ go, ↓ curl, slant or out), or then <b>M</b> = send him in motion (a defender who follows him is in man coverage).<br>
         <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down, and <b>Q/E dives</b> for the tackle (extra reach; miss it and you're on the floor). Blocked? <b>Q/E rips free</b> of the blocker instead. Ball in the air? <b>R</b> goes up for it — time it right and it's yours.<br>
         <b>Clock &amp; kicks:</b> <b>T</b> (or tap the clock) calls a timeout, three a half · Space while a punt comes down to you = fair catch · behind in the fourth quarter, Space on your kickoff = onside kick.<br>
         Call your plays, stop the CPU's drives, win on the scoreboard before time runs out.
@@ -356,6 +359,7 @@
         <button class="btn" id="d-pro">Pro</button>
         <button class="btn" id="d-allpro" style="background:linear-gradient(180deg,#ff9d8e,#ff5a47); box-shadow:0 6px 0 #a8362a; color:#1a0a08;">All-Pro</button>
       </div>
+      <button class="btn mini" id="d-qlen" title="How long each quarter's game clock runs">Quarters 1:15</button>
       <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center; align-items:flex-start;">
         <div class="modecol"><button class="btn" id="d-team" style="background:linear-gradient(180deg,#cfd8e6,#9fb0c6); box-shadow:0 6px 0 #5d6d82;">My Team</button>
           <span class="keys" id="team-note"></span></div>
@@ -369,7 +373,7 @@
       <div id="loadnote">LOADING PLAYERS…</div>
       <div id="padnote" class="hidden"></div>
       <div class="keys portrait-tip">Tip: turn your phone sideways for the widest view of the field.</div>
-      <div class="keys touch-only" style="font-size:12px;opacity:.85">Drag anywhere on the left to move · the red button hikes, throws, spins, or switches defender · <b>JUKE</b> cuts away from the nearest tackler (on defense it <b>DIVES</b>, or <b>RIPS</b> free of a block) · tap a receiver's number before the snap for a hot route.</div>
+      <div class="keys touch-only" style="font-size:12px;opacity:.85">Drag anywhere on the left to move · the red button hikes, throws, spins, or switches defender · <b>JUKE</b> cuts away from the nearest tackler (on defense it <b>DIVES</b>, or <b>RIPS</b> free of a block) · tap a receiver's number before the snap for a hot route or to send him in motion.</div>
     </div>
 
     <div class="overlay hidden" id="pause">
@@ -420,7 +424,9 @@
   const SHED_P = 0.06;
   // Four quarters of this length. 75*4 keeps the same total game length as the
   // single 300-second clock it replaced, so pacing is unchanged.
-  const QTR_SECS = 75;
+  // (the default; the start screen's QUARTERS button makes it 2:30 or 5:00 and remembers it)
+  const QTR_OPTS=[75,150,300];
+  let QTR_SECS = (()=>{ try{ const v=+localStorage.getItem('gb_qtr'); return QTR_OPTS.includes(v)?v:75; }catch(e){ return 75; } })();
   // how long a man takes to get back up off the turf after the whistle
   const GETUP_SECS = 0.62;
 
@@ -965,6 +971,9 @@
     else pool = Math.random()<passP ? PASS_PLAYS : OPEN_RUNS;
     const id = pool[Math.floor(Math.random()*pool.length)];
     setupPlay(id); G.phase='presnap'; G.defCall='balanced'; G.autoSnap = hurry ? 1.6 : milk ? 4.0 : 2.8;
+    // a third of the time, not hurrying, a receiver goes in motion 1.3s before the snap
+    if(G.playType==='pass' && !hurry && Math.random()<0.33){ const c=G.receivers.map((r,i)=>i).filter(i=>!G.receivers[i].screen && G.receivers[i].pos!=='RB' && G.receivers[i].pos!=='FB');
+      if(c.length) G.cpuMotion={i:c[(Math.random()*c.length)|0], at:1.3}; }
     showDefCall();
     setMsg(hurry?'CPU HURRY-UP — pick your D':'CPU BALL — pick your D',1.0);
   }
@@ -1112,7 +1121,7 @@
     const play=PLAYS[playId]||PLAYS.dive; const type=play.kind; const cx=G.los;
     const F=FORMS[play.form]||FORMS.gun;
     G.playId=playId; G.playType=type; G.form=play.form||'gun';
-    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.windup=null; G.diveC=null; G.stiffT=0; G.stiffCd=0; G.fumble=null; G.pile=null; G.mesh=null; G.hole=null; G._scrRel=false;
+    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.windup=null; G.diveC=null; G.stiffT=0; G.stiffCd=0; G.fumble=null; G.pile=null; G.mesh=null; G.hole=null; G._scrRel=false; G.motion=null; G.cpuMotion=null;
     G.passState = type==='pass'?'drop':null; G.qbHurry=null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0; G.reads=null; G.hotSel=null;
     document.getElementById('spinpip').textContent='SPIN READY';
     const Y=v=>fieldMid+yd(v);
@@ -1154,7 +1163,7 @@
         }
       } else {
         for(const s of skill){
-          if(s.route){ const r=ent(s); r.route=makeRoute(s.route,toC(s.y)); G.receivers.push(r); }
+          if(s.route){ const r=ent(s); r.route=makeRoute(s.route,toC(s.y)); r.rkind=s.route; G.receivers.push(r); }
           else G.blockers.push(ent(s));     // stays in to protect
         }
       }
@@ -1525,6 +1534,7 @@
       if(Math.random()<0.018){ return deadBallFoul('offside'); }
     }
     G.lastTackler=null; G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); closeAudible(); PAD.hot=0;
+    if(G.motion) endMotion(); G.cpuMotion=null;
     G.icons=padIcons(); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
     G.rec=[]; G._recT=0; stopReplay();   // fresh replay buffer each snap
     if(G.drive && G.drive.team===G.offense && !G.conv) G.drive.plays++;
@@ -1868,12 +1878,12 @@
     if(G.phase==='presnap' && off){
       if(P.hot===1){                                     // hot route: pick the man
         const k=padIcons().indexOf(i); if(k>=0){ const r=G.receivers[k]; G.hotSel=k; P.hot=2; const right=r.y>fieldMid;
-          setMsg('HOT ROUTE #'+r.n+':  ↑ GO   ↓ CURL   '+(right?'←':'→')+' SLANT   '+(right?'→':'←')+' OUT',3.0); }
+          setMsg('HOT ROUTE #'+r.n+':  ↑ GO   ↓ CURL   '+(right?'←':'→')+' SLANT   '+(right?'→':'←')+' OUT   '+gb(PB.X)+'MOTION',3.0); }
         else if(i===PB.Y){ P.hot=0; G.hotSel=null; setMsg('',0); }
         return; }
       if(P.hot===2){                                     // ...then the route, on the d-pad
         const dir=i===PB.UP?'up':i===PB.DOWN?'down':i===PB.LEFT?'left':i===PB.RIGHT?'right':null;
-        if(dir){ P.hot=0; hotRoute(dir); } else if(i===PB.Y||i===PB.B){ P.hot=0; G.hotSel=null; setMsg('',0); }
+        if(dir){ P.hot=0; hotRoute(dir); } else if(i===PB.X){ P.hot=0; startMotion(G.hotSel); } else if(i===PB.Y||i===PB.B){ P.hot=0; G.hotSel=null; setMsg('',0); }
         return; }
       if(i===PB.A){ action('pad'); return; }
       if(i===PB.X){ openAudible(); return; }
@@ -1909,11 +1919,11 @@
     const el=document.getElementById('pause'); el.classList.toggle('hidden', !G.paused);
     if(!G.paused) document.getElementById('p-resume').textContent='Resume';
     if(G.paused){ document.getElementById('p-help').innerHTML = TWO_P ? twoPHelp() : PAD.used
-        ? '<b>Before the snap:</b> '+gb(PB.A)+'hike · '+gb(PB.X)+'audible · '+gb(PB.Y)+'hot route · '+gb(PB.RB)+'flip · '+gb(PB.VIEW)+'timeout<br>'
+        ? '<b>Before the snap:</b> '+gb(PB.A)+'hike · '+gb(PB.X)+'audible · '+gb(PB.Y)+'hot route or motion · '+gb(PB.RB)+'flip · '+gb(PB.VIEW)+'timeout<br>'
           +'<b>Passing:</b> each receiver\u2019s button throws to him — tap for a touch pass, hold for a bullet · '+gb(PB.RT)+'scramble<br>'
           +'<b>Running:</b> stick moves · '+gb(PB.RT)+'sprint · '+gb(PB.X)+'juke · flick '+(PAD.ps?'R':'RS')+' to juke · '+gb(PB.B)+'stiff arm · '+gb(PB.Y)+'dive (QB: slide) · '+gb(PB.A)+'spin<br>'
           +'<b>Defense:</b> '+gb(PB.B)+'switch · '+gb(PB.X)+'dive, or rip free of a block · '+gb(PB.Y)+'go up for the ball · '+gb(PB.RT)+'sprint'
-        : '<b>Before the snap:</b> Space hike · C audible · X flip · 1–5 then an arrow = hot route · T timeout<br>'
+        : '<b>Before the snap:</b> Space hike · C audible · X flip · 1–5 then an arrow = hot route, then M = motion · T timeout<br>'
           +'<b>Passing:</b> 1–5 pick a receiver · tap Space for a touch pass, hold it for a bullet<br>'
           +'<b>Running:</b> arrows/WASD · Shift sprint · Q/E juke · R stiff arm · Z dive (QB: slide) · Space spin<br>'
           +'<b>Defense:</b> Space switch · Q/E dive, or rip free of a block · R go up for the ball · P pause';
@@ -1934,7 +1944,7 @@
       const P=padOf(who), off=who===G.offense, ps=P.ps, gb=(b)=>'<span class="gb b'+b+'">'+padGlyph(b,ps)+'</span>';
       if(G.phase==='presnap' && off){
         if(P.hot===1) h='HOT ROUTE: press a receiver\u2019s button · '+gb(PB.Y)+'cancel';
-        else if(P.hot===2) h='✚ ↑ GO · ↓ CURL · ← → SLANT / OUT';
+        else if(P.hot===2) h='✚ ↑ GO · ↓ CURL · ← → SLANT / OUT · '+gb(PB.X)+'MOTION';
         else h=gb(PB.A)+'HIKE '+gb(PB.X)+'AUDIBLE '+(G.playType==='pass'?gb(PB.Y)+'HOT ROUTE ':'')+gb(PB.RB)+'FLIP';
       } else if(G.phase==='live' && off && G.playType==='pass' && G.passState==='drop') h='RECEIVER\u2019S BUTTON THROWS · TAP = TOUCH · HOLD = BULLET · '+gb(PB.RT)+'SCRAMBLE';
       else if(G.phase==='live' && off) h=gb(PB.RT)+'SPRINT '+gb(PB.X)+'JUKE '+gb(PB.B)+'STIFF ARM '+gb(PB.Y)+((G.carrier&&G.carrier.role==='qb')?'SLIDE ':'DIVE ')+gb(PB.A)+'SPIN';
@@ -2254,6 +2264,8 @@
       if(G.deadT<=0) finishDead(); syncHUD(); return; }
 
     if(G.phase==='presnap'){
+      if(!humanOff() && G.cpuMotion && G.autoSnap<G.cpuMotion.at){ const i=G.cpuMotion.i; G.cpuMotion=null; startMotion(i); }
+      if(G.motion) stepMotion(dt);
       if(!humanOff()){ G.autoSnap-=dt; if(G.autoSnap<=0) snap(); }
       if(humanDef() && G.userDef){ moveEntity(G.userDef,dt,userDefBase(),userDefSprint(),other(G.offense)); if(G.userDef.x<G.los+yd(0.5)) G.userDef.x=G.los+yd(0.5); }
       syncHUD(); return;
@@ -5459,6 +5471,29 @@
     r.route=makeRoute(kind,toC); r.hot=kind; G.reads=null;
     setMsg(TWO_P?'HOT ROUTE':'HOT ROUTE — #'+r.n+' '+kind.toUpperCase(),1.0);
   }
+  // Motion: before the snap a receiver jogs across the formation toward the slot on the
+  // far side. A man defender goes with him — the tell that says man coverage — and a zone
+  // lets him go. Snap it whenever you like: his route is re-aimed from wherever he is.
+  function startMotion(i){
+    const r=G.receivers[i]; G.hotSel=null;
+    if(!r || G.phase!=='presnap' || G.motion || r.screen || r.pos==='RB' || r.pos==='FB') return;
+    const side=r.y>=fieldMid?1:-1;
+    G.motion={r, ty:fieldMid-side*yd(WR_SLOT*0.7)};
+    setMsg(TWO_P?'MOTION':'MOTION — #'+r.n,0.9);
+  }
+  function stepMotion(dt){
+    const m=G.motion, r=m.r, sp=S.rec*0.62, dy=m.ty-r.y;
+    if(Math.abs(dy)<yd(0.15)){ r.vx=0; r.vy=0; }
+    else { r.vx=0; r.vy=Math.sign(dy)*sp; r.y+=r.vy*dt; if(Math.sign(m.ty-r.y)!==Math.sign(dy)) r.y=m.ty; }
+    for(const d of G.defenders){ if(d===G.userDef || d.job!=='cover' || d.assign!==r) continue;
+      const ddy=r.y-d.y, step=Math.min(Math.abs(ddy), sp*1.05*dt); d.y+=Math.sign(ddy)*step; d.vx=0; d.vy=Math.abs(ddy)>yd(0.1)?Math.sign(ddy)*sp:0; d.homeY=d.y; }
+  }
+  // at the snap: his route turns the right way from where he now stands
+  function endMotion(){
+    const r=G.motion.r, kind=r.hot||r.rkind; G.motion=null;
+    if(kind) r.route=makeRoute(kind, (fieldMid-r.y)>=0?1:-1);
+    G.receivers.sort((a,b)=>a.y-b.y); G.reads=null;
+  }
   // keys that belong to a menu or to the pre-snap, before the game's own keys see them
   function menuKey(k){
     const pc=document.getElementById('playcall'), dc=document.getElementById('defcall');
@@ -5474,7 +5509,8 @@
       if(k==='c'){ openAudible(); return true; }
       if(k==='x'){ flipPlay(); return true; }
       if(G.playType==='pass' && /^[1-5]$/.test(k)){ const i=+k-1; const r=G.receivers[i]; if(r){ G.hotSel=i;
-          const right=r.y>fieldMid; setMsg('HOT ROUTE #'+r.n+':  ↑ GO   ↓ CURL   '+(right?'←':'→')+' SLANT   '+(right?'→':'←')+' OUT',3.0); } return true; }
+          const right=r.y>fieldMid; setMsg('HOT ROUTE #'+r.n+':  ↑ GO   ↓ CURL   '+(right?'←':'→')+' SLANT   '+(right?'→':'←')+' OUT   M MOTION',3.0); } return true; }
+      if(G.hotSel!=null && k==='m'){ startMotion(G.hotSel); return true; }
       if(G.hotSel!=null && (/^arrow/.test(k)||/^[wasd]$/.test(k))){ hotRoute(k.length===1?{w:'up',s:'down',a:'left',d:'right'}[k]:k.slice(5)); return true; }
       if(k==='escape'){ G.hotSel=null; setMsg('',0); return true; }
     }
@@ -5496,13 +5532,13 @@
   document.getElementById('playcall').addEventListener('click',e=>{ const t=e.target.closest('.tab'); if(t){ setPcForm(t.dataset.form); return; }
     const c=e.target.closest('.oc'); if(c && !c.classList.contains('hidden')) choosePlay(c.dataset.play); });
   document.getElementById('audible').addEventListener('click',e=>{
-    const h=e.target.closest('span[data-hot]'); if(h){ closeAudible(); if(h.dataset.hot==='__x'){ G.hotSel=null; setMsg('',0); } else hotRoute(h.dataset.hot); return; }
+    const h=e.target.closest('span[data-hot]'); if(h){ closeAudible(); if(h.dataset.hot==='__x'){ G.hotSel=null; setMsg('',0); } else if(h.dataset.hot==='motion') startMotion(G.hotSel); else hotRoute(h.dataset.hot); return; }
     const c=e.target.closest('span[data-play]'); if(!c) return; if(c.dataset.play==='__close') closeAudible(); else audibleTo(c.dataset.play); });
   // Touch: tap a receiver's number before the snap for his hot-route menu.
   document.getElementById('rlabels').addEventListener('click',e=>{ const el=e.target.closest('.rl'); if(!el || G.phase!=='presnap' || G.offense!=='user' || G.playType!=='pass') return;
     const i=[...el.parentNode.children].indexOf(el), r=G.receivers[i]; if(!r) return;
     const au=document.getElementById('audible'), right=r.y>fieldMid; G.hotSel=i;
-    au.innerHTML='<b>HOT ROUTE — #'+r.n+'</b>'+[['up','GO ↑'],['down','CURL ↓'],[right?'left':'right','SLANT'],[right?'right':'left','OUT'],['__x','✕']].map(([d,l])=>'<span data-hot="'+d+'">'+l+'</span>').join('');
+    au.innerHTML='<b>HOT ROUTE — #'+r.n+'</b>'+[['up','GO ↑'],['down','CURL ↓'],[right?'left':'right','SLANT'],[right?'right':'left','OUT'],['motion','MOTION'],['__x','✕']].map(([d,l])=>'<span data-hot="'+d+'">'+l+'</span>').join('');
     au.classList.remove('hidden'); G.audibleOpen=false; });
   document.getElementById('presnap-bar').addEventListener('click',e=>{ const c=e.target.closest('span[data-a]'); if(!c) return; if(c.dataset.a==='flip') flipPlay(); else (G.audibleOpen?closeAudible():openAudible()); });
   document.querySelectorAll('.dc').forEach(el=> el.addEventListener('click',()=>chooseDef(el.dataset.def)));
@@ -5534,6 +5570,11 @@
     say('Practice. Call anything you like — no clock, no pressure. Try the touch pass and the bullet.',true); }
   function startWith(d){ PRACTICE=false; setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff=d; document.getElementById('start').classList.add('hidden'); newGame(true); document.getElementById('stage').focus(); say('Welcome to Gridiron Blitz — we are underway!'+wxIntro(),true); }
   document.getElementById('d-rookie').addEventListener('click',()=>startWith('rookie'));
+  // Quarter length: a longer game is more possessions, not a slower one — the clock runs as
+  // it always did. Harnesses never touch the key, so they keep the calibrated 1:15.
+  { const b=document.getElementById('d-qlen'), fmt=v=>Math.floor(v/60)+':'+String(v%60).padStart(2,'0');
+    const show=()=>{ b.textContent='Quarters '+fmt(QTR_SECS); if(!G || G.phase==='start') document.getElementById('v-clock').textContent=fmt(QTR_SECS); }; show();
+    b.addEventListener('click',()=>{ QTR_SECS=QTR_OPTS[(QTR_OPTS.indexOf(QTR_SECS)+1)%QTR_OPTS.length]; try{ localStorage.setItem('gb_qtr',String(QTR_SECS)); }catch(e){} show(); }); }
   document.getElementById('d-pro').addEventListener('click',()=>startWith('pro'));
   document.getElementById('d-allpro').addEventListener('click',()=>startWith('allpro'));
   document.getElementById('again').addEventListener('click',()=>{

@@ -29,6 +29,7 @@ const errs = []; p.on('pageerror', e => errs.push(e.message));
 // refusing makes 'load' wait 30s before it falls back to the vendored copy.
 await p.route(u => u.hostname !== 'localhost', r => r.abort());
 if (process.env.RATINGS === 'random') await p.addInitScript(() => { window.__gbRatings = 'random'; });
+if (process.env.MOTION) await p.addInitScript(() => { window.__motion = true; });
 await p.goto('http://localhost:' + (process.env.PORT || 8106) + '/index.sim.html', { waitUntil: 'load' });
 await p.waitForFunction(() => { try { return window.__sim && window.__sim.ready; } catch (e) { return false; } }, null, { timeout: 60000 });
 await p.click('#d-pro');
@@ -41,7 +42,7 @@ const PASSIDS = ALL ? [...(await (await fetch('http://localhost:' + (process.env
 const CH = 40, res = { cpu: [], user: [] };
 for (const SIDE of SIDES) for (let n0 = 0; n0 < N; n0 += CH) {
  const part = await p.evaluate(([N0, NN, BOT, REACT, USERQB, PASS, SIDE, THROW]) => {
-  const S = window.__sim, PPY = (560-52)/53.3, DT = 1/60;
+  const S = window.__sim, PPY = (560-52)/53.3, DT = 1/60, MOTION = !!window.__motion;
   const run = (side) => {
     const out = [];
     for (let n = N0; n < N0 + NN; n++) {
@@ -52,6 +53,10 @@ for (const SIDE of SIDES) for (let n0 = 0; n0 < N; n0 += CH) {
       const id = PASS[n % PASS.length];
       if (window.__gbRatings === 'random') G.rosters = { user: S.makeRoster(), cpu: S.makeRoster() };
       S.setupPlay(id); G.phase = 'presnap'; G.autoSnap = 99;
+      // MOTION=1: the CPU sends a receiver in motion 1.3s before every snap (it does a third
+      // of the time in a game); the presnap is stepped so he and his man actually move
+      if (MOTION && side === 'cpu') { const c = G.receivers.map((r, i) => i).filter(i => !G.receivers[i].screen && G.receivers[i].pos !== 'RB');
+        if (c.length) { G.cpuMotion = { i: c[n % c.length], at: 100 }; for (let k = 0; k < 78; k++) S.update(DT); } }
       S.snap(); if (G.phase !== 'live') { n--; continue; }
       const hold = 0.8 + ((n*0.37) % 1.8);
       let t = 0, thrown = false, caught = false, intc = false, sack = false, air = null, catchX = null;
