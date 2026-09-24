@@ -77,6 +77,7 @@
   #rlabels{position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden;}
   #rlabels .rl{position:absolute; width:19px; height:19px; margin:-24px 0 0 -10px; border-radius:50%; background:#9cc2ff; color:#08101a; font:700 12px/19px 'Oswald',sans-serif; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.5);}
   #rlabels .rl.sel{background:var(--gold);} #rlabels .rl.hot{background:#ff8a7a;}
+  #rlabels .rl.off{opacity:.8; outline:2px dashed rgba(255,255,255,.7); outline-offset:1px;}
   #mute{position:absolute; top:8px; right:8px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
   #commtog{position:absolute; top:8px; right:48px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
   #fstog{position:absolute; top:8px; right:152px; z-index:5; cursor:pointer; font-size:17px; line-height:1; padding:6px 8px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
@@ -123,6 +124,78 @@
   #joyhint{position:absolute; left:18px; bottom:24px; width:96px; height:96px; border-radius:50%; border:2px dashed rgba(255,255,255,.22); pointer-events:none; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,.35); font-size:11px; letter-spacing:.1em;}
   @media (hover:hover) and (pointer:fine){ #touch{display:none;} }
   .credit{position:absolute; bottom:6px; right:10px; font-size:10px; letter-spacing:.14em; color:var(--muted); opacity:.6; pointer-events:none;}
+  /* ---- phones and small screens ----
+     Measured on a 844x390 landscape phone the stage is only ~300px tall, and the play
+     call (357px) was clipped at the top: the formation tabs were simply gone. In
+     portrait the stage was a 374x276 letterbox and the start screen's buttons were
+     cut off below it, so the game could not be started at all. */
+  #stage{touch-action:none;}
+  #stamina,#spinpip,#replay{pointer-events:none;}
+  .overlay,#playcall,#defcall,#audible{touch-action:pan-y;}
+  /* Menus scroll rather than clip; the auto margins centre them when they fit. */
+  .overlay{justify-content:flex-start; overflow-y:auto;}
+  .overlay>:first-child{margin-top:auto;} .overlay>:last-child{margin-bottom:auto;}
+  #playcall,#defcall{max-height:100%; overflow-y:auto;}
+  .touch-only{display:none;} .portrait-tip{display:none !important;}
+  #joyknob{position:absolute; left:50%; top:50%; width:40px; height:40px; margin:-20px 0 0 -20px; border-radius:50%; background:rgba(255,255,255,.2); border:2px solid rgba(255,255,255,.4); display:none;}
+  #joyhint.on{border-style:solid; border-color:rgba(255,255,255,.38); color:transparent;}
+  #joyhint.on #joyknob{display:block;}
+  #t-juke{right:190px; bottom:12px; width:62px; height:62px; font-size:11px;}
+  @media (hover:none), (pointer:coarse){
+    .kbd-only{display:none !important;} .touch-only{display:block;}
+    .pc .key{display:none;}
+    #presnap-bar{right:auto; left:10px; bottom:auto; top:10px;}
+    #rlabels .rl{width:26px; height:26px; margin:-30px 0 0 -13px; font:700 14px/26px 'Oswald',sans-serif;}
+    #rlabels .rl.tap{pointer-events:auto; cursor:pointer;}
+  }
+  @media (max-width:480px){
+    .sb-cell{padding:5px 6px;} #sb-you,#sb-cpu{min-width:44px;}
+    .sb-cell .lbl{font-size:8px; letter-spacing:.1em;}
+    .sb-cell .val{font-size:15px; white-space:nowrap;}
+  }
+  /* short landscape (phones): a slimmer scoreboard and compact menus */
+  @media (max-height:520px) and (orientation:landscape){
+    #app{padding:4px; gap:4px;} #scoreboard{gap:4px;}
+    .sb-cell{padding:3px 8px; border-radius:8px;} .sb-cell .lbl{font-size:8px;}
+    .sb-cell .val{font-size:clamp(14px,2.4vw,20px); white-space:nowrap;}
+    #playcall,#defcall{padding:6px 8px; gap:5px;}
+    #pc-cards{gap:5px;}
+    #playcall .pc{flex:0 1 100px; padding:5px 4px;}
+    #playcall .pc .pt{font-size:14px;} #playcall .pc .ps{font-size:9px; margin-top:1px;}
+    #playcall .pc .art{width:84px; height:42px; margin-bottom:2px;}
+    #defcall .pc{flex:0 1 118px; padding:5px 4px;}
+    #defcall .pc .art{width:100px; height:50px; margin-bottom:2px;}
+    #defcall .pc .pt{font-size:16px;} #defcall .pc .ps{font-size:9px;}
+    #pc-tabs .tab{padding:5px 9px; font-size:11px;}
+    .overlay{gap:8px; padding:10px;}
+    .title{font-size:clamp(26px,8vh,44px);} .title small{font-size:12px; margin-top:3px;}
+    .btn{padding:9px 22px; font-size:15px;}
+    .tbtn{width:64px; height:64px;} #t-action{width:76px; height:76px; right:92px; bottom:44px;}
+    #t-sprint{right:12px; bottom:12px;} #t-next{right:12px; bottom:92px; width:54px; height:54px;}
+    #t-juke{right:176px; bottom:10px; width:56px; height:56px;}
+    #joyhint{bottom:16px;}
+  }
+  /* Portrait: the stage takes the whole screen. On a touch screen the field sits on
+     top and the controls get their own deck below it, so your thumbs never cover the
+     play; without touch controls the field simply fills it. */
+  @media (orientation:portrait){
+    #app{justify-content:flex-start;}
+    #stage{flex:1 1 auto; min-height:0; aspect-ratio:auto; max-width:none;}
+  }
+  @media (orientation:portrait) and (pointer:coarse){
+    .portrait-tip{display:block !important; color:var(--gold); font-size:12px;}
+    #gl{bottom:auto; height:60%;}
+    #stage{background:linear-gradient(180deg,#0a0e15 60%,#111a26 60%,#0b1119);}
+    #joyhint{left:22px; bottom:calc(20% - 48px); width:96px; height:96px;}
+    #t-action{right:22px; bottom:calc(20% - 8px); width:88px; height:88px;}
+    #t-sprint{right:122px; bottom:calc(20% - 74px); width:72px; height:72px;}
+    #t-juke{right:122px; bottom:calc(20% + 20px); width:64px; height:64px;}
+    #t-next{right:26px; bottom:calc(20% - 88px); width:62px; height:62px;}
+    #stamina{bottom:auto; top:calc(60% + 10px);} #spinpip{bottom:auto; top:calc(60% + 7px);}
+    #comm{bottom:auto; top:calc(60% - 10px); transform:translate(-50%,-100%); max-width:92%;}
+    #poss{top:30%;}
+    .credit{display:none;}
+  }
 </style>
 <!-- Three.js: try the CDN first (some network filters block same-origin subfolders),
      and fall back to the vendored copies if the CDN is unreachable. Each fallback is
@@ -153,10 +226,11 @@
     <div id="spinpip">SPIN READY</div>
 
     <div id="touch">
-      <div id="joyhint">MOVE</div>
+      <div id="joyhint">MOVE<i id="joyknob"></i></div>
       <div class="tbtn" id="t-next">REC ▸</div>
       <div class="tbtn" id="t-action">HIKE</div>
       <div class="tbtn" id="t-sprint">SPRINT</div>
+      <div class="tbtn" id="t-juke">JUKE</div>
     </div>
 
     <div id="poss"></div>
@@ -168,7 +242,7 @@
     <div id="comm"></div>
 
     <div id="playcall" class="hidden">
-      <div id="pc-head"><div id="pc-tabs"></div><div id="pc-hint">← → formation · 1–9 call it · then C audible · X flip · 1–5 + arrow = hot route</div></div>
+      <div id="pc-head"><div id="pc-tabs"></div><div id="pc-hint" class="kbd-only">← → formation · 1–9 call it · then C audible · X flip · 1–5 + arrow = hot route</div></div>
       <div id="pc-cards"><div id="pc-list"></div>
         <div class="pc oc kick hidden" id="pb-fg" data-play="fg"><div class="pt">FIELD GOAL</div><div class="ps" id="fg-label">3 points</div></div>
         <div class="pc oc kick hidden" id="pb-punt" data-play="punt"><div class="pt">PUNT</div><div class="ps">flip the field</div></div>
@@ -203,7 +277,7 @@
 
     <div class="overlay" id="start">
       <h1 class="title">GRIDIRON<br>BLITZ<small>HEAD TO HEAD</small></h1>
-      <div class="keys">
+      <div class="keys kbd-only">
         <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · <b>Q·E juke</b> · 1·2·3 pick receiver · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> change announcer voice.<br>
         <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down, and <b>Q/E dives</b> for the tackle (extra reach; miss it and you're on the floor). Blocked? <b>Q/E rips free</b> of the blocker instead.<br>
         <b>Clock &amp; kicks:</b> <b>T</b> (or tap the clock) calls a timeout, three a half · Space while a punt comes down to you = fair catch · behind in the fourth quarter, Space on your kickoff = onside kick.<br>
@@ -218,7 +292,8 @@
         <button class="btn" id="d-season" style="background:linear-gradient(180deg,#ffe08a,#f0b429); box-shadow:0 6px 0 #a87a14; color:#1a1406;">Season</button>
         <span class="keys" id="season-note" style="margin:0;"></span>
       </div>
-      <div class="keys" style="font-size:11px;opacity:.7">Touch: left pad moves · red button = hike/throw/spin or switch defender · SPRINT burns.</div>
+      <div class="keys portrait-tip">Tip: turn your phone sideways for the widest view of the field.</div>
+      <div class="keys touch-only" style="font-size:12px;opacity:.85">Drag anywhere on the left to move · the red button hikes, throws, spins, or switches defender · <b>JUKE</b> cuts away from the nearest tackler (on defense it <b>DIVES</b>, or <b>RIPS</b> free of a block) · tap a receiver's number before the snap for a hot route.</div>
     </div>
 
     <div class="overlay hidden" id="over">
@@ -1086,7 +1161,7 @@
       if(Math.random()<0.025){ return deadBallFoul('falseStart'); }
       if(Math.random()<0.018){ return deadBallFoul('offside'); }
     }
-    G.lastTackler=null; G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
+    G.lastTackler=null; G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); closeAudible(); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
     G.rec=[]; G._recT=0; stopReplay();   // fresh replay buffer each snap
     if((GOAL_X-G.los)/PPY<=22 || G.down>=3) crowdSwell(crowdBase+0.05,1.4);   // anticipation on tense downs / red zone
     const spc=(PLAYS[G.playId]||{}).special;
@@ -1164,13 +1239,29 @@
     SFX.throw(); crowdSwell(crowdBase+0.05,1.0);
   }
 
-  const action_btn=document.getElementById('t-action'), sprint_btn=document.getElementById('t-sprint'), next_btn=document.getElementById('t-next');
+  const action_btn=document.getElementById('t-action'), sprint_btn=document.getElementById('t-sprint'), next_btn=document.getElementById('t-next'), juke_btn=document.getElementById('t-juke');
+  // Floating stick: it starts wherever your thumb lands on the left half of the stage,
+  // which in portrait includes the control deck under the field (not part of the canvas).
+  const stageEl=document.getElementById('stage'), joyHint=document.getElementById('joyhint'), joyKnob=document.getElementById('joyknob');
+  const JOY_R=48;   // CSS px of stick travel
   let joyId=null, joyOrigin=null;
-  function rel(t){ const r=cv.getBoundingClientRect(); return {x:(t.clientX-r.left)/r.width*CW,y:(t.clientY-r.top)/r.height*CH}; }
-  cv.addEventListener('pointerdown',e=>{ if(e.pointerType==='mouse') return; const p=rel(e); if(p.x<CW*0.5){ joyId=e.pointerId; joyOrigin=p; touchDir={x:0,y:0}; } });
-  cv.addEventListener('pointermove',e=>{ if(e.pointerId!==joyId||!joyOrigin) return; const p=rel(e); let dx=p.x-joyOrigin.x,dy=p.y-joyOrigin.y; const m=Math.hypot(dx,dy)||1,c=Math.min(m,46)/46; touchDir={x:dx/m*c,y:dy/m*c}; });
-  function endJoy(e){ if(e.pointerId===joyId){ joyId=null; joyOrigin=null; touchDir=null; } }
-  cv.addEventListener('pointerup',endJoy); cv.addEventListener('pointercancel',endJoy);
+  stageEl.addEventListener('pointerdown',e=>{ if(e.pointerType==='mouse' || (e.target!==cv && e.target!==stageEl)) return;
+    const r=stageEl.getBoundingClientRect(); if(e.clientX-r.left > r.width*0.5) return;
+    joyId=e.pointerId; joyOrigin={x:e.clientX,y:e.clientY}; touchDir={x:0,y:0};
+    joyHint.classList.add('on'); joyHint.style.left=(e.clientX-r.left-48)+'px'; joyHint.style.top=(e.clientY-r.top-48)+'px'; joyHint.style.bottom='auto'; });
+  stageEl.addEventListener('pointermove',e=>{ if(e.pointerId!==joyId||!joyOrigin) return; const dx=e.clientX-joyOrigin.x, dy=e.clientY-joyOrigin.y;
+    const m=Math.hypot(dx,dy)||1, c=Math.min(m,JOY_R)/JOY_R; touchDir={x:dx/m*c,y:dy/m*c};
+    joyKnob.style.transform='translate('+(touchDir.x*JOY_R*0.62).toFixed(1)+'px,'+(touchDir.y*JOY_R*0.62).toFixed(1)+'px)'; });
+  function endJoy(e){ if(e.pointerId===joyId){ joyId=null; joyOrigin=null; touchDir=null; joyHint.classList.remove('on'); joyHint.style.left=joyHint.style.top=joyHint.style.bottom=''; joyKnob.style.transform=''; } }
+  stageEl.addEventListener('pointerup',endJoy); stageEl.addEventListener('pointercancel',endJoy);
+  // Touch had no juke and, on defense, no dive and no rip: those lived on Q/E only.
+  // The cut goes the way the stick leans, or away from the nearest tackler.
+  juke_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); audioInit();
+    if(G.offense==='cpu'){ juke(1); return; }
+    let dir = touchDir && Math.abs(touchDir.x)>0.2 ? Math.sign(touchDir.x) : 0;
+    const c=G.ctrlBlocker||G.carrier;
+    if(!dir && c){ let near=null, nd=1e9; for(const d of G.defenders){ const dd=dist(d,c); if(dd<nd){ nd=dd; near=d; } } dir = near && near.y>c.y ? -1 : 1; }
+    juke(dir||1); });
   action_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); action(); });
   next_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); if(G.offense==='user'&&G.receivers.length){ G.sel=(G.sel+1)%G.receivers.length; G.selLock=1.4; } });
   sprint_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); sprintHeld=true; });
@@ -2511,13 +2602,15 @@
     if(G.offense==='cpu') ab.textContent='SWITCH';
     else ab.textContent = G.phase==='presnap'?'HIKE':(G.playType==='pass'&&G.passState==='drop'?'THROW':'SPIN');
     next_btn.style.display=(G.offense==='user'&&G.phase==='live'&&G.playType==='pass'&&G.passState==='drop')?'flex':'none';
+    const jl = G.phase!=='live' ? '' : G.offense==='cpu' ? ((G.userDef&&(G.userDef.blocked||0)>0)?'RIP':'DIVE') : 'JUKE';
+    if(juke_btn.textContent!==jl){ juke_btn.textContent=jl; juke_btn.style.display=jl?'flex':'none'; }
   }
 
   // ---- 3D rendering (three.js r128) ----
   let scene, camera, renderer, ballMesh, pPool=[], camPos, camLook, flashes=[];
   let playerProto=null, playersReady=false, lastDt=0.016, ringPool=[], losLine, firstLine, catchMark;
   const routeLines=[], _lab=new THREE.Vector3(), _routePts=new Float32Array(200); let _presnapBar=null;
-  let _runQBG=null, _frameNo=0, _carrierG=null, downPole=null, firstPole=null; const _tuckV=new THREE.Vector3();
+  let _runQBG=null, _frameNo=0, _carrierG=null, downPole=null, firstPole=null, nearPosts=null; const _tuckV=new THREE.Vector3();
   const _spinAxis=new THREE.Vector3(1,0,0); let _spiral=0;   // ball spirals about its long axis
   const _fdir=new THREE.Vector3(), _qs=new THREE.Quaternion();
   // A real football is 11" x 6.7" = 0.306 x 0.186 yards. ballMesh is a r=0.4 sphere,
@@ -3136,11 +3229,12 @@
   }
   function goalpost3D(x){
     const m=new THREE.MeshStandardMaterial({color:0xffe44a,emissive:0x6a560e,emissiveIntensity:0.6,roughness:0.3,metalness:0.35});
-    const z0=26.65, crossH=3.3, halfW=3.05;
-    const base=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.2,crossH,14), m); base.position.set(x,crossH/2,z0); base.castShadow=true; scene.add(base);
-    const pad=new THREE.Mesh(new THREE.CylinderGeometry(0.33,0.33,1.5,14), new THREE.MeshStandardMaterial({color:0xc22,roughness:0.85})); pad.position.set(x,0.75,z0); scene.add(pad);
-    const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,halfW*2,14), m); bar.rotation.x=Math.PI/2; bar.position.set(x,crossH,z0); bar.castShadow=true; scene.add(bar);
-    [-halfW,halfW].forEach(z=>{ const up=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,6.8,14), m); up.position.set(x,crossH+3.4,z0+z); up.castShadow=true; scene.add(up); });
+    const z0=26.65, crossH=3.3, halfW=3.05, g=new THREE.Group();
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.2,crossH,14), m); base.position.set(x,crossH/2,z0); base.castShadow=true; g.add(base);
+    const pad=new THREE.Mesh(new THREE.CylinderGeometry(0.33,0.33,1.5,14), new THREE.MeshStandardMaterial({color:0xc22,roughness:0.85})); pad.position.set(x,0.75,z0); g.add(pad);
+    const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,halfW*2,14), m); bar.rotation.x=Math.PI/2; bar.position.set(x,crossH,z0); bar.castShadow=true; g.add(bar);
+    [-halfW,halfW].forEach(z=>{ const up=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,6.8,14), m); up.position.set(x,crossH+3.4,z0+z); up.castShadow=true; g.add(up); });
+    scene.add(g); return g;
   }
   function buildStands(){
     const ct=crowdTexture();
@@ -3235,7 +3329,7 @@
     buildSidelines();
     buildFlashes();
     lightTower(-30,-30); lightTower(150,-30); lightTower(-30,83); lightTower(150,83);
-    goalpost3D(0.5); goalpost3D(119.5);
+    nearPosts=goalpost3D(0.5); goalpost3D(119.5);
     ballMesh=new THREE.Mesh(new THREE.SphereGeometry(0.4,20,16), new THREE.MeshStandardMaterial({color:0x3d1f0c,roughness:0.66,metalness:0.02})); ballMesh.scale.set(...BALL_LIVE);
     { const white=new THREE.MeshStandardMaterial({color:0xe8e4d8,roughness:0.58});
       // laces run along the ball's long axis (X); the old box ran across it
@@ -3256,7 +3350,9 @@
     camPos=new THREE.Vector3(40,8.5,26.65); camLook=new THREE.Vector3(60,1,26.65);
     resize3D(); window.addEventListener('resize',resize3D); applyQuality();
   }
-  function resize3D(){ if(!renderer) return; const st=document.getElementById('stage'); const w=st.clientWidth||760,h=st.clientHeight||560; renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  // 1 at the design aspect (760x560) or wider; above 1 when the view is narrower
+  function narrowK(){ return Math.max(1, (760/560)/(camera.aspect||1.357)); }
+  function resize3D(){ if(!renderer) return; const st=document.getElementById('gl'); const w=st.clientWidth||760,h=st.clientHeight||560; renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2)); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
   // Ball in the carrier's right hand: palm centre in the hand bone's frame (y runs to
   // the fingers, +z faces the palm on the right hand), long axis along the hand.
   const _ballLocal=new THREE.Vector3(0.0,0.075,0.055), _handQ=new THREE.Quaternion(), _alignQ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.PI/2);
@@ -3338,9 +3434,13 @@
         while(lab.childElementCount>G.receivers.length) lab.lastChild.remove();
         const W=renderer.domElement.clientWidth||760, H=renderer.domElement.clientHeight||560;
         G.receivers.forEach((r,i)=>{ const el=lab.children[i]; _lab.set(WX(r.x),2.45,WZ(r.y)).project(camera);
-          el.style.left=((_lab.x+1)/2*W).toFixed(1)+'px'; el.style.top=((1-_lab.y)/2*H).toFixed(1)+'px';
+          // A receiver off the edge of a narrow (portrait) view keeps his number, pinned
+          // to the edge on his side, so you still know he is there and can pick him.
+          let lx=(_lab.x+1)/2*W, ly=(1-_lab.y)/2*H; const off = lx<14 || lx>W-14 || ly<30 || ly>H-6;
+          lx=Math.max(14,Math.min(W-14,lx)); ly=Math.max(30,Math.min(H-6,ly));
+          el.style.left=lx.toFixed(1)+'px'; el.style.top=ly.toFixed(1)+'px';
           if(el.textContent!==String(i+1)) el.textContent=i+1;
-          const cls='rl'+(G.phase==='live'&&i===G.sel?' sel':'')+(G.hotSel===i?' hot':''); if(el.className!==cls) el.className=cls; }); } }
+          const cls='rl'+(off?' off':'')+(G.phase==='live'&&i===G.sel?' sel':'')+(G.hotSel===i?' hot':'')+(G.phase==='presnap'&&G.playType==='pass'?' tap':''); if(el.className!==cls) el.className=cls; }); } }
     const bar=_presnapBar||(_presnapBar=document.getElementById('presnap-bar'));
     if(bar){ const on=!repFrame && G.offense==='user' && G.phase==='presnap'; if(bar.classList.contains('hidden')===on) bar.classList.toggle('hidden',!on); }
   }
@@ -3742,7 +3842,7 @@
       const focusX = (G.ball&&G.ball.active) ? WX(G.ball.x) : WX(tee.x);
       const midX = (focusX + WX(G.carrier.x))*0.5;
       const highBall = (G.ball&&G.ball.active)?7:3;
-      camPos.lerp(new THREE.Vector3(midX+2, 30, WZ(fieldMid)-60), 0.07);
+      camPos.lerp(new THREE.Vector3(midX+2, 30, WZ(fieldMid)-60*narrowK()), 0.07);
       camLook.lerp(new THREE.Vector3((focusX+midX)*0.5, highBall, WZ(fieldMid)), 0.10);
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(G._td && G.phase==='dead' && G.carrier){ // touchdown: slow orbit around the celebration
@@ -3757,13 +3857,21 @@
       // controlling on defense. Pulled in to frame ~34 yards with the carrier nearer
       // the middle, at a lower angle so less empty grass fills the shot. Widens on a
       // dropback so the routes still fit.
-      const wide=(G.passState==='drop'||G.passState==='air')?1.22:((G.phase==='presnap'&&G.playType==='pass'&&G.offense==='user')?1.32:1.0);
+      // A narrow view (portrait) sees less across the field at the same distance: pull
+      // back in proportion so the same width of the play fits.
+      const wide=((G.passState==='drop'||G.passState==='air')?1.22:((G.phase==='presnap'&&G.playType==='pass'&&G.offense==='user')?1.32:1.0))*narrowK();
       const cmid=cz+(WZ(fieldMid)-cz)*0.20;
-      camPos.lerp(new THREE.Vector3(cx-13*wide,8.2*wide,cmid),0.10);
+      // Deep in your own end the chase cam used to back up past the goalposts and, in
+      // a narrow view, into the end-zone stands, which filled the bottom of the shot.
+      // Stop it at the back of the end zone and climb instead.
+      let camX=cx-13*wide, camY=8.2*wide; const CAM_MIN_X=-5;
+      if(camX<CAM_MIN_X){ camY+=(CAM_MIN_X-camX)*0.6; camX=CAM_MIN_X; }
+      camPos.lerp(new THREE.Vector3(camX,camY,cmid),0.10);
       camLook.lerp(new THREE.Vector3(cx+6*wide,1.5,cz),0.13);
       const s=G.shake>0?Math.min(0.45,G.shake*2.4):0;
       camera.position.set(camPos.x+(Math.random()-0.5)*s, camPos.y+(Math.random()-0.5)*s, camPos.z+(Math.random()-0.5)*s);
       camera.lookAt(camLook); }
+    if(nearPosts) nearPosts.visible = camera.position.x > 4;   // never shoot the play through the near uprights
     for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; } else if(Math.random()<0.025){ f.material.opacity=0.95; f.lookAt(camera.position); } }
     // slide the tight shadow frustum onto the action, keeping the light direction fixed
     if(sunLight){ const fx=camLook.x, fz=camLook.z;
@@ -4103,7 +4211,15 @@
 
   document.getElementById('playcall').addEventListener('click',e=>{ const t=e.target.closest('.tab'); if(t){ setPcForm(t.dataset.form); return; }
     const c=e.target.closest('.oc'); if(c && !c.classList.contains('hidden')) choosePlay(c.dataset.play); });
-  document.getElementById('audible').addEventListener('click',e=>{ const c=e.target.closest('span[data-play]'); if(!c) return; if(c.dataset.play==='__close') closeAudible(); else audibleTo(c.dataset.play); });
+  document.getElementById('audible').addEventListener('click',e=>{
+    const h=e.target.closest('span[data-hot]'); if(h){ closeAudible(); if(h.dataset.hot==='__x'){ G.hotSel=null; setMsg('',0); } else hotRoute(h.dataset.hot); return; }
+    const c=e.target.closest('span[data-play]'); if(!c) return; if(c.dataset.play==='__close') closeAudible(); else audibleTo(c.dataset.play); });
+  // Touch: tap a receiver's number before the snap for his hot-route menu.
+  document.getElementById('rlabels').addEventListener('click',e=>{ const el=e.target.closest('.rl'); if(!el || G.phase!=='presnap' || G.offense!=='user' || G.playType!=='pass') return;
+    const i=[...el.parentNode.children].indexOf(el), r=G.receivers[i]; if(!r) return;
+    const au=document.getElementById('audible'), right=r.y>fieldMid; G.hotSel=i;
+    au.innerHTML='<b>HOT ROUTE — #'+r.n+'</b>'+[['up','GO ↑'],['down','CURL ↓'],[right?'left':'right','SLANT'],[right?'right':'left','OUT'],['__x','✕']].map(([d,l])=>'<span data-hot="'+d+'">'+l+'</span>').join('');
+    au.classList.remove('hidden'); G.audibleOpen=false; });
   document.getElementById('presnap-bar').addEventListener('click',e=>{ const c=e.target.closest('span[data-a]'); if(!c) return; if(c.dataset.a==='flip') flipPlay(); else (G.audibleOpen?closeAudible():openAudible()); });
   document.querySelectorAll('.dc').forEach(el=> el.addEventListener('click',()=>chooseDef(el.dataset.def)));
   function startWith(d){ SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff=d; document.getElementById('start').classList.add('hidden'); newGame(); document.getElementById('stage').focus(); say('Welcome to Gridiron Blitz — we are underway!',true); }
