@@ -194,6 +194,9 @@
   /* Menus scroll rather than clip; the auto margins centre them when they fit. */
   .overlay{justify-content:flex-start; overflow-y:auto;}
   .overlay>:first-child{margin-top:auto;} .overlay>:last-child{margin-bottom:auto;}
+  /* the long screens keep their way out in view while they scroll (on a phone the roster
+     and the offseason run two or three screens, and the button sat at the very bottom) */
+  #team-close,#off-go{position:sticky; bottom:6px; z-index:2; flex-shrink:0;}
   #playcall,#defcall{max-height:100%; overflow-y:auto;}
   .touch-only{display:none;} .portrait-tip{display:none !important;}
   .modecol{display:flex; flex-direction:column; align-items:center; gap:5px; max-width:300px;}
@@ -217,6 +220,8 @@
   }
   /* short landscape (phones): a slimmer scoreboard and compact menus */
   @media (max-height:520px) and (orientation:landscape){
+    /* a coach tip on a phone sits in the top-left corner, small, not across the middle of the field */
+    #tip{left:12px; top:44px; transform:none; max-width:min(330px,46%); font-size:11.5px; line-height:1.4; padding:6px 10px 6px 9px;}
     #over #over-title{order:0;} #over #final-line{order:1;} #over .btn{order:2;} #over #final-sub{order:3;}
     #app{padding:4px; gap:4px;} #scoreboard{gap:4px;}
     .sb-cell{padding:3px 8px; border-radius:8px;} .sb-cell .lbl{font-size:8px;}
