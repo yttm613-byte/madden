@@ -37,8 +37,10 @@ s = s.replace(/<!DOCTYPE html>\s*/i, '')
      .replace(/<\/head>\s*/i, '')
      .replace(/<body[^>]*>\s*/i, '')
      .replace(/<\/body>\s*/i, '')
-     .replace(/<meta[^>]*>\s*/gi, '')
-     .replace(/<link[^>]*>\s*/gi, '');
+     // a real tag has whitespace after its name: `<meta[^>]*>` also matched the game's
+     // own shader patch, '#include <metalnessmap_fragment>', and broke the light model
+     .replace(/<meta\s[^>]*>\s*/gi, '')
+     .replace(/<link\s[^>]*>\s*/gi, '');
 
 // ---- 2. fonts, embedded (the stylesheet link would be blocked) -------------------
 // Vendored, not fetched. This read used to point at a file in /tmp, and when /tmp was
