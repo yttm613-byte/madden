@@ -509,6 +509,20 @@
     }
     return r;
   }
+  // ---- weather -------------------------------------------------------------------------
+  // Most games are dry; now and then it rains or snows, and it plays the part: a wet ball
+  // is harder to hold on to, to catch and to throw on target, and snow takes the edge off
+  // everybody's footing. Late in a season it snows more. The sim build is always dry.
+  const WXS={ clear:{fum:1,cat:1,err:1,spd:1}, rain:{fum:1.45,cat:0.965,err:1.12,spd:0.985}, snow:{fum:1.25,cat:0.955,err:1.08,spd:0.965} };
+  let WEATHER='clear';
+  const wx=()=>WXS[WEATHER]||WXS.clear;
+  function pickWeather(){
+    const f=typeof window!=='undefined' && window.__gbWeather; if(f && WXS[f]) return f;
+    let pr=0.16, ps=0.09;
+    if(SEASON && !TWO_P){ const wk=(SEASON.results||[]).length; if(wk>=4){ ps=0.26; pr=0.12; } else { ps=0.03; pr=0.2; } }
+    const r=Math.random(); return r<ps?'snow':r<ps+pr?'rain':'clear';
+  }
+  function wxIntro(){ return WEATHER==='rain' ? ' And it is pouring out here — ball security will be everything today.' : WEATHER==='snow' ? ' Snow is coming down — a real winter game, footing will be an adventure!' : ''; }
   // ---- your team: the same men game after game, with their season stats ----
   const TEAM_KEY='gb-team';
   let MYTEAM=null;
@@ -531,7 +545,7 @@
   function rateUp(){
     if(!G || !G.rosters) return;
     const off=G.offense, dfn=off==='user'?'cpu':'user';
-    const set=(e,team)=>{ if(!e || e.rt!==undefined) return; const r=G.rosters[team]; e.rt=(r&&r[e.n])||null; e.sf=1+rz(e.rt,'spd')*0.003; };
+    const set=(e,team)=>{ if(!e || e.rt!==undefined) return; const r=G.rosters[team]; e.rt=(r&&r[e.n])||null; e.sf=(1+rz(e.rt,'spd')*0.003)*wx().spd; };
     set(G.carrier,off); for(const r of G.receivers) set(r,off); for(const b of G.blockers) set(b,off);
     for(const d of G.defenders){ if(d.rt!==undefined) continue; set(d,dfn); d.spd=(d.spd||1)*d.sf;
       if(d.winAt!=null && isFinite(d.winAt)) d.winAt*=Math.max(0.78,Math.min(1.22,1-rz(d.rt,'str')*0.008)); }
@@ -549,6 +563,7 @@
         fx:[], shake:0, flash:0, trail:[], rec:[], replay:null, fumble:null, _td:false, _fg:false, _turn:false, _spot:0,
         _safety:false, _returning:false, _retKind:null, _retStart:0, conv:null, twoPt:false, convChoice:false, kickKind:null, _koFlight:false, _fgFlight:false, _fgRes:false, clockStop:false, flag:null };
     G.rosters={ user: TWO_P ? makeRoster() : myTeam().roster, cpu: (SEASON&&!TWO_P) ? oppRoster(seasonOpp(SEASON)) : makeRoster() };
+    applyWeather(pickWeather());
     G.timeouts={user:3,cpu:3}; G.stats={user:blankStats(),cpu:blankStats()};
     G._openingRecv='user'; startKickoff('user');
   }
@@ -2479,7 +2494,7 @@
     // the distance, so a 40-yard throw lands a yard or two off where a 10-yarder is on it
     // (touch is thrown with more margin deep; a bullet with less)
     const err=(yd(0.35)*pressure*2.2 + yd(0.30)*deep + yd(1.1)*deep*deep)*(kind==='touch'?0.85:kind==='bullet'?1.12:1)
-             *Math.max(0.7, 1-rz(qb.rt,'acc')*0.012);                  // the passer's accuracy
+             *Math.max(0.7, 1-rz(qb.rt,'acc')*0.012)*wx().err;          // the passer's accuracy, and the weather
     tx += (Math.random()*2-1)*err; ty += (Math.random()*2-1)*err;
     ty=Math.max(fieldTop,Math.min(fieldBot,ty));
     G.ball={active:true,x:qb.x,y:qb.y,fromX:qb.x,fromY:qb.y,tx,ty,t:0,dur,rec:r,kind,arcK:kind==='bullet'?0.5:kind==='touch'?1.75:1};
@@ -2544,7 +2559,7 @@
       pCatch *= airY<9 ? 1 : airY<18 ? 1-(airY-9)*0.03 : Math.max(0.26, 0.73-(airY-18)*0.035);
       pInt   *= 1 + Math.max(0, Math.min(1.6, (airY-8)*0.06));
       pCatch *= 1 - Math.min(0.45, (rd/PPY)*0.15);
-      pCatch = Math.min(0.985, pCatch*(1+rz(r.rt,'hnd')*0.004));   // his hands
+      pCatch = Math.min(0.985, pCatch*(1+rz(r.rt,'hnd')*0.004)*wx().cat);   // his hands, and the weather
     }
     // your defender went up for it as it arrived
     const ud=humanDef()?G.userDef:null;
@@ -2713,7 +2728,7 @@
     if(hit<5.5) return false;                                  // only real collisions
     let p=0.012 + (hit-5.5)*0.006 + Math.max(0,carrySp-6)*0.005;
     if(G.spinCd>1.6) p+=0.012;                                 // spinning with it is risky
-    p=Math.min(0.055,p);
+    p=Math.min(0.08,p*wx().fum);                              // a wet ball comes out more
     if(Math.random()>=p) return false;
     // pop it loose
     const a=Math.atan2(c.vy||0,(c.vx||1))+ (Math.random()-0.5)*1.6;
@@ -3777,6 +3792,71 @@
       playersReady=true;
     }, undefined, (e)=>{ console.error('player glb load failed', e); });
   }
+  let wxRain=null, wxSnow=null, wxCover=null, wxField=null, wxSky=null, wxT=0, wxSnd=null;
+  function initWeather3D(){
+    const NR=1800, rg=new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NR*6),3));
+    wxRain=new THREE.LineSegments(rg, new THREE.LineBasicMaterial({color:0xaec0d8, transparent:true, opacity:0.4, depthWrite:false}));
+    wxRain.frustumCulled=false; wxRain.visible=false; wxRain.userData.n=NR; scene.add(wxRain);
+    const NS=1500, sg=new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NS*3),3));
+    const c=document.createElement('canvas'); c.width=c.height=32; const g=c.getContext('2d'), gr=g.createRadialGradient(16,16,0,16,16,16);
+    gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(0.45,'rgba(255,255,255,0.65)'); gr.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle=gr; g.fillRect(0,0,32,32);
+    wxSnow=new THREE.Points(sg, new THREE.PointsMaterial({size:0.3, map:new THREE.CanvasTexture(c), transparent:true, depthWrite:false}));
+    wxSnow.frustumCulled=false; wxSnow.visible=false; wxSnow.userData.n=NS; scene.add(wxSnow);
+    // snow lying on the turf in drifts, heavier toward the sidelines, lines half showing
+    const t=document.createElement('canvas'); t.width=1024; t.height=456; const tg=t.getContext('2d');
+    for(let i=0;i<2600;i++){ const x=Math.random()*1024, y=Math.random()*456, edge=Math.min(y,456-y)/228, r=6+Math.random()*26*(1.2-edge*0.6);
+      const a=0.07+Math.random()*0.15*(1.25-edge*0.5); const rr=tg.createRadialGradient(x,y,0,x,y,r); rr.addColorStop(0,'rgba(246,249,255,'+a+')'); rr.addColorStop(1,'rgba(246,249,255,0)');
+      tg.fillStyle=rr; tg.fillRect(x-r,y-r,r*2,r*2); }
+    const tex=new THREE.CanvasTexture(t); if(THREE.sRGBEncoding) tex.encoding=THREE.sRGBEncoding;
+    wxCover=new THREE.Mesh(new THREE.PlaneGeometry(120,53.3), new THREE.MeshStandardMaterial({map:tex, transparent:true, roughness:0.95, depthWrite:false}));
+    wxCover.rotation.x=-Math.PI/2; wxCover.position.set(60,0.012,26.65); wxCover.receiveShadow=true; wxCover.visible=false; scene.add(wxCover);
+  }
+  // scatter every drop or flake through the box in front of the camera
+  function wxSeed(all){
+    const L=(typeof camLook!=='undefined'&&camLook)?camLook:{x:60,z:26.65};
+    const put=(arr,i,stride,top)=>{ const x=L.x-28+Math.random()*62, z=L.z-34+Math.random()*68, y=top?22+Math.random()*6:Math.random()*28;
+      arr[i*stride]=x; arr[i*stride+1]=y; arr[i*stride+2]=z; if(stride===6){ arr[i*6+3]=x+0.05; arr[i*6+4]=y-0.75; arr[i*6+5]=z; } };
+    if(wxRain){ const a=wxRain.geometry.attributes.position.array; for(let i=0;i<wxRain.userData.n;i++) put(a,i,6,!all); wxRain.geometry.attributes.position.needsUpdate=true; }
+    if(wxSnow){ const a=wxSnow.geometry.attributes.position.array; for(let i=0;i<wxSnow.userData.n;i++) put(a,i,3,!all); wxSnow.geometry.attributes.position.needsUpdate=true; }
+  }
+  function updateWeather(dt){
+    if(WEATHER==='clear' || !wxRain) return;
+    wxT+=dt; const L=camLook||{x:60,z:26.65};
+    const lite=qKey==='lite'||qKey==='fast', out=(x,z)=>x<L.x-30||x>L.x+36||z<L.z-36||z>L.z+36;
+    if(WEATHER==='rain'){ const a=wxRain.geometry.attributes.position.array, n=wxRain.userData.n, v=26*dt, w=2.2*dt;
+      for(let i=0;i<n;i++){ const o=i*6; a[o+1]-=v; a[o+4]-=v; a[o]+=w; a[o+3]+=w;
+        if(a[o+4]<0 || out(a[o],a[o+2])){ const x=L.x-28+Math.random()*62, z=L.z-34+Math.random()*68, y=24+Math.random()*4;
+          a[o]=x; a[o+1]=y; a[o+2]=z; a[o+3]=x+0.05; a[o+4]=y-0.75; a[o+5]=z; } }
+      wxRain.geometry.attributes.position.needsUpdate=true; wxRain.geometry.setDrawRange(0,(lite?n*0.45:n)*2); }
+    else { const a=wxSnow.geometry.attributes.position.array, n=wxSnow.userData.n, v=2.1*dt;
+      for(let i=0;i<n;i++){ const o=i*3; a[o+1]-=v*(0.7+(i%7)*0.08); a[o]+=Math.sin(wxT*1.1+i)*0.55*dt+0.35*dt; a[o+2]+=Math.cos(wxT*0.9+i*1.7)*0.45*dt;
+        if(a[o+1]<0 || out(a[o],a[o+2])){ a[o]=L.x-28+Math.random()*62; a[o+1]=22+Math.random()*6; a[o+2]=L.z-34+Math.random()*68; } }
+      wxSnow.geometry.attributes.position.needsUpdate=true; wxSnow.geometry.setDrawRange(0, lite?n*0.5:n); }
+  }
+  function applyWeather(kind){
+    WEATHER=WXS[kind]?kind:'clear';
+    const lb=document.querySelector('#sb-clock .lbl'); if(lb) lb.textContent='Clock'+(WEATHER==='rain'?' · 🌧':WEATHER==='snow'?' · ❄':'');
+    wxSound();
+    if(!scene) return;
+    const f={clear:[0x12203a,75,250], rain:[0x1a222e,36,165], snow:[0x39424f,30,135]}[WEATHER];
+    scene.fog.color.setHex(f[0]); scene.fog.near=f[1]; scene.fog.far=f[2];
+    if(wxRain) wxRain.visible=WEATHER==='rain'; if(wxSnow) wxSnow.visible=WEATHER==='snow'; if(wxCover) wxCover.visible=WEATHER==='snow';
+    if(wxField){ wxField.material.roughness=WEATHER==='rain'?0.6:0.82; wxField.material.color.setScalar(WEATHER==='rain'?0.8:1); }
+    if(wxSky) wxSky.material.color.setHex(WEATHER==='rain'?0x7d8594:WEATHER==='snow'?0xaab3c0:0xffffff);
+    if(sunLight) sunLight.intensity=WEATHER==='clear'?1.45:WEATHER==='rain'?1.12:1.25;
+    wxSeed(true);
+  }
+  // rain you can hear: filtered noise under the crowd
+  function wxSound(){ try{
+    if(wxSnd){ wxSnd.g.gain.setTargetAtTime(0,actx.currentTime,0.4); const old=wxSnd; setTimeout(()=>{ try{ old.src.stop(); }catch(e){} },1500); wxSnd=null; }
+    if(WEATHER!=='rain' || !actx || muted) return;
+    const n=Math.floor(actx.sampleRate*3), buf=actx.createBuffer(1,n,actx.sampleRate), d=buf.getChannelData(0); for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+    const src=actx.createBufferSource(); src.buffer=buf; src.loop=true;
+    const hp=actx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=700;
+    const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=5200;
+    const g=actx.createGain(); g.gain.value=0; g.gain.setTargetAtTime(0.045,actx.currentTime,0.8);
+    src.connect(hp).connect(lp).connect(g).connect(actx.destination); src.start(); wxSnd={src,g};
+  }catch(e){} }
   function goalpost3D(x){
     const m=new THREE.MeshStandardMaterial({color:0xffe44a,emissive:0x6a560e,emissiveIntensity:0.6,roughness:0.3,metalness:0.35});
     const z0=26.65, crossH=3.3, halfW=3.05, g=new THREE.Group();
@@ -3843,7 +3923,7 @@
       if(THREE.RGBELoader){ new THREE.RGBELoader().load('assets/env.hdr',(hdr)=>{ try{ hdr.mapping=THREE.EquirectangularReflectionMapping; scene.environment=pmrem.fromEquirectangular(hdr).texture; hdr.dispose(); }catch(e){} }); }
     }catch(e){}
     document.getElementById('gl').appendChild(cv);
-    const sky=new THREE.Mesh(new THREE.SphereGeometry(340,24,16), new THREE.MeshBasicMaterial({map:skyTexture(),side:THREE.BackSide,fog:false})); scene.add(sky);
+    const sky=new THREE.Mesh(new THREE.SphereGeometry(340,24,16), new THREE.MeshBasicMaterial({map:skyTexture(),side:THREE.BackSide,fog:false})); scene.add(sky); wxSky=sky;
     scene.add(new THREE.AmbientLight(0x4a5a78,0.5));    // soft cool fill
     const sun=new THREE.DirectionalLight(0xfff4dc,1.45); sun.position.set(70,95,18); sun.castShadow=true;   // brighter key light
     sun.target.position.set(60,0,26.65); scene.add(sun.target);
@@ -3855,7 +3935,8 @@
     const rim=new THREE.DirectionalLight(0x9ab8ff,0.5); rim.position.set(40,38,-46); scene.add(rim);          // cool back rim for separation
     const warm=new THREE.DirectionalLight(0xffd2a0,0.32); warm.position.set(90,30,70); scene.add(warm);       // warm cross-fill
     const field=new THREE.Mesh(new THREE.PlaneGeometry(120,53.3), new THREE.MeshStandardMaterial({map:fieldTexture(),roughness:0.82,metalness:0.0,envMapIntensity:0.35}));
-    field.rotation.x=-Math.PI/2; field.position.set(60,0,26.65); field.receiveShadow=true; scene.add(field);
+    field.rotation.x=-Math.PI/2; field.position.set(60,0,26.65); field.receiveShadow=true; scene.add(field); wxField=field;
+    initWeather3D();
     // broadcast lines: blue line of scrimmage + yellow first-down line (positioned per play)
     function fieldLine(color){ const m=new THREE.Mesh(new THREE.PlaneGeometry(0.34,53.3), new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.8,depthWrite:false,fog:false}));
       m.rotation.x=-Math.PI/2; m.position.set(60,0.04,26.65); m.visible=false; scene.add(m); return m; }
@@ -4430,6 +4511,7 @@
       camera.position.set(camPos.x+(Math.random()-0.5)*s, camPos.y+(Math.random()-0.5)*s, camPos.z+(Math.random()-0.5)*s);
       camera.lookAt(camLook); }
     if(nearPosts) nearPosts.visible = camera.position.x > 4;   // never shoot the play through the near uprights
+    updateWeather(lastDt||0.016);
     for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; } else if(Math.random()<0.025){ f.material.opacity=0.95; f.lookAt(camera.position); } }
     // slide the tight shadow frustum onto the action, keeping the light direction fixed
     if(sunLight){ const fx=camLook.x, fz=camLook.z;
@@ -4576,7 +4658,7 @@
     audioInit(); startCrowd(); pendingDiff='season';
     document.getElementById('start').classList.add('hidden'); document.getElementById('over').classList.add('hidden');
     newGame(); document.getElementById('stage').focus();
-    say(title ? 'The title game — it all comes down to this, against the '+o.name+'.' : 'Week '+(wk+1)+': the '+o.name+' are in town.', true);
+    say((title ? 'The title game — it all comes down to this, against the '+o.name+'.' : 'Week '+(wk+1)+': the '+o.name+' are in town.')+wxIntro(), true);
     setMsg(title ? 'TITLE GAME vs '+o.name.toUpperCase() : 'WEEK '+(wk+1)+' vs '+o.name.toUpperCase(), 2.2);
   }
   // ---- your team across a season ----
@@ -4868,9 +4950,9 @@
     twoPNote(); }
   function startTwoPlayer(){ SEASON=null; applyOpponent(null); resetOverButtons(); setTwoP(true); audioInit(); startCrowd(); pendingDiff='pro';
     document.getElementById('start').classList.add('hidden'); newGame(); syncHUD(); document.getElementById('stage').focus();
-    say('Two players, one field — let\u2019s play some football!',true);
+    say('Two players, one field — let\u2019s play some football!'+wxIntro(),true);
     togglePause(true); document.getElementById('p-resume').textContent='Kick off'; }
-  function startWith(d){ setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff=d; document.getElementById('start').classList.add('hidden'); newGame(); document.getElementById('stage').focus(); say('Welcome to Gridiron Blitz — we are underway!',true); }
+  function startWith(d){ setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff=d; document.getElementById('start').classList.add('hidden'); newGame(); document.getElementById('stage').focus(); say('Welcome to Gridiron Blitz — we are underway!'+wxIntro(),true); }
   document.getElementById('d-rookie').addEventListener('click',()=>startWith('rookie'));
   document.getElementById('d-pro').addEventListener('click',()=>startWith('pro'));
   document.getElementById('d-allpro').addEventListener('click',()=>startWith('allpro'));
@@ -4949,7 +5031,7 @@
 
   newGame(); G.phase='start';
   document.getElementById('playcall').classList.add('hidden'); document.getElementById('defcall').classList.add('hidden');
-  init3D();
+  init3D(); applyWeather(WEATHER);
   requestAnimationFrame(loop);
 })();
 </script>
