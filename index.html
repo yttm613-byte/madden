@@ -79,6 +79,8 @@
   #rlabels{position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden;}
   #rlabels .rl{position:absolute; width:19px; height:19px; margin:-24px 0 0 -10px; border-radius:50%; background:#9cc2ff; color:#08101a; font:700 12px/19px 'Oswald',sans-serif; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.5);}
   #rlabels .rl.sel{background:var(--gold);} #rlabels .rl.hot{background:#ff8a7a;}
+  #rlabels .rl.pick{pointer-events:auto; cursor:pointer; touch-action:none;}
+  #rlabels .rl.pick::after{content:''; position:absolute; left:50%; top:-10px; width:56px; height:88px; margin-left:-28px; border-radius:28px;}
   #rlabels .rl.off{opacity:.8; outline:2px dashed rgba(255,255,255,.7); outline-offset:1px;}
   #mute{position:absolute; top:8px; right:8px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
   #commtog{position:absolute; top:8px; right:48px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
@@ -373,7 +375,7 @@
       <h1 class="title">GRIDIRON<br>BLITZ<small>HEAD TO HEAD</small></h1>
       <div class="keys kbd-only" id="quickhelp">Arrows/WASD run · <b>Space</b> hikes, throws, spins · <b>Shift</b> sprints · <b>Q/E</b> juke · <a href="#" id="howto" style="color:var(--gold)">How to play ▸</a></div>
       <div class="keys kbd-only hidden" id="fullhelp">
-        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · 1–5 pick receiver · <b>tap Space for a touch pass, hold it for a bullet</b> · <b>Q·E juke</b> · <b>R</b> stiff arm · <b>Z</b> dive (a QB slides) · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> announcer voice · <b>P</b> pause.<br>
+        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · 1–5 throw to that receiver · <b>tap Space for a touch pass, hold it for a bullet</b> · <b>Q·E juke</b> · <b>R</b> stiff arm · <b>Z</b> dive (a QB slides) · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> announcer voice · <b>P</b> pause.<br>
         <b>Before the snap:</b> <b>C</b> audible · <b>X</b> flip the play · a receiver's number then an arrow = hot route (↑ go, ↓ curl, slant or out), or then <b>M</b> = send him in motion (a defender who follows him is in man coverage).<br>
         <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down, and <b>Q/E dives</b> for the tackle (extra reach; miss it and you're on the floor). Blocked? <b>Q/E rips free</b> of the blocker instead. Ball in the air? <b>R</b> goes up for it — time it right and it's yours.<br>
         <b>Clock &amp; kicks:</b> <b>T</b> (or tap the clock) calls a timeout, three a half · Space while a punt comes down to you = fair catch · behind in the fourth quarter, Space on your kickoff = onside kick.<br>
@@ -679,9 +681,9 @@
     playcall:{ key:'Call a play: <b>← →</b> change formation, <b>1–9</b> call it (or click a card). Green plays run, blue plays pass.',
          pad:g=>'Call a play: the stick moves the cursor, '+g(PB.A)+' calls it, '+g(PB.LB)+g(PB.RB)+' change formation.',
          touch:'Call a play: tap a formation tab, then a play. Green plays run, blue plays pass.' },
-    pass:{ key:'A pass: <b>Space</b> snaps. Each receiver wears a number — press it to pick him, then <b>tap Space</b> for a lofted touch pass or <b>hold it</b> for a bullet.',
+    pass:{ key:'A pass: <b>Space</b> snaps. Each receiver wears a number — <b>press it to throw to him</b>: tap it for a lofted touch pass, hold it for a bullet. <b>Space</b> throws to the gold one.',
          pad:g=>'A pass: '+g(PB.A)+' snaps. Each receiver wears the button that throws to him — <b>tap</b> for a touch pass, <b>hold</b> for a bullet.',
-         touch:'A pass: tap <b>HIKE</b>, then <b>THROW</b> goes to the gold receiver (<b>REC ▸</b> picks another). Tap for touch, hold for a bullet.' },
+         touch:'A pass: tap <b>HIKE</b>, then <b>tap a receiver</b> to throw to him, or <b>THROW</b> for the gold one. Tap for a touch pass, hold for a bullet.' },
     run:{ key:'A run: <b>Space</b> snaps, then follow your blockers. <b>Q/E</b> juke, <b>R</b> stiff arm, <b>Z</b> dive for the last yard, <b>Space</b> spins.',
          pad:g=>'A run: '+g(PB.A)+' snaps. '+g(PB.X)+' jukes, '+g(PB.B)+' stiff arm, '+g(PB.Y)+' dive, '+g(PB.RT)+' sprint.',
          touch:'A run: tap <b>HIKE</b>, drag to run. <b>JUKE</b> cuts, <b>STIFF</b> / <b>DIVE</b> appear when they help.' },
@@ -1535,12 +1537,12 @@
     if(k==='f') toggleFullscreen();
     if(k==='t') callTimeout('user');       // stop the clock between plays
     if(k==='b') toggleBlockerControl();   // run plays: take control of a lineman and block
-    if(/^[1-5]$/.test(k) && actOff()){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
+    if(/^[1-5]$/.test(k) && actOff()){ if(pickRec(+k-1) && !e.repeat) startThrow('num'); }   // his number throws to him
     keys[k]=true;
   });
   addEventListener('keyup',e=>{ if(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
     const k=e.key.toLowerCase(); codes[e.code]=false; if(k==='shift') sprintHeld=false;
-    if(k===' ') releaseThrow('key'); if(e.code==='Enter'||e.code==='NumpadEnter') releaseThrow('key2'); keys[k]=false; });
+    if(k===' ') releaseThrow('key'); if(/^[1-5]$/.test(k)) releaseThrow('num'); if(e.code==='Enter'||e.code==='NumpadEnter') releaseThrow('key2'); keys[k]=false; });
   // Player 2's half of the keyboard.
   function p2Key(e){
     const c=e.code;
@@ -1549,7 +1551,7 @@
     if(c==='Slash'){ jukeAuto(inputVec('cpu').y); return; }
     if(c==='Period'){ if(actDef()) swatBall(); else stiffArm(); return; }
     if(c==='Comma'){ carrierDive(); return; }
-    if(c==='KeyL'){ if(actOff() && G.receivers.length){ G.sel=(G.sel+1)%G.receivers.length; G.selLock=1.4; } return; }
+    if(c==='KeyL'){ if(actOff() && G.receivers.length) pickRec((G.sel+1)%G.receivers.length); return; }
     if(c==='Semicolon'){ callTimeout('cpu'); return; }
     if(c==='KeyK'){ toggleBlockerControl(); return; }
     if(c==='Quote'){ if(G.phase==='presnap' && actOff()) (G.audibleOpen?closeAudible():openAudible()); return; }
@@ -1699,6 +1701,11 @@
   // over the underneath defenders; keep holding and it goes as a BULLET, flat and on
   // him sooner, but a linebacker standing in the lane can get a hand on it.
   const BULLET_T=0.17;
+  // Pick a receiver. The pick is yours for the rest of the play: it used to last 1.4s,
+  // after which the game went back to highlighting whoever it judged most open, so a man
+  // picked early in the drop was not the man the ball went to. Until you pick, THROW
+  // (Space, the pad's button, the touch button) goes to the most open man.
+  function pickRec(i){ if(!G || !G.receivers[i]) return false; G.sel=i; G.selLock=99; return true; }
   function startThrow(src,btn){ if(!G||G.phase!=='live'||!actOff()||G.playType!=='pass'||G.passState!=='drop'||G.windup) return; G.windup={t:0,held:true,src,btn}; }
   function releaseThrow(src,btn){ const w=G&&G.windup; if(w && w.src===src && (btn==null||w.btn===btn)) w.held=false; }
   function tickWindup(dt){ const w=G.windup; if(!w) return;
@@ -1791,7 +1798,7 @@
   const move2_btn=document.getElementById('t-move2');
   move2_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); audioInit(); const l=move2_btn.textContent;
     if(l==='SWAT') swatBall(); else if(l==='STIFF') stiffArm(); else if(l) carrierDive(); });
-  next_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); if(actOff()&&G.receivers.length){ G.sel=(G.sel+1)%G.receivers.length; G.selLock=1.4; } });
+  next_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); if(actOff()&&G.receivers.length) pickRec((G.sel+1)%G.receivers.length); });
   sprint_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); sprintHeld=true; });
   ['pointerup','pointerleave','pointercancel'].forEach(ev=> sprint_btn.addEventListener(ev,()=>sprintHeld=false));
 
@@ -1972,7 +1979,7 @@
       return;
     }
     if(G.phase==='live' && off && G.playType==='pass' && G.passState==='drop'){
-      const k=iconsNow().indexOf(i); if(k>=0 && !G.windup){ G.sel=k; G.selLock=1.4; startThrow('pad'+s,i); }
+      const k=iconsNow().indexOf(i); if(k>=0 && !G.windup){ pickRec(k); startThrow('pad'+s,i); }
       return;
     }
     if(G.phase==='live' && off){
@@ -1998,13 +2005,18 @@
     G.paused = on==null ? !G.paused : !!on;
     const el=document.getElementById('pause'); el.classList.toggle('hidden', !G.paused);
     if(!G.paused) document.getElementById('p-resume').textContent='Resume';
-    if(G.paused){ document.getElementById('p-help').innerHTML = TWO_P ? twoPHelp() : PAD.used
+    if(G.paused){ document.getElementById('p-help').innerHTML = TWO_P ? twoPHelp() : (!PAD.used && lastInput==='touch')
+        ? '<b>Before the snap:</b> HIKE snaps · tap a receiver\u2019s number for a hot route or motion · AUDIBLE · FLIP<br>'
+          +'<b>Passing:</b> tap a receiver to throw to him, or THROW for the gold one — tap for a touch pass, hold for a bullet<br>'
+          +'<b>Running:</b> thumb on the left half moves · SPRINT · JUKE · SPIN · STIFF / DIVE<br>'
+          +'<b>Defense:</b> SWITCH · DIVE · SWAT goes up for the ball'
+        : PAD.used
         ? '<b>Before the snap:</b> '+gb(PB.A)+'hike · '+gb(PB.X)+'audible · '+gb(PB.Y)+'hot route or motion · '+gb(PB.RB)+'flip · '+gb(PB.VIEW)+'timeout<br>'
           +'<b>Passing:</b> each receiver\u2019s button throws to him — tap for a touch pass, hold for a bullet · '+gb(PB.RT)+'scramble<br>'
           +'<b>Running:</b> stick moves · '+gb(PB.RT)+'sprint · '+gb(PB.X)+'juke · flick '+(PAD.ps?'R':'RS')+' to juke · '+gb(PB.B)+'stiff arm · '+gb(PB.Y)+'dive (QB: slide) · '+gb(PB.A)+'spin<br>'
           +'<b>Defense:</b> '+gb(PB.B)+'switch · '+gb(PB.X)+'dive, or rip free of a block · '+gb(PB.Y)+'go up for the ball · '+gb(PB.RT)+'sprint'
         : '<b>Before the snap:</b> Space hike · C audible · X flip · 1–5 then an arrow = hot route, then M = motion · T timeout<br>'
-          +'<b>Passing:</b> 1–5 pick a receiver · tap Space for a touch pass, hold it for a bullet<br>'
+          +'<b>Passing:</b> 1–5 throws to that receiver, Space to the gold one · tap for a touch pass, hold for a bullet<br>'
           +'<b>Running:</b> arrows/WASD · Shift sprint · Q/E juke · R stiff arm · Z dive (QB: slide) · Space spin<br>'
           +'<b>Defense:</b> Space switch · Q/E dive, or rip free of a block · R go up for the ball · P pause';
       try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){} }
@@ -4656,7 +4668,7 @@
           el.style.left=lx.toFixed(1)+'px'; el.style.top=ly.toFixed(1)+'px';
           const op=padOf(G.offense), ic=((PAD.used||TWO_P)&&op)?iconsNow()[i]:-1, txt=ic>=0?padGlyph(ic,op.ps):String(i+1);
           if(el.textContent!==txt) el.textContent=txt;
-          const cls='rl'+(ic>=0?' g'+ic:'')+(off?' off':'')+(G.phase==='live'&&i===G.sel?' sel':'')+(G.hotSel===i?' hot':'')+(G.phase==='presnap'&&G.playType==='pass'?' tap':''); if(el.className!==cls) el.className=cls; }); } }
+          const cls='rl'+(ic>=0?' g'+ic:'')+(off?' off':'')+(G.phase==='live'&&i===G.sel?' sel':'')+(G.hotSel===i?' hot':'')+(G.phase==='presnap'&&G.playType==='pass'?' tap':'')+(G.phase==='live'&&G.passState==='drop'?' pick':''); if(el.className!==cls) el.className=cls; }); } }
     const bar=_presnapBar||(_presnapBar=document.getElementById('presnap-bar'));
     if(bar){ const on=!repFrame && G.offense==='user' && G.phase==='presnap'; if(bar.classList.contains('hidden')===on) bar.classList.toggle('hidden',!on); }
   }
@@ -5722,6 +5734,15 @@
   document.getElementById('audible').addEventListener('click',e=>{
     const h=e.target.closest('span[data-hot]'); if(h){ closeAudible(); if(h.dataset.hot==='__x'){ G.hotSel=null; setMsg('',0); } else if(h.dataset.hot==='motion') startMotion(G.hotSel); else hotRoute(h.dataset.hot); return; }
     const c=e.target.closest('span[data-play]'); if(!c) return; if(c.dataset.play==='__close') closeAudible(); else audibleTo(c.dataset.play); });
+  // During the drop, press a receiver (his number, or the man under it: the number's hit
+  // area runs down over him) to throw to him: a tap is a touch pass, a hold a bullet, as
+  // with THROW. Touch used to have only REC ▸, stepping through them one at a time.
+  document.getElementById('rlabels').addEventListener('pointerdown',e=>{ const el=e.target.closest('.rl.pick');
+    if(!el || !G || G.phase!=='live' || G.passState!=='drop' || !actOff()) return;
+    e.preventDefault(); e.stopPropagation(); audioInit();
+    if(pickRec([...el.parentNode.children].indexOf(el))) startThrow('tap', e.pointerId); });
+  // (only that finger lets go: lifting the one on the stick must not turn a bullet into a lob)
+  ['pointerup','pointercancel'].forEach(ev=> addEventListener(ev,e=>releaseThrow('tap', e.pointerId)));
   // Touch: tap a receiver's number before the snap for his hot-route menu.
   document.getElementById('rlabels').addEventListener('click',e=>{ const el=e.target.closest('.rl'); if(!el || G.phase!=='presnap' || G.offense!=='user' || G.playType!=='pass') return;
     const i=[...el.parentNode.children].indexOf(el), r=G.receivers[i]; if(!r) return;
@@ -5740,7 +5761,7 @@
     const n=padSlots();
     el.innerHTML = n>=2 ? 'two controllers: P1 and P2' : n===1 ? 'P1 on the keyboard · P2 on the controller' : 'one keyboard: P1 WASD + Space · P2 arrows + Enter<br>(or plug in a controller)'; }
   function twoPHelp(){ const d=twoPDevices(), n=padSlots();
-    const kb1='<b>P1</b> WASD move · Space hike, throw (tap = touch, hold = bullet), spin, switch · left Shift sprint · Q/E juke (defense: dive) · R stiff arm (defense: go up for the ball) · Z dive · 1–5 pick a receiver · C audible · T timeout';
+    const kb1='<b>P1</b> WASD move · Space hike, throw (tap = touch, hold = bullet), spin, switch · left Shift sprint · Q/E juke (defense: dive) · R stiff arm (defense: go up for the ball) · Z dive · 1–5 throw to a receiver · C audible · T timeout';
     const kb2='<b>P2</b> arrows move · Enter hike, throw, spin, switch · right Shift sprint · / juke (defense: dive) · . stiff arm (defense: go up for the ball) · , dive · L next receiver · \u2019 audible · ; timeout · in menus arrows and Enter';
     const pad=t=>'<b>'+t+'</b> the controller: stick moves · '+gb(PB.RT)+' sprint · '+gb(PB.A)+' hike, spin, switch · each receiver\u2019s button throws to him · '+gb(PB.X)+' juke · '+gb(PB.B)+' stiff arm · '+gb(PB.Y)+' dive, or go up for the ball';
     return (n>=2 ? pad('P1')+'<br>'+pad('P2') : n===1 ? kb1.replace('WASD move','WASD or arrows move')+'<br>'+pad('P2') : kb1+'<br>'+kb2)
