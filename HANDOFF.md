@@ -289,6 +289,12 @@ headless browser and measuring against NFL rates.
   `choosePlay()` and friends, so a harness can drive the game frame by frame
   without rendering.
 
+**Soak every mode before shipping:** `node tools/soak.mjs exhibition|season|twop|practice
+[games] [seed]` plays whole games through the real UI (seeded, so a failure
+reproduces) and reports page errors, stuck states and NaN positions. The test build
+fixes the coin toss (`__gbToss`) unless a harness clears it; the sim build skips the
+intro and plays with average ratings in dry weather.
+
 **Run a harness's plays in chunks, and run one browser at a time.** A single
 `page.evaluate` that simulates hundreds of plays slows to a crawl (a 440-dropback run
 went from 15 seconds chunked to a stalled 10+ minutes in one call), and two headless
