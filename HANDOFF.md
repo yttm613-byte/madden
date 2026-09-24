@@ -214,8 +214,9 @@ like with like.
 | Your completion rate, original four passes (`passtrace`, random-timing QB) | 60–63% | 65% |
 | Your interceptions / sacks / net yards per dropback | ~2.1% / 5.5–7% / 6.1 | 2.3% / 6.5% / 6.3 |
 | Your QB by throw, every pass play (`PLAYS=all`, random timing): old auto / all bullets / all touch / smart (touch past 12 yd) | 69% 2.2% INT 4.40 / 68.6% 2.5% 4.31 (sacks 9.5%: the windup) / 65.8% 1.5% 4.27 / 69% 1.0% 4.71 yd | — |
-| CPU completion, every pass play (`passtrace PLAYS=all`, human-like defender) | 64–67% | 65% |
-| CPU interceptions / net yards per dropback (same) | 2.1–2.4% / 8.3–8.8 | 2.3% / 6.3 |
+| CPU completion, every pass play (`passtrace PLAYS=all`, human-like defender) | 63–68% | 65% |
+| CPU sacked (your line rushes four ~65% of the time, wins sooner against him, and he needs 0.22–1.0s to react) | 4.5% (three runs; was 0.2–1.1%) | 6.5% |
+| CPU interceptions / net yards per dropback (same) | 0.5–1.9% / 7.2–8.6 | 2.3% / 6.3 |
 | CPU completion by air yards: 0–9 / 10–19 / 20+ | 77–78% / 53–56% / 20–25% | 72% / 55% / 35% |
 | CPU yards after catch (median) | 2.2–2.4 | ~3 |
 | Punt return | 11.0–11.3 avg | ~9 |
@@ -249,9 +250,9 @@ Roughly in order of how much they would improve the game.
    rate are right now; the explosive tail is still thin. Racing the contain
    corners in the open field took 20+ carries to 0.2%, so the tail is sensitive
    to them — measure before touching `contain`.
-2. **The AI pass rush never sacks the CPU quarterback on its own.** Protection
-   holds 2.6s at the earliest and he is rid of the ball by 2.0–2.7s, so sacks
-   come from your blitz. He also never throws more than ~18 yards downfield.
+2. ~~The AI pass rush never sacks the CPU quarterback~~ — 4.5% now (see the
+   baselines). He still gets the ball out in ~1.5s on average (NFL ~2.7s) and
+   rarely throws more than ~18 yards downfield.
 3. **Screens net ~3 yards** against an NFL ~6. The convoy blocks now; the back
    catches it two yards behind the line and has to make it all up.
 4. **Scoring** was 51–63 a game; one full sim now scores 37. Not yet measured
