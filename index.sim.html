@@ -1137,7 +1137,10 @@
     const rq=()=>0.10+Math.random()*0.20, rl=()=>0.04+Math.random()*0.16, rc=()=>0.12+Math.random()*0.20;
     const deL=add(1.0,-4.6,91,'DE',run?'pursue':'rush',rq());
     const dtL=add(0.9,-1.5,94,'DT',run?'pursue':'rush',rq());
-    const dtR=add(0.9, 1.5,97,'DT',run?'pursue':'spy', rq());
+    // Against the CPU's passer your line brings four most of the time (the NFL base), not
+    // three and a spy: with three he had the ball out in 1.5s on average, a rusher beat
+    // his man before the throw on 8% of dropbacks, and he was sacked 0.5% of the time.
+    const dtR=add(0.9, 1.5,97,'DT',run?'pursue':((G.offense==='cpu' && Math.random()<0.65)?'rush':'spy'), rq());
     const deR=add(1.0, 4.6,99,'DE',run?'pursue':'rush',rq());
     const DL=[deL,dtL,dtR,deR];
     if(front==='goal') DL.push(add(0.9,0,93,'DT',run?'pursue':'rush',rq()));
@@ -1319,7 +1322,9 @@
     // ...and now and then one simply beats his man off the snap. Without that the rush
     // never got home on its own (0 sacks in 440 CPU dropbacks, NFL 6.5%): pressure only
     // ever came from a blitz. How often scales with difficulty when it is YOUR passer.
-    winAt: job==='rush' ? (Math.random()<rushWinP() ? 1.3+Math.random()*1.1 : 2.6+Math.random()*5.6)
+    // (a rusher who beats the CPU's passer does it sooner: that passer gets the ball out
+    // in ~1.5s, and the 1.3s-and-later wins never arrived in time — 0.5% sacks)
+    winAt: job==='rush' ? (Math.random()<rushWinP() ? (G&&G.offense==='cpu' ? 0.95+Math.random()*1.0 : 1.3+Math.random()*1.1) : 2.6+Math.random()*5.6)
                         : (Math.random()<SHED_P ? 0.85+Math.random()*1.35 : Infinity) }; }
   // ---- input ----
   const keys={}, codes={}; let touchDir=null, sprintHeld=false;
@@ -2468,7 +2473,11 @@
     // own linebacker sent straight at him. He now picks the man up five yards away and
     // needs a beat to get rid of it.
     // ...unless he never sees him: a man coming from the blind side gets home first.
-    if(pr<yd(5) && elapsed>0.3 && G.qbHurry==null) G.qbHurry = Math.random()<0.3 ? 0.45+Math.random()*0.5 : 0.08+Math.random()*0.32;
+    // He also used to react to a free rusher in as little as 0.08s, so nobody ever got
+    // within tackling range: the closest any rusher came in 400 dropbacks was 2 yards,
+    // and he was sacked 0.5-1% of the time against an NFL 6.5%. Now he needs a quarter
+    // to half a second to see it and get rid of it, longer from the blind side.
+    if(pr<yd(5) && elapsed>0.3 && G.qbHurry==null) G.qbHurry = Math.random()<0.35 ? 0.5+Math.random()*0.5 : 0.22+Math.random()*0.33;
     if(G.qbHurry!=null) G.qbHurry-=dt;
     // What each man is worth: the odds of the catch — the same table resolveCatch uses,
     // on separation from the COVERAGE (the rushers guard nobody) — times the yards it
