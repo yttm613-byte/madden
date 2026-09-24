@@ -650,10 +650,27 @@
       +'<div class="sub">'+wk+(WEATHER==='rain'?' · 🌧 RAIN':WEATHER==='snow'?' · ❄ SNOW':' · CLEAR')+'</div><div class="toss"></div><div class="skip">PRESS ANY KEY TO SKIP</div>';
     el.classList.remove('hidden'); requestAnimationFrame(()=>el.classList.add('show'));
   }
+  // Halftime: the same broadcast shot as the open, with the first-half numbers on the card.
+  function halftimeCard(recv){
+    if(typeof window!=='undefined' && window.__gbNoIntro) return;
+    G.phase='intro'; G.introT=0; G._halftime=true; setMsg('',0);
+    const st=G.stats, row=(lbl,f)=>'<tr><td style="text-align:left;opacity:.7;padding-right:14px">'+lbl+'</td><td style="padding:0 12px">'+f('user')+'</td><td style="padding:0 12px">'+f('cpu')+'</td></tr>';
+    const box = st ? '<table style="margin:8px auto 0;font:500 13px/1.6 Oswald,sans-serif;color:#dfe8f5;border-collapse:collapse">'
+      +'<tr style="opacity:.6;font-size:10px;letter-spacing:.14em"><td></td><td>'+tname('user')+'</td><td>'+(TWO_P?'P2':cpuLabel())+'</td></tr>'
+      +row('Passing',t=>st[t].passComp+'/'+st[t].passAtt+' · '+Math.round(st[t].passYds)+' yds')
+      +row('Rushing',t=>st[t].rushAtt+' · '+Math.round(st[t].rushYds)+' yds')
+      +row('Turnovers',t=>st[t].ints+st[t].fumLost)+'</table>' : '';
+    const el=document.getElementById('intro'), you=TEAM_KIT.user, them=TEAM_KIT.cpu;
+    const card=(name,score,kit)=>'<div class="tm" style="background:linear-gradient(180deg,'+hexCss(kit.jersey)+','+hexCss(kit.jersey)+'cc); border-bottom:4px solid '+hexCss(kit.trim)+'">'+score+'<small>'+name+'</small></div>';
+    const rname=recv==='user'?(TWO_P?'PLAYER 1':'YOU'):(TWO_P?'PLAYER 2':cpuLabel());
+    el.innerHTML='<div class="sub" style="margin:0 0 8px;font-size:14px;color:var(--gold)">HALFTIME</div><div class="row">'+card(TWO_P?'PLAYER 1':'YOU',G.userScore,you)+'<div class="vs">–</div>'+card(TWO_P?'PLAYER 2':cpuLabel(),G.cpuScore,them)+'</div>'
+      +box+'<div class="toss" style="font-size:15px">'+rname+' RECEIVE'+(recv==='user'&&!TWO_P?'':'S')+' THE SECOND-HALF KICK</div><div class="skip">PRESS ANY KEY TO SKIP</div>';
+    el.classList.remove('hidden'); requestAnimationFrame(()=>el.classList.add('show'));
+  }
   function introTick(dt){
     G.introT+=dt;
     const el=document.getElementById('intro'), toss=el&&el.querySelector('.toss');
-    if(toss && G.introT>2.6 && !toss.textContent){
+    if(toss && G.introT>2.6 && !toss.textContent && !G._halftime){
       const w=G._tossWinner, o=(SEASON&&!TWO_P)?seasonOpp(SEASON):null;
       const name=w==='user'?(TWO_P?'PLAYER 1':'YOU'):(TWO_P?'PLAYER 2':(o?o.name.toUpperCase():'THE CPU'));
       toss.textContent=(w==='user'&&!TWO_P?'YOU WIN THE TOSS — YOU\u2019LL RECEIVE':name+(o&&w!=='user'?' WIN':' WINS')+' THE TOSS AND WILL RECEIVE');
@@ -663,8 +680,8 @@
     if(G.introT>=INTRO_T) endIntro();
   }
   function endIntro(){
-    if(!G || G.phase!=='intro') return;
-    const el=document.getElementById('intro'); if(el){ el.classList.remove('show'); setTimeout(()=>el.classList.add('hidden'),380); }
+    if(!G || G.phase!=='intro') return; G._halftime=false;
+    const el=document.getElementById('intro'); if(el){ el.classList.remove('show'); setTimeout(()=>{ if(!G || G.phase!=='intro') el.classList.add('hidden'); },380); }
     G.phase='live'; G.snapTime=performance.now(); G.playT=0;
     setMsg(G.koTeeT>1?'KICKOFF — SPACE FOR AN ONSIDE KICK':'KICKOFF!',1.3); crowdSwell(0.14,2.5);
   }
@@ -691,7 +708,7 @@
   function flipLos(spot){ return Math.max(yd(11), Math.min(yd(92), WORLD_W-spot)); }
 
   function startPossession(off, losX){
-    G.flag=null;
+    G.flag=null; G.drive={team:off, plays:0, x0:losX, t0:gameLeft()};
     G.offense=off; G.los=losX; G.firstX=Math.min(losX+yd(10),GOAL_X); G.down=1;
     G._returning=false; G._retKind=null; G.playType='run'; G.passState=null;
     routeOffense();
@@ -1464,7 +1481,17 @@
     if(G.phase==='presnap') snap();
     else if(G.phase==='live'){ if(G.playType==='pass'&&G.passState==='drop') startThrow(src||'key'); else spin(); }
   }
-  function switchDef(){ G.userDef = nearestDefToBall(); }
+  // Live, the switch takes whoever is nearest the ball. Before the snap that was always
+  // the lineman over the ball, so there was no way to line up as an end or a safety:
+  // now it steps through the defense, linebackers first, then the line, then the back end.
+  const DEF_ORDER={MLB:0,LB:1,DE:2,DT:3,S:4,CB:5};
+  function switchDef(){
+    if(G.phase==='presnap' && G.defenders.length){
+      const L=[...G.defenders].sort((a,b)=>((DEF_ORDER[a.role]??6)-(DEF_ORDER[b.role]??6)) || (a.y-b.y));
+      const i=L.indexOf(G.userDef); G.userDef=L[(i+1)%L.length];
+      const r=G.userDef.role||''; setMsg('YOU: '+({MLB:'MIDDLE LINEBACKER',LB:'LINEBACKER',DE:'DEFENSIVE END',DT:'DEFENSIVE TACKLE',S:'SAFETY',CB:'CORNERBACK'}[r]||r)+' #'+G.userDef.n,0.9);
+      return; }
+    G.userDef = nearestDefToBall(); }
   // Run plays: press B to take over a blocker (lineman) and block; press again to go back to the runner.
   function toggleBlockerControl(){
     if(!actOff() || G.playType!=='run') return;
@@ -1485,6 +1512,7 @@
     G.lastTackler=null; G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); closeAudible(); PAD.hot=0;
     G.icons=padIcons(); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
     G.rec=[]; G._recT=0; stopReplay();   // fresh replay buffer each snap
+    if(G.drive && G.drive.team===G.offense && !G.conv) G.drive.plays++;
     if((GOAL_X-G.los)/PPY<=22 || G.down>=3) crowdSwell(crowdBase+0.05,1.4);   // anticipation on tense downs / red zone
     const spc=(PLAYS[G.playId]||{}).special;
     if(spc==='kneel'){ G.clock=Math.max(0,G.clock-6); endPlay('KNEEL', G.los-yd(1)); setMsg('TAKES A KNEE',0.9); return; }
@@ -2994,7 +3022,7 @@
   }
 
   function endPlay(reason,spot,turnover){
-    G.phase='dead'; G.deadT=1.1; G._td=false; G._fg=false; G._turn=!!turnover; G._safety=false; G._bigHit=false;
+    hideTip(); G.phase='dead'; G.deadT=1.1; G._td=false; G._fg=false; G._turn=!!turnover; G._safety=false; G._bigHit=false;
     // The clock used to run straight through every dead ball, so a losing team could
     // never stop it and mount a comeback — the whole late-game layer of football was
     // missing. It now stops on the things it really stops on: an incompletion, going
@@ -3063,11 +3091,15 @@
       setMsg(G.conv==='user'?'TWO-POINT — GOOD!':'CPU TWO-POINT — GOOD',1.5); SFX.roar(); G.shake=0.28; G.flash=0.4; spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',22,true);
       G.conv=null; G.twoPt=false; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false; G.phase='dead'; G.deadT=1.4; syncHUD(); return;
     }
-    if(G._td) return; recordPlay('TD', GOAL_X); G.phase='dead'; G.deadT=1.9; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false;
+    if(G._td) return; const wasRet=G._returning, retKind=G._retKind;
+    recordPlay('TD', GOAL_X); G.phase='dead'; G.deadT=1.9; G._td=true; G._turn=false; G._fg=false; G._safety=false; G._returning=false;
     // The scorer gets his moment first — the celebration, teammates running in to him —
     // then the replay, then the conversion. The conversion used to start on the same
     // frame as the touchdown, so nobody ever saw anyone celebrate.
     G._pendingConv=G.offense; G._tdReplayed=false;
+    { const kind = wasRet ? (retKind==='int'?'PICK SIX':retKind==='punt'?'PUNT RETURN TD':retKind==='kick'?'KICK RETURN TD':'TOUCHDOWN') : 'TOUCHDOWN';
+      banner(G.offense==='user'?(TWO_P?'P1 '+kind:kind+'!'):(TWO_P?'P2 '+kind:'CPU '+kind), wasRet?'':driveLine(GOAL_X), G.offense, 2.6);
+      commentate(G.offense==='user'?'TOUCHDOWN!':'CPU TOUCHDOWN'); }     // the booth calls it; the banner shows it
     spawnBurst(G.carrier.x,G.carrier.y,'#ffd24a',26,true); G.shake=0.3; G.flash=0.5; SFX.roar();
     crowdSwell(G.offense==='user'?0.34:0.18, 4.5);   // huge home roar (muted for a CPU score)
     if(G.offense==='user'){ G.userScore+=6; G.longest=Math.max(G.longest,Math.max(0,Math.round((GOAL_X-G.los)/PPY))); }
@@ -3140,7 +3172,7 @@
     document.getElementById('pb-punt').classList.add('hidden');
     document.getElementById('pb-fg').classList.remove('hidden'); document.getElementById('fg-label').textContent='KICK XP · 1 pt';
     if(pcForm!=='goal' && pcForm!=='gun') pcForm='goal'; buildPlayCall(); pcSpecials();
-    setMsg('TOUCHDOWN!  Run/pass for 2 — or kick the XP',1.5);
+    setMsg('EXTRA POINT — or run or pass for 2',1.5);
     document.getElementById('playcall').classList.remove('hidden');
   }
   function practiceReset(msg){ G._td=false; G._fg=false; G._turn=false; G._safety=false; G._returning=false; G._koFlight=false; G._koPhase=null; G.ball={active:false};
@@ -3225,7 +3257,8 @@
         if(good){ if(cpu) G.cpuScore+=1; else G.userScore+=1; }   // credit whoever actually kicked it
         G._td=true; G._turn=false; G._fg=false;
         setMsg((cpu?'CPU ':'')+(good?'EXTRA POINT IS GOOD':'EXTRA POINT MISSED'),1.3); }
-      else if(good){ if(G.offense==='user') G.userScore+=3; else G.cpuScore+=3; G._fg=true; G._turn=false; G.clockStop=true; setMsg(G.offense==='user'?'FIELD GOAL — GOOD!':'CPU FIELD GOAL — GOOD',1.4); }
+      else if(good){ if(G.offense==='user') G.userScore+=3; else G.cpuScore+=3; G._fg=true; G._turn=false; G.clockStop=true; setMsg(G.offense==='user'?'FIELD GOAL — GOOD!':'CPU FIELD GOAL — GOOD',1.4);
+        if(G.kickKind!=='pat') banner('FIELD GOAL', driveLine(G.los), G.offense, 2.2); }
       else { G._fg=false; G._turn=true; G._spot=G.los; G.clockStop=true; setMsg(G.offense==='user'?'FIELD GOAL — NO GOOD':'CPU FG — NO GOOD',1.4); }
       if(good) SFX.roar();
     }
@@ -3253,6 +3286,17 @@
   function ballOn(){ const ya=G.los/PPY; if(Math.abs(ya-60)<0.5) return '50'; if(ya<60) return 'OWN '+Math.max(0,Math.round(ya-10)); return 'OPP '+Math.max(0,Math.round(110-ya)); }
   // Possession can flip from a punt, kickoff, interception, fumble, downs or a score.
   // Rather than instrument every one of those paths, watch the value itself.
+  // A broadcast graphic for the big moments: the same plate as the possession banner.
+  function hideTip(){ const t=document.getElementById('tip'); if(t) t.classList.remove('show'); }
+  function banner(title, sub, team, secs){
+    hideTip(); const el=document.getElementById('poss'); if(!el) return;
+    el.className=team==='user'?'you':'cpu'; el.innerHTML=title+(sub?'<small>'+sub+'</small>':'');
+    el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'), (secs||2.4)*1000);
+  }
+  function driveLine(endX){ const d=G.drive; if(!d || d.team!==G.offense) return '';
+    const yds=Math.max(0,Math.round((endX-d.x0)/PPY)), t=Math.max(0,Math.round(d.t0-gameLeft()));
+    if(G._returning) return '';
+    return d.plays+' PLAY'+(d.plays===1?'':'S')+' · '+yds+' YARD'+(yds===1?'':'S')+' · '+Math.floor(t/60)+':'+String(t%60).padStart(2,'0'); }
   let _lastOff=null;
   function possessionWatch(){
     if(!G || G.phase==='start') return;
@@ -4692,9 +4736,13 @@
     if(G.qtr===3){                       // halftime — kick off to the other team
       G.timeouts={user:3,cpu:3};         // three more each for the second half
       const recv = (G._openingRecv==='user') ? 'cpu' : 'user';
-      setMsg('HALFTIME — '+G.userScore+' to '+G.cpuScore, 2.0);
       say('That is the half. '+(G.userScore>G.cpuScore?'You lead it.':(G.userScore<G.cpuScore?'The CPU leads it.':'All square.')), true);
+      // whatever menu was up when the half ran out (a coverage call, the play call) goes
+      // with it — the coverage menu used to stay on screen through the second-half kick
+      ['defcall','playcall'].forEach(id=>{ const e=document.getElementById(id); if(e) e.classList.add('hidden'); }); closeAudible(); hideTip();
+      G.needDef=false; G.convChoice=false;
       startKickoff(recv);                // startKickoff() takes the RECEIVING team
+      halftimeCard(recv);                // the flyover and the first-half numbers, then the kick
       syncHUD(); return true;
     }
     setMsg('END OF THE '+(G.qtr===2?'FIRST':'THIRD')+' QUARTER', 1.6);
