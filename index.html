@@ -97,6 +97,16 @@
     text-shadow:0 3px 0 rgba(0,0,0,.45); box-shadow:0 10px 34px rgba(0,0,0,.55);
     transition:opacity .18s, transform .18s;}
   #poss.show{opacity:1; transform:translate(-50%,-50%) scale(1);}
+  /* TV lower third: after a big play, the man who made it and his game so far */
+  #l3{position:absolute; left:14px; top:14px; z-index:6; display:flex; align-items:stretch; opacity:0; transform:translateX(-14px);
+    transition:opacity .28s, transform .28s; pointer-events:none; box-shadow:0 8px 24px rgba(0,0,0,.45);}
+  #l3.show{opacity:1; transform:none;}
+  #l3 .bar{width:6px; background:#2f6bd6; border-right:2px solid var(--gold);}
+  #l3.cpu .bar{background:#c21f2c; border-right-color:#e6e8ee;}
+  #l3 .bd{background:rgba(8,13,22,.92); padding:6px 16px 7px 11px; border:1px solid #2c3e57; border-left:none;}
+  #l3 .nm{font:400 22px/1.05 'Anton','Oswald',sans-serif; letter-spacing:.05em; color:#fff; white-space:nowrap;}
+  #l3 .nm small{font:600 11px 'Oswald',sans-serif; letter-spacing:.16em; color:var(--muted); margin-left:9px; vertical-align:3px;}
+  #l3 .st{font:600 13px 'Oswald',sans-serif; letter-spacing:.1em; color:var(--gold); margin-top:3px; white-space:nowrap;}
   #poss.you{background:linear-gradient(180deg,#2f6bd6,#12305e); border:2px solid #8fc4ff;}
   #poss.cpu{background:linear-gradient(180deg,#d23b34,#6d1a15); border:2px solid #ff9a8a;}
   #poss small{display:block; font-family:'Oswald',sans-serif; font-weight:600; font-size:.36em;
@@ -220,6 +230,7 @@
   }
   /* short landscape (phones): a slimmer scoreboard and compact menus */
   @media (max-height:520px) and (orientation:landscape){
+    #l3{top:86px; left:12px;} #l3 .nm{font-size:17px;} #l3 .st{font-size:11px;}   /* under the result line */
     /* a coach tip on a phone sits in the top-left corner, small, not across the middle of the field */
     #tip{left:12px; top:44px; transform:none; max-width:min(330px,46%); font-size:11.5px; line-height:1.4; padding:6px 10px 6px 9px;}
     #over #over-title{order:0;} #over #final-line{order:1;} #over .btn{order:2;} #over #final-sub{order:3;}
@@ -305,6 +316,7 @@
     </div>
 
     <div id="poss"></div>
+    <div id="l3"></div>
     <div id="intro" class="hidden"></div>
     <div id="tip"></div>
     <div id="replay"><i></i>INSTANT REPLAY</div>
@@ -5044,6 +5056,25 @@
 
   // ---- the box score ---------------------------------------------------------------
   function blankStats(){ return {passAtt:0,passComp:0,passYds:0,passTD:0,ints:0,rushAtt:0,rushYds:0,rushTD:0,sacked:0,sackYds:0,fumLost:0,players:{}}; }
+  // A broadcast lower third after a big play: the man who made it, and his game so far.
+  // Shown after a 12+ yard run, a 15+ yard catch, a sack, or a touchdown (after its
+  // banner), and otherwise not on back-to-back plays.
+  let _l3Since=9;
+  function lowerThird(team, n, kind, delay){
+    const el=document.getElementById('l3'); if(!el || !G.stats) return;
+    const st=G.stats[team], p=st.players[n]||{rushAtt:0,rush:0,rec:0,recYds:0,td:0,tkl:0,sacks:0,ints:0}, R=Math.round, man=manOn(team,n);
+    const line = kind==='rush' ? p.rushAtt+' CAR · '+R(p.rush)+' YDS'+(p.td?' · '+p.td+' TD':'')
+      : kind==='rec' ? p.rec+' REC · '+R(p.recYds)+' YDS'+(p.td?' · '+p.td+' TD':'')
+      : kind==='sack' ? p.sacks+' SACK'+(p.sacks===1?'':'S')+(p.tkl?' · '+p.tkl+' TKL':'')
+      : st.passComp+'/'+st.passAtt+' · '+R(st.passYds)+' YDS'+(st.passTD?' · '+st.passTD+' TD':'');
+    const nm=man ? (man.initial?man.initial+'. ':'')+man.name : '#'+n, pos=n===12?'QB':posOf(n);
+    _l3Since=0;
+    const show=()=>{ if(!G || G.phase==='final' || G.phase==='intro') return;
+      el.className=team==='user'?'you':'cpu';
+      el.innerHTML='<i class="bar"></i><div class="bd"><div class="nm">'+nm+'<small>#'+n+' · '+pos+'</small></div><div class="st">'+line+'</div></div>';
+      el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),3300); };
+    if(delay) setTimeout(show, delay*1000); else show();
+  }
   function statP(team,n){ const s=G.stats[team].players; return s[n]||(s[n]={rushAtt:0,rush:0,rec:0,recYds:0,td:0,tkl:0,sacks:0,ints:0}); }
   // Once as every scrimmage play ends (endPlay, or scoreTD for a touchdown). A play a
   // flag wiped out, a conversion try and the yards of a return do not count — the same
@@ -5054,13 +5085,16 @@
     if(G._returning){ if(td) statP(team,c.n).td++; return; }
     const gain=(Math.min(spot,GOAL_X)-G.los)/PPY, tk=G.lastTackler, dteam=other(team);
     if(tk && /TACKL|SACK/.test(reason)) statP(dteam,tk.n).tkl++;
+    _l3Since++;
     if(G.playType==='pass'){
       if(reason==='INCOMPLETE'){ st.passAtt++; return; }
       if(/INTERCEPT/.test(reason)){ st.passAtt++; st.ints++; return; }
-      if(c.role==='wr'){ st.passAtt++; st.passComp++; st.passYds+=gain; const p=statP(team,c.n); p.rec++; p.recYds+=gain; if(td){ st.passTD++; p.td++; } return; }
-      if(/SACK/.test(reason)){ st.sacked++; st.sackYds+=gain; if(tk) statP(dteam,tk.n).sacks++; return; }
+      if(c.role==='wr'){ st.passAtt++; st.passComp++; st.passYds+=gain; const p=statP(team,c.n); p.rec++; p.recYds+=gain; if(td){ st.passTD++; p.td++; }
+        if(td || (gain>=15 && _l3Since>=2)) lowerThird(team, c.n, 'rec', td?2.3:0.5); return; }
+      if(/SACK/.test(reason)){ st.sacked++; st.sackYds+=gain; if(tk){ statP(dteam,tk.n).sacks++; lowerThird(dteam, tk.n, 'sack', 0.5); } return; }
     }
     st.rushAtt++; st.rushYds+=gain; const p=statP(team,c.n); p.rushAtt++; p.rush+=gain; if(td){ st.rushTD++; p.td++; }
+    if(td || (gain>=12 && _l3Since>=2)) lowerThird(team, c.n, 'rush', td?2.3:0.5);
   }
   function playerOfGame(){
     const win=G.userScore>=G.cpuScore?'user':'cpu'; let best=null, bs=0;

@@ -59,7 +59,7 @@ for (const SIDE of SIDES) for (let n0 = 0; n0 < N; n0 += CH) {
         if (c.length) { G.cpuMotion = { i: c[n % c.length], at: 100 }; for (let k = 0; k < 78; k++) S.update(DT); } }
       S.snap(); if (G.phase !== 'live') { n--; continue; }
       const hold = 0.8 + ((n*0.37) % 1.8);
-      let t = 0, thrown = false, caught = false, intc = false, sack = false, air = null, catchX = null;
+      let t = 0, thrown = false, caught = false, intc = false, sack = false, air = null, catchX = null, tt = null;
       let caughtT = null;
       while (G.phase === 'live' && t < 16) {
         if (side === 'user' && !thrown && G.passState === 'drop') {
@@ -78,7 +78,7 @@ for (const SIDE of SIDES) for (let n0 = 0; n0 < N; n0 += CH) {
           else if (G.passState === 'caught' && caughtT !== null && t - caughtT > REACT) steer(c.x, c.y);
         }
         if (G.passState === 'caught' && caughtT === null) caughtT = t;
-        if (!thrown && G.passState === 'air') { thrown = true; air = (G.ball.tx - G.los)/PPY; }
+        if (!thrown && G.passState === 'air') { thrown = true; air = (G.ball.tx - G.los)/PPY; tt = t; }
         if (G.passState === 'caught' && catchX === null && G.carrier && G.carrier.role === 'wr') { caught = true; catchX = G.carrier.x; }
         if (G._returning && G._retKind === 'int') intc = true;
         S.update(DT); t += DT;
@@ -93,7 +93,7 @@ for (const SIDE of SIDES) for (let n0 = 0; n0 < N; n0 += CH) {
       const gain = intc ? 0 : ((spot - 40*PPY)/PPY);
       for (const k of ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift']) S.keys[k] = false;
       const kind = G.ball && G.ball.kind;
-      out.push({ id, kind, thrown, caught, intc, sack, scramble, air: air == null ? null : +air.toFixed(1), gain: +gain.toFixed(1), yac: catchX == null ? null : +((spot - catchX)/PPY).toFixed(1), td: !!G._td && !intc });
+      out.push({ id, kind, thrown, caught, intc, sack, scramble, tt: tt == null ? null : +tt.toFixed(2), air: air == null ? null : +air.toFixed(1), gain: +gain.toFixed(1), yac: catchX == null ? null : +((spot - catchX)/PPY).toFixed(1), td: !!G._td && !intc });
     }
     return out;
   };
@@ -112,6 +112,8 @@ for (const side of SIDES) {
   const bucket = (lo, hi) => { const a = att.filter(x => x.air != null && x.air >= lo && x.air < hi); const c = a.filter(x => x.caught && !x.intc);
     return `${lo}-${hi === 99 ? '' : hi-1}: ${pct(c.length, a.length)} of ${a.length} (INT ${a.filter(x => x.intc).length})`; };
   console.log(`     by air yards: ${bucket(-9, 10)} | ${bucket(10, 20)} | ${bucket(20, 99)}   (NFL ~72% | ~55% | ~35%)`);
+  { const T = r.filter(x => x.tt != null).map(x => x.tt), n = Math.max(1, T.length), sh = (a, b) => (100 * T.filter(x => x >= a && x < b).length / n).toFixed(0) + '%';
+    console.log(`     time to throw: mean ${(T.reduce((s, x) => s + x, 0) / n).toFixed(2)}s  <2.0 ${sh(0, 2)} · 2.0-2.5 ${sh(2, 2.5)} · 2.5-3.0 ${sh(2.5, 3)} · 3.0+ ${sh(3, 99)}   (NFL ~2.7s; ~45% under 2.5s)`); }
   for (const id of PASSIDS) {
     const a = r.filter(x => x.id === id), at = a.filter(x => x.thrown), c = at.filter(x => x.caught && !x.intc);
     console.log(`     ${id.padEnd(10)} comp ${pct(c.length, at.length).padStart(6)}  net ${(a.reduce((s, x) => s + x.gain, 0)/Math.max(1, a.length)).toFixed(1).padStart(5)} yd  sack ${pct(a.filter(x => x.sack).length, a.length)}`);
