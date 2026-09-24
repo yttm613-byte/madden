@@ -97,6 +97,16 @@
     text-shadow:0 3px 0 rgba(0,0,0,.45); box-shadow:0 10px 34px rgba(0,0,0,.55);
     transition:opacity .18s, transform .18s;}
   #poss.show{opacity:1; transform:translate(-50%,-50%) scale(1);}
+  /* TV lower third: after a big play, the man who made it and his game so far */
+  #l3{position:absolute; left:14px; top:14px; z-index:6; display:flex; align-items:stretch; opacity:0; transform:translateX(-14px);
+    transition:opacity .28s, transform .28s; pointer-events:none; box-shadow:0 8px 24px rgba(0,0,0,.45);}
+  #l3.show{opacity:1; transform:none;}
+  #l3 .bar{width:6px; background:#2f6bd6; border-right:2px solid var(--gold);}
+  #l3.cpu .bar{background:#c21f2c; border-right-color:#e6e8ee;}
+  #l3 .bd{background:rgba(8,13,22,.92); padding:6px 16px 7px 11px; border:1px solid #2c3e57; border-left:none;}
+  #l3 .nm{font:400 22px/1.05 'Anton','Oswald',sans-serif; letter-spacing:.05em; color:#fff; white-space:nowrap;}
+  #l3 .nm small{font:600 11px 'Oswald',sans-serif; letter-spacing:.16em; color:var(--muted); margin-left:9px; vertical-align:3px;}
+  #l3 .st{font:600 13px 'Oswald',sans-serif; letter-spacing:.1em; color:var(--gold); margin-top:3px; white-space:nowrap;}
   #poss.you{background:linear-gradient(180deg,#2f6bd6,#12305e); border:2px solid #8fc4ff;}
   #poss.cpu{background:linear-gradient(180deg,#d23b34,#6d1a15); border:2px solid #ff9a8a;}
   #poss small{display:block; font-family:'Oswald',sans-serif; font-weight:600; font-size:.36em;
@@ -170,6 +180,13 @@
   #offseason .pro .pr{margin-top:3px;} #offseason .pro .pi{margin-top:4px; font-size:10.5px;}
   #offseason .pro.on{border-color:#9cff9c; box-shadow:0 0 0 2px #9cff9c inset; background:rgba(30,60,40,.9);}
   #team{z-index:18; justify-content:flex-start; gap:10px; background:rgba(6,10,16,.96);}
+  #team-id{display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; justify-content:center; font:600 11px 'Oswald',sans-serif; letter-spacing:.14em; color:var(--muted);}
+  #team-name{font:600 15px 'Oswald',sans-serif; letter-spacing:.06em; text-transform:uppercase; color:#fff; background:#101a2a; border:1px solid #2c3e57; border-radius:6px; padding:5px 9px; width:230px; max-width:70vw;}
+  #team-name:focus{outline:none; border-color:var(--gold);}
+  #team-id .sws{display:flex; gap:6px; flex-wrap:wrap; justify-content:center;}
+  #team-id .sw{width:30px; height:30px; border-radius:7px; border:2px solid #2c3e57; cursor:pointer; padding:0; position:relative; overflow:hidden;}
+  #team-id .sw i{position:absolute; left:0; right:0; bottom:0; height:30%;}
+  #team-id .sw.on{border-color:#fff; box-shadow:0 0 0 2px var(--gold);}
   #team .cols{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; align-items:flex-start; width:100%;}
   #team table{border-collapse:collapse; font-size:12px; line-height:1.42; text-align:left;}
   #team th{font:600 10px 'Oswald',sans-serif; letter-spacing:.14em; color:var(--muted); padding:0 5px 3px; text-align:left;}
@@ -220,6 +237,7 @@
   }
   /* short landscape (phones): a slimmer scoreboard and compact menus */
   @media (max-height:520px) and (orientation:landscape){
+    #l3{top:86px; left:12px;} #l3 .nm{font-size:17px;} #l3 .st{font-size:11px;}   /* under the result line */
     /* a coach tip on a phone sits in the top-left corner, small, not across the middle of the field */
     #tip{left:12px; top:44px; transform:none; max-width:min(330px,46%); font-size:11.5px; line-height:1.4; padding:6px 10px 6px 9px;}
     #over #over-title{order:0;} #over #final-line{order:1;} #over .btn{order:2;} #over #final-sub{order:3;}
@@ -305,6 +323,7 @@
     </div>
 
     <div id="poss"></div>
+    <div id="l3"></div>
     <div id="intro" class="hidden"></div>
     <div id="tip"></div>
     <div id="replay"><i></i>INSTANT REPLAY</div>
@@ -399,6 +418,7 @@
     <div class="overlay hidden" id="team">
       <h1 class="title" style="font-size:clamp(26px,5vw,42px)">YOUR TEAM</h1>
       <div class="keys" id="team-sub" style="margin:0;max-width:none"></div>
+      <div id="team-id"><label for="team-name">TEAM NAME</label><input id="team-name" maxlength="18" autocomplete="off" spellcheck="false" placeholder="Your team"><span>COLORS</span><div class="sws" id="team-sws"></div></div>
       <div id="team-body"></div>
       <button class="btn" id="team-close">Back</button>
     </div>
@@ -589,6 +609,29 @@
     if(!MYTEAM){ MYTEAM={ v:1, roster:makeRoster(), seasonNo:1, stats:{}, history:[] }; saveTeam(); }
     return MYTEAM;
   }
+  // Your team's name and colours (the team screen): the name goes on the scoreboard, the
+  // matchup and halftime cards, the standings and the final score; the colourway dresses
+  // the players. An opponent whose jersey is too close to yours wears road whites.
+  const COLORWAYS={
+    royal:  {label:'Royal & gold',   kit:{jersey:0x1e58d8, trim:0xf0b429, helmet:0xe8ecf4, stripe:0x1e58d8, mask:0x10131a, sock:0x1e58d8, pants:0xe9ebef, belt:0x1e58d8}},
+    navy:   {label:'Navy & silver',  kit:{jersey:0x14254a, trim:0xc0c7d1, helmet:0xc0c7d1, stripe:0x14254a, mask:0x10131a, sock:0x14254a, pants:0xc0c7d1, belt:0x14254a}},
+    forest: {label:'Forest & gold',  kit:{jersey:0x1d5c34, trim:0xf2c230, helmet:0xf2c230, stripe:0x1d5c34, mask:0x10131a, sock:0x1d5c34, pants:0xe9ebef, belt:0x1d5c34}},
+    orange: {label:'Orange & black', kit:{jersey:0xe86a1c, trim:0x15171d, helmet:0x15171d, stripe:0xe86a1c, mask:0x0e1014, sock:0xe86a1c, pants:0xeef0f3, belt:0x15171d}},
+    purple: {label:'Purple & gold',  kit:{jersey:0x4b2585, trim:0xf0c43a, helmet:0xf0c43a, stripe:0x4b2585, mask:0x10131a, sock:0x4b2585, pants:0xf0c43a, belt:0x4b2585}},
+    teal:   {label:'Teal & black',   kit:{jersey:0x0f7f86, trim:0x15171d, helmet:0x15171d, stripe:0x0f7f86, mask:0x0e1014, sock:0x0f7f86, pants:0xeef0f3, belt:0x15171d}},
+    crimson:{label:'Crimson & white',kit:{jersey:0xb0101f, trim:0xeef0f3, helmet:0xb0101f, stripe:0xeef0f3, mask:0x15171d, sock:0xb0101f, pants:0xeef0f3, belt:0xb0101f}},
+    black:  {label:'Black & gold',   kit:{jersey:0x121317, trim:0xd4a017, helmet:0xd4a017, stripe:0x121317, mask:0x0e1014, sock:0x121317, pants:0xd4a017, belt:0x121317}},
+    sky:    {label:'Sky & navy',     kit:{jersey:0x4fa3e8, trim:0x14254a, helmet:0xeef0f3, stripe:0x14254a, mask:0x10131a, sock:0x4fa3e8, pants:0xeef0f3, belt:0x14254a}},
+    maroon: {label:'Maroon & gold',  kit:{jersey:0x6e1a2c, trim:0xe5b53b, helmet:0x6e1a2c, stripe:0xe5b53b, mask:0x10131a, sock:0x6e1a2c, pants:0xe5b53b, belt:0x6e1a2c}},
+  };
+  function teamName(){ const T=MYTEAM||myTeam(); return (T.name||'').trim(); }
+  function teamAbbr(){ const n=teamName(); if(!n) return 'YOU';
+    const w=n.toUpperCase().replace(/[^A-Z0-9 ]/g,'').split(/\s+/).filter(Boolean);
+    // three words or more: their initials (Harbor City Sharks, HCS); otherwise the city's first three (Brooklyn Thunder, BRO)
+    return (w.length>=3 ? w.map(x=>x[0]).join('').slice(0,3) : (w[0]||'YOU').slice(0,3)) || 'YOU'; }
+  function applyMyKit(){ const T=MYTEAM||myTeam(); Object.assign(TEAM_KIT.user, (COLORWAYS[T.kit]||COLORWAYS.royal).kit);
+    for(const g of (typeof pPool!=='undefined'?pPool:[])) if(g && g.userData) g.userData.team=null; }
+  function kitClash(a,b){ const d=k=>((a>>k)&255)-((b>>k)&255); return Math.hypot(d(16),d(8),d(0)) < 110; }
   const _oppRosters={};
   function oppRoster(o){ const sn=(MYTEAM&&MYTEAM.seasonNo)||1, key=o.abbr+':'+sn;
     return _oppRosters[key] || (_oppRosters[key]=makeRoster(rng32(hashStr(o.abbr)+sn*7919), Math.round((o.str-0.5)*4)+Math.min(8,(sn-1)*2))); }
@@ -663,7 +706,7 @@
     const o=(SEASON&&!TWO_P)?seasonOpp(SEASON):null, wk=SEASON&&!TWO_P?(SEASON.results.length>=REG_WEEKS?'TITLE GAME':'WEEK '+(SEASON.results.length+1)):TWO_P?'TWO PLAYERS':'EXHIBITION';
     const rec=SEASON&&!TWO_P?recStr(seasonRecord(SEASON)):'';
     const card=(name,sub,kit)=>'<div class="tm" style="background:linear-gradient(180deg,'+hexCss(kit.jersey)+','+hexCss(kit.jersey)+'cc); border-bottom:4px solid '+hexCss(kit.trim)+'">'+name+'<small>'+sub+'</small></div>';
-    el.innerHTML='<div class="row">'+card(TWO_P?'PLAYER 1':'YOU','HOME'+(rec?' · '+rec:''),you)+'<div class="vs">VS</div>'+card(TWO_P?'PLAYER 2':(o?o.name.toUpperCase():'CPU'),'AWAY',them)+'</div>'
+    el.innerHTML='<div class="row">'+card(TWO_P?'PLAYER 1':(teamName()||'YOU').toUpperCase(),'HOME'+(rec?' · '+rec:''),you)+'<div class="vs">VS</div>'+card(TWO_P?'PLAYER 2':(o?o.name.toUpperCase():'CPU'),'AWAY',them)+'</div>'
       +'<div class="sub">'+wk+(WEATHER==='rain'?' · 🌧 RAIN':WEATHER==='snow'?' · ❄ SNOW':' · CLEAR')+'</div><div class="toss"></div><div class="skip">PRESS ANY KEY TO SKIP</div>';
     el.classList.remove('hidden'); requestAnimationFrame(()=>el.classList.add('show'));
   }
@@ -680,7 +723,7 @@
     const el=document.getElementById('intro'), you=TEAM_KIT.user, them=TEAM_KIT.cpu;
     const card=(name,score,kit)=>'<div class="tm" style="background:linear-gradient(180deg,'+hexCss(kit.jersey)+','+hexCss(kit.jersey)+'cc); border-bottom:4px solid '+hexCss(kit.trim)+'">'+score+'<small>'+name+'</small></div>';
     const rname=recv==='user'?(TWO_P?'PLAYER 1':'YOU'):(TWO_P?'PLAYER 2':cpuLabel());
-    el.innerHTML='<div class="sub" style="margin:0 0 8px;font-size:14px;color:var(--gold)">HALFTIME</div><div class="row">'+card(TWO_P?'PLAYER 1':'YOU',G.userScore,you)+'<div class="vs">–</div>'+card(TWO_P?'PLAYER 2':cpuLabel(),G.cpuScore,them)+'</div>'
+    el.innerHTML='<div class="sub" style="margin:0 0 8px;font-size:14px;color:var(--gold)">HALFTIME</div><div class="row">'+card(TWO_P?'PLAYER 1':teamAbbr(),G.userScore,you)+'<div class="vs">–</div>'+card(TWO_P?'PLAYER 2':cpuLabel(),G.cpuScore,them)+'</div>'
       +box+'<div class="toss" style="font-size:15px">'+rname+' RECEIVE'+(recv==='user'&&!TWO_P?'':'S')+' THE SECOND-HALF KICK</div><div class="skip">PRESS ANY KEY TO SKIP</div>';
     el.classList.remove('hidden'); requestAnimationFrame(()=>el.classList.add('show'));
   }
@@ -1445,7 +1488,8 @@
   // Two players and no controller: player 2 takes the arrows and the keys around Enter.
   const P2KEY={ArrowUp:1,ArrowDown:1,ArrowLeft:1,ArrowRight:1,Enter:1,NumpadEnter:1,ShiftRight:1,Slash:1,Period:1,Comma:1,KeyL:1,KeyK:1,Semicolon:1,Quote:1};
   function kbSplit(){ return TWO_P && padSlots()===0; }
-  addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
+  addEventListener('keydown',e=>{ if(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;   // typing your team's name
+    const k=e.key.toLowerCase();
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
     if(PAD.used && !TWO_P) padSetUsed(false); lastInput='key';
     codes[e.code]=true;
@@ -1465,7 +1509,8 @@
     if(/^[1-5]$/.test(k) && actOff()){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
     keys[k]=true;
   });
-  addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); codes[e.code]=false; if(k==='shift') sprintHeld=false;
+  addEventListener('keyup',e=>{ if(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const k=e.key.toLowerCase(); codes[e.code]=false; if(k==='shift') sprintHeld=false;
     if(k===' ') releaseThrow('key'); if(e.code==='Enter'||e.code==='NumpadEnter') releaseThrow('key2'); keys[k]=false; });
   // Player 2's half of the keyboard.
   function p2Key(e){
@@ -1803,7 +1848,7 @@
   function padMenuEls(){
     const q=id=>document.getElementById(id);
     if(visible(q('pause'))) return [...q('pause').querySelectorAll('button')];
-    if(visible(q('team'))) return [q('team-close')];
+    if(visible(q('team'))) return [...q('team').querySelectorAll('.sw'), q('team-close')];
     if(visible(q('offseason'))) return [...q('offseason').querySelectorAll('.pro'), q('off-go')];
     if(visible(q('start'))) return [...q('start').querySelectorAll('button.btn')].filter(e=>e.style.display!=='none');
     if(visible(q('over'))) return [...q('over').querySelectorAll('button.btn')].filter(e=>e.style.display!=='none');
@@ -3492,6 +3537,8 @@
     user:{jersey:0x1e58d8, trim:0xf0b429, helmet:0xe8ecf4, stripe:0x1e58d8, mask:0x10131a, sock:0x1e58d8, pants:0xe9ebef, belt:0x1e58d8},   // home: royal, gold trim, silver lid
     cpu: {jersey:0xa5131d, trim:0xe6e8ee, helmet:0x15171d, stripe:0xa5131d, mask:0x0e1014, sock:0x15171d, pants:0x1b1d24, belt:0x15171d},   // away: deep red on black
   };
+  applyMyKit();   // your saved colours and name (the team screen)
+  { const y=document.querySelector('#sb-you .lbl'); if(y) y.textContent=teamAbbr(); }
   function WX(px){ return px/PPY; }
   function WZ(py){ return (py-fieldTop)/PPY; }
   function fieldTexture(){
@@ -5044,6 +5091,25 @@
 
   // ---- the box score ---------------------------------------------------------------
   function blankStats(){ return {passAtt:0,passComp:0,passYds:0,passTD:0,ints:0,rushAtt:0,rushYds:0,rushTD:0,sacked:0,sackYds:0,fumLost:0,players:{}}; }
+  // A broadcast lower third after a big play: the man who made it, and his game so far.
+  // Shown after a 12+ yard run, a 15+ yard catch, a sack, or a touchdown (after its
+  // banner), and otherwise not on back-to-back plays.
+  let _l3Since=9;
+  function lowerThird(team, n, kind, delay){
+    const el=document.getElementById('l3'); if(!el || !G.stats) return;
+    const st=G.stats[team], p=st.players[n]||{rushAtt:0,rush:0,rec:0,recYds:0,td:0,tkl:0,sacks:0,ints:0}, R=Math.round, man=manOn(team,n);
+    const line = kind==='rush' ? p.rushAtt+' CAR · '+R(p.rush)+' YDS'+(p.td?' · '+p.td+' TD':'')
+      : kind==='rec' ? p.rec+' REC · '+R(p.recYds)+' YDS'+(p.td?' · '+p.td+' TD':'')
+      : kind==='sack' ? p.sacks+' SACK'+(p.sacks===1?'':'S')+(p.tkl?' · '+p.tkl+' TKL':'')
+      : st.passComp+'/'+st.passAtt+' · '+R(st.passYds)+' YDS'+(st.passTD?' · '+st.passTD+' TD':'');
+    const nm=man ? (man.initial?man.initial+'. ':'')+man.name : '#'+n, pos=n===12?'QB':posOf(n);
+    _l3Since=0;
+    const show=()=>{ if(!G || G.phase==='final' || G.phase==='intro') return;
+      el.className=team==='user'?'you':'cpu';
+      el.innerHTML='<i class="bar"></i><div class="bd"><div class="nm">'+nm+'<small>#'+n+' · '+pos+'</small></div><div class="st">'+line+'</div></div>';
+      el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),3300); };
+    if(delay) setTimeout(show, delay*1000); else show();
+  }
   function statP(team,n){ const s=G.stats[team].players; return s[n]||(s[n]={rushAtt:0,rush:0,rec:0,recYds:0,td:0,tkl:0,sacks:0,ints:0}); }
   // Once as every scrimmage play ends (endPlay, or scoreTD for a touchdown). A play a
   // flag wiped out, a conversion try and the yards of a return do not count — the same
@@ -5054,13 +5120,16 @@
     if(G._returning){ if(td) statP(team,c.n).td++; return; }
     const gain=(Math.min(spot,GOAL_X)-G.los)/PPY, tk=G.lastTackler, dteam=other(team);
     if(tk && /TACKL|SACK/.test(reason)) statP(dteam,tk.n).tkl++;
+    _l3Since++;
     if(G.playType==='pass'){
       if(reason==='INCOMPLETE'){ st.passAtt++; return; }
       if(/INTERCEPT/.test(reason)){ st.passAtt++; st.ints++; return; }
-      if(c.role==='wr'){ st.passAtt++; st.passComp++; st.passYds+=gain; const p=statP(team,c.n); p.rec++; p.recYds+=gain; if(td){ st.passTD++; p.td++; } return; }
-      if(/SACK/.test(reason)){ st.sacked++; st.sackYds+=gain; if(tk) statP(dteam,tk.n).sacks++; return; }
+      if(c.role==='wr'){ st.passAtt++; st.passComp++; st.passYds+=gain; const p=statP(team,c.n); p.rec++; p.recYds+=gain; if(td){ st.passTD++; p.td++; }
+        if(td || (gain>=15 && _l3Since>=2)) lowerThird(team, c.n, 'rec', td?2.3:0.5); return; }
+      if(/SACK/.test(reason)){ st.sacked++; st.sackYds+=gain; if(tk){ statP(dteam,tk.n).sacks++; lowerThird(dteam, tk.n, 'sack', 0.5); } return; }
     }
     st.rushAtt++; st.rushYds+=gain; const p=statP(team,c.n); p.rushAtt++; p.rush+=gain; if(td){ st.rushTD++; p.td++; }
+    if(td || (gain>=12 && _l3Since>=2)) lowerThird(team, c.n, 'rush', td?2.3:0.5);
   }
   function playerOfGame(){
     const win=G.userScore>=G.cpuScore?'user':'cpu'; let best=null, bs=0;
@@ -5142,7 +5211,7 @@
     for(const o of OPPONENTS){ const L=s.league[o.abbr]; rows.push({abbr:o.abbr, name:o.name, str:o.str, w:L.w, l:L.l, pf:L.pf, pa:L.pa}); }
     const pct=r=>(r.w+r.l)?r.w/(r.w+r.l):0;
     return rows.sort((a,b)=>(pct(b)-pct(a)) || ((b.pf-b.pa)-(a.pf-a.pa)) || ((b.str||0)-(a.str||0))); }
-  function standLine(s, n){ return standings(s).slice(0,n||5).map((r,i)=>(i+1)+'. '+(r.you?'<b>YOU</b>':r.abbr)+' '+r.w+'–'+r.l).join(' · '); }
+  function standLine(s, n){ return standings(s).slice(0,n||5).map((r,i)=>(i+1)+'. '+(r.you?'<b>'+teamAbbr()+'</b>':r.abbr)+' '+r.w+'–'+r.l).join(' · '); }
   // the season's best player, from the season totals
   function seasonMVP(){ const T=myTeam(), S=T.stats||{}, R=T.roster; let best=null, bs=0;
     for(const k in S){ const p=S[k], n=+k; let sc=((p.rush||0)+(p.recYds||0))/10+(p.td||0)*6+(p.tkl||0)+(p.sacks||0)*3+(p.ints||0)*5;
@@ -5159,8 +5228,12 @@
     el.textContent = (!s || s.over) ? 'seven games, then the title game' : 'week '+(s.results.length+1)+' · '+recStr(seasonRecord(s))
       +(s.results.length?' · '+(()=>{ const i=standings(s).findIndex(r=>r.you); return ['1st','2nd','3rd'][i]||((i+1)+'th'); })()+' in the league':'')+' · next: '+seasonOpp(s).name; }
   // an opponent's colours and name on the scoreboard (null: the exhibition CPU)
+  let _curOpp=null;
   function applyOpponent(o){
+    _curOpp=o||null;
     Object.assign(TEAM_KIT.cpu, o ? o.kit : CPU_KIT0);
+    if(kitClash(TEAM_KIT.user.jersey, TEAM_KIT.cpu.jersey)){ const c=TEAM_KIT.cpu.jersey;      // road whites
+      Object.assign(TEAM_KIT.cpu, {jersey:0xeef0f3, trim:c, stripe:c, sock:c, belt:c}); if(kitClash(TEAM_KIT.cpu.pants,0xeef0f3)) TEAM_KIT.cpu.pants=c; }
     for(const g of pPool) if(g && g.userData) g.userData.team=null;     // re-tint at the next frame
     const lbl=document.querySelector('#sb-cpu .lbl'); if(lbl) lbl.textContent = o ? o.abbr : 'CPU';
   }
@@ -5310,11 +5383,18 @@
       +(L.length?'<div class="lead" style="margin-top:8px">Season leaders — '+L.join(' · ')+'</div>':'<div class="lead" style="margin-top:8px;opacity:.7">Play a season and your stat leaders show up here. Men who play well get better.</div>')
       +(hist?'<div class="lead" style="opacity:.8">'+hist+'</div>':'')
       +(()=>{ const sp=SEASON||loadSeason(); if(!sp || !sp.results || !sp.results.length) return '';
-          return '<div class="lead" style="margin-top:4px">League — '+standings(sp).map((r,i)=>(i+1)+'. '+(r.you?'<b>YOU</b>':r.abbr)+' '+r.w+'–'+r.l).join(' · ')+'</div>'; })(); }
+          return '<div class="lead" style="margin-top:4px">League — '+standings(sp).map((r,i)=>(i+1)+'. '+(r.you?'<b>'+teamAbbr()+'</b>':r.abbr)+' '+r.w+'–'+r.l).join(' · ')+'</div>'; })(); }
   function showTeam(){ const T=myTeam(), sp=SEASON||loadSeason(); ensureAges(T);
     document.getElementById('team-sub').textContent='Season '+(T.seasonNo||1)+(sp&&sp.results&&sp.results.length&&!sp.over?' · '+recStr(seasonRecord(sp))+' after '+sp.results.length+' game'+(sp.results.length>1?'s':''):'')+' · team rating '+teamOvr();
     document.getElementById('team-body').innerHTML=teamHTML();
+    const nm=document.getElementById('team-name'); if(nm) nm.value=T.name||'';
+    const sws=document.getElementById('team-sws');
+    if(sws) sws.innerHTML=Object.entries(COLORWAYS).map(([k,c])=>'<button class="sw'+((T.kit||'royal')===k?' on':'')+'" data-kit="'+k+'" title="'+c.label+'" style="background:'+hexCss(c.kit.jersey)+'"><i style="background:'+hexCss(c.kit.trim)+'"></i></button>').join('');
     document.getElementById('team').classList.remove('hidden'); }
+  document.getElementById('team-name').addEventListener('input',e=>{ const T=myTeam(); T.name=e.target.value.replace(/\s+/g,' ').slice(0,18); saveTeam();
+    const y=document.querySelector('#sb-you .lbl'); if(y && !TWO_P) y.textContent=teamAbbr(); });
+  document.getElementById('team-sws').addEventListener('click',e=>{ const b=e.target.closest('.sw'); if(!b) return; const T=myTeam(); T.kit=b.dataset.kit; saveTeam();
+    applyMyKit(); applyOpponent(_curOpp); document.querySelectorAll('#team-sws .sw').forEach(x=>x.classList.toggle('on', x===b)); });
   function teamOvr(){ const R=myTeam().roster; let s=0,n=0; for(const [,ns] of UNITS) for(const k of ns){ if(R[k]){ s+=R[k].ovr; n++; } } return n?Math.round(s/n):0; }
   function teamNote(){ const el=document.getElementById('team-note'); if(el) el.textContent='team rating '+teamOvr()+' · season '+(myTeam().seasonNo||1); }
   function seasonAfterGame(u,c){
@@ -5533,7 +5613,7 @@
     const u=G.userScore,c=G.cpuScore;
     document.getElementById('over-title').textContent = SEASON ? (u>c?'VICTORY':(u<c?'DEFEAT':'TIE GAME')) : TWO_P ? (u>c?'P1 WINS':(u<c?'P2 WINS':'TIE GAME')) : (u>c?'YOU WIN':(u<c?'CPU WINS':'TIE GAME'));
     document.getElementById('over-title').style.color = u>c?'#9cff9c':(u<c?'#ff8a7a':'#ffd24a');
-    document.getElementById('final-line').textContent=tname('user')+' '+u+'  –  '+c+' '+cpuLabel();
+    document.getElementById('final-line').textContent=(TWO_P?tname('user'):teamAbbr())+' '+u+'  –  '+c+' '+cpuLabel();
     if(TWO_P){ document.getElementById('again').textContent='Rematch'; document.getElementById('to-menu').style.display=''; }
     document.getElementById('final-sub').innerHTML=boxScoreHTML()+'<div style="opacity:.7;margin-top:4px">Longest play '+G.longest+' yds</div>';
     if(SEASON) seasonAfterGame(u,c); else resetOverButtons();
@@ -5570,7 +5650,7 @@
     return (n>=2 ? pad('P1')+'<br>'+pad('P2') : n===1 ? kb1.replace('WASD move','WASD or arrows move')+'<br>'+pad('P2') : kb1+'<br>'+kb2)
       +'<br><span style="opacity:.8">The offense calls its play, then the defense calls its coverage (routes stay hidden). Snap when both are set.</span>'; }
   function setTwoP(on){ TWO_P=!!on;
-    const y=document.querySelector('#sb-you .lbl'); if(y) y.textContent=TWO_P?'P1':'You';
+    const y=document.querySelector('#sb-you .lbl'); if(y) y.textContent=TWO_P?'P1':teamAbbr();
     if(TWO_P){ const c=document.querySelector('#sb-cpu .lbl'); if(c) c.textContent='P2'; }
     twoPNote(); }
   function startTwoPlayer(){ PRACTICE=false; SEASON=null; applyOpponent(null); resetOverButtons(); setTwoP(true); audioInit(); startCrowd(); pendingDiff='pro';
@@ -5647,7 +5727,7 @@
     commB.addEventListener('pointerdown',()=>{ lp=setTimeout(cycleAnnouncerVoice,600); });
     ['pointerup','pointerleave','pointercancel'].forEach(e=>commB.addEventListener(e,()=>clearTimeout(lp)));
   }
-  addEventListener('keydown',e=>{ if(e.key&&e.key.toLowerCase()==='v') cycleAnnouncerVoice(); });
+  addEventListener('keydown',e=>{ if(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return; if(e.key&&e.key.toLowerCase()==='v') cycleAnnouncerVoice(); });
   function toggleFullscreen(){
     const el=document.getElementById('app');
     try{
