@@ -184,6 +184,13 @@ two-player game both sides are people. Use `humanOff()`/`humanDef()` for "is thi
 side human" and `actOff()`/`actDef()` for "is the player who pressed this on offense".
 `G.offense==='user'` is still right for wording, stats and scoring (whose points).
 
+**Only big parts cast shadows.** A player is 16 meshes and every one is a draw call,
+twice with shadows. `SHADOW_PARTS` (jersey, pants, skin, helmet, socks, cleats,
+gloves) are the only casters, and eyes, chin strap, visor and name bar are hidden past
+26 yards from the camera (`detailParts`; the visor stays off for men who do not wear
+one). Measured on the same seeded scene: 566 → 450 draw calls a frame, 132 → 51
+shadow casters. Toggle `shadowParts`/`detailParts`, never `traverse` every mesh.
+
 **A dive must not drop the body.** Dives pitch the model over its feet, which
 already lays it on the turf; the 0.55 drop the tackle falls use buried every diver
 to the ankles (defender dive tackles included) until it was set to ~0.

@@ -2077,7 +2077,9 @@
 
   // ---- loop ----
   let last=performance.now();
-  function loop(now){ let dt=(now-last)/1000; last=now; const raw=Math.min(0.5,Math.max(0,dt)); if(dt>0.05) dt=0.05;
+  let _introEl=null;
+  function loop(now){ let dt=(now-last)/1000; last=now;
+    if(G && G.phase!=='intro'){ const ie=_introEl||(_introEl=document.getElementById('intro')); if(ie && !ie.classList.contains('hidden')){ ie.classList.remove('show'); ie.classList.add('hidden'); } } const raw=Math.min(0.5,Math.max(0,dt)); if(dt>0.05) dt=0.05;
     try{ pollPad(dt); autoQuality(raw); }catch(e){}   // quality judges real frame time, not the clamped game step
     if(G && G.paused){ lastDt=0; render3D(); padBar(); requestAnimationFrame(loop); return; }
     if(G && G.slowT>0){ G.slowT-=dt; dt*=0.3; }          // bullet time on a big hit
@@ -3428,9 +3430,15 @@
     grp.add(model);
     // every part gets its own material instance so each player can be tinted and varied
     const mats={}, parts={};
+    // Only the parts big enough to throw a visible shadow cast one. Every part used to,
+    // and a player is 16 meshes: the shadow pass drew all 16 for each of 22 men, eyes,
+    // chin strap and number patches included — shadows nobody could ever see.
+    const SHADOW_PARTS={Jersey:1,Pants:1,Skin:1,Helmet:1,Socks:1,Cleats:1,Gloves:1}, shadowParts=[], detailParts=[];
     model.traverse(o=>{ if(!o.isMesh||!o.material) return;
-      o.frustumCulled=false; o.castShadow=true;
+      o.frustumCulled=false;
       o.material=o.material.clone(); const n=o.material.name;
+      o.castShadow=!!SHADOW_PARTS[n]; if(o.castShadow) shadowParts.push(o);
+      if(n==='Eyes'||n==='ChinStrap'||n==='NameBar'||n==='Visor') detailParts.push(o);
       (mats[n]=mats[n]||[]).push(o.material); (parts[n]=parts[n]||[]).push(o); });
     const each=(n,f)=>{ for(const m of (mats[n]||[])) f(m); };
     const surf=(n,r,mt,env)=>each(n,m=>{ m.roughness=r; m.metalness=mt; m.envMapIntensity=env; });
@@ -3479,7 +3487,7 @@
     // the model carries a 'heavy' morph target (belly, neck, seat, thighs, arms): the
     // game dials it in per position so linemen are big men, not stretched receivers
     const morphs=[]; model.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetInfluences.length) morphs.push(o); });
-    grp.userData={ring,mats,parts,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, morphs, heavy:-1};
+    grp.userData={ring,mats,parts,shadowParts,detailParts,wearsVisor,detailOn:true,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, morphs, heavy:-1};
     initRig(grp.userData, model);
     grp.visible=false; scene.add(grp); return grp;
   }
@@ -4213,7 +4221,11 @@
         const qd=Q(), dxc=Math.abs(WX(e.x)-camera.position.x);
         const far = dxc>qd.poseDist;
         if(u.shadowOn!==(dxc<qd.shadowDist)){ u.shadowOn=dxc<qd.shadowDist;
-          u.model.traverse(o=>{ if(o.isMesh) o.castShadow=u.shadowOn; }); }
+          for(const o of u.shadowParts) o.castShadow=u.shadowOn; }
+        // Details a few pixels across past ~26 yards (eyes, chin strap, visor, name bar)
+        // are not drawn out there: four fewer draw calls for every man down the field.
+        { const det = repFrame || dxc<26; if(u.detailOn!==det){ u.detailOn=det;
+            for(const o of u.detailParts) o.visible = det && (o.material.name!=='Visor' || u.wearsVisor); } }
         // ---- what is this man doing? -------------------------------------------------
         // The pose is chosen from his position and the moment in the play; the heading,
         // the IK targets (a man's chest, the ball, the ground) and the head's target come
