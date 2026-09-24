@@ -382,6 +382,15 @@ angle, with joint positions printed — that is how every pose was tuned. For po
 context, set `window.__gbNoDraw=true` on `index.test.html` so `render3D()` runs the
 pose logic without drawing, step the game, and render a close camera yourself.
 
+**The single-file bundle is a different program.** `node tools/build-artifact.cjs out.html`
+packs the game into one self-contained page (three.js inline, the models and the HDR as
+data URIs, fonts embedded) for hosts that block every external request. It rewrites the
+source to do it, and a rewrite can break what `index.html` gets right: its tag-stripping
+once deleted `<metalnessmap_fragment>` from the game's own shader patch, every harness
+passed, and the bundle's distant players failed to compile. After building one, run
+`node tools/bundlecheck.mjs out.html [shot.png]`: it loads the bundle with the network
+cut off, as such a host would, and exits non-zero on any page or console error.
+
 Two practical notes: drive `update(dt)` directly rather than waiting on real
 time, because software rendering only manages a few frames a second; and listen
 for **console** errors, not just page errors — a three.js shader that fails to
