@@ -57,6 +57,26 @@
   .pc.man .pt{color:#cfe3ff;} .pc.zone .pt{color:#ffd98a;} .pc.prevent .pt{color:#9cffe0;}
   .pc .art{display:block; width:104px; height:56px; margin:0 auto 5px; border-radius:6px; background:rgba(38,92,52,.38);}
   #defcall .pc .art{width:132px; height:71px;}
+  #defcall .pc{flex:0 1 150px;}
+  .pc{position:relative;} .pc .key{position:absolute; top:5px; left:7px; font:700 11px 'Oswald',sans-serif; color:var(--muted);}
+  #pc-head,#dc-head{width:100%; display:flex; justify-content:center; align-items:center; gap:10px; flex-wrap:wrap;}
+  #dc-head{font:700 13px 'Oswald',sans-serif; letter-spacing:.12em; color:#ffd98a;}
+  #pc-tabs{display:flex; gap:6px; flex-wrap:wrap; justify-content:center;}
+  #pc-tabs .tab{font:600 12px/1 'Oswald',sans-serif; letter-spacing:.08em; padding:7px 12px; border-radius:999px; border:1px solid #2c3e57; background:rgba(18,26,36,.92); color:#c8d4e4; cursor:pointer;}
+  #pc-tabs .tab.on{background:var(--gold); color:#1a1406; border-color:var(--gold);}
+  #pc-hint{font-size:11px; color:#b8c6da; letter-spacing:.03em; background:rgba(8,12,20,.72); padding:4px 9px; border-radius:8px;}
+  #pc-cards{width:100%; display:flex; flex-wrap:wrap; gap:8px; justify-content:center; align-items:flex-end;}
+  #pc-list{display:contents;}
+  .pc.cover2 .pt{color:#b9f0ff;} .pc.firezone .pt{color:#ffb38a;}
+  #audible{position:absolute; left:50%; bottom:14px; transform:translateX(-50%); display:flex; flex-wrap:wrap; gap:6px; justify-content:center; align-items:center; max-width:94%; padding:9px 12px; border-radius:12px; background:rgba(8,12,20,.9); border:1px solid #2c3e57; z-index:6; font-family:'Oswald',sans-serif;}
+  #audible b{width:100%; text-align:center; font-size:12px; letter-spacing:.14em; color:var(--gold);}
+  #audible span{cursor:pointer; font-size:13px; letter-spacing:.05em; padding:5px 9px; border-radius:8px; border:1px solid #2c3e57; background:rgba(18,26,36,.95); color:#dfe8f5;}
+  #audible span.on{border-color:var(--gold);} #audible i{font-style:normal; color:var(--muted); margin-right:5px;}
+  #presnap-bar{position:absolute; right:10px; bottom:12px; display:flex; gap:6px; z-index:5; font-family:'Oswald',sans-serif;}
+  #presnap-bar span{cursor:pointer; font-size:12px; letter-spacing:.1em; padding:7px 10px; border-radius:9px; background:rgba(10,16,24,.7); border:1px solid #2c3e57; color:#dfe8f5; user-select:none;}
+  #rlabels{position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden;}
+  #rlabels .rl{position:absolute; width:19px; height:19px; margin:-24px 0 0 -10px; border-radius:50%; background:#9cc2ff; color:#08101a; font:700 12px/19px 'Oswald',sans-serif; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.5);}
+  #rlabels .rl.sel{background:var(--gold);} #rlabels .rl.hot{background:#ff8a7a;}
   #mute{position:absolute; top:8px; right:8px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
   #commtog{position:absolute; top:8px; right:48px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
   #fstog{position:absolute; top:8px; right:152px; z-index:5; cursor:pointer; font-size:17px; line-height:1; padding:6px 8px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
@@ -148,24 +168,26 @@
     <div id="comm"></div>
 
     <div id="playcall" class="hidden">
-      <div class="pc oc run" data-play="dive"><canvas class="art" width="208" height="112"></canvas><div class="pt">DIVE</div><div class="ps">up the gut</div></div>
-      <div class="pc oc run" data-play="sweep"><canvas class="art" width="208" height="112"></canvas><div class="pt">SWEEP</div><div class="ps">bounce outside</div></div>
-      <div class="pc oc run" data-play="draw"><canvas class="art" width="208" height="112"></canvas><div class="pt">DRAW</div><div class="ps">let them rush</div></div>
-      <div class="pc oc pass" data-play="slants"><canvas class="art" width="208" height="112"></canvas><div class="pt">SLANTS</div><div class="ps">quick &amp; safe</div></div>
-      <div class="pc oc pass" data-play="verticals"><canvas class="art" width="208" height="112"></canvas><div class="pt">VERTS</div><div class="ps">deep shot</div></div>
-      <div class="pc oc pass" data-play="screen"><canvas class="art" width="208" height="112"></canvas><div class="pt">SCREEN</div><div class="ps">dump &amp; block</div></div>
-      <div class="pc oc pass" data-play="playaction"><canvas class="art" width="208" height="112"></canvas><div class="pt">PLAY ACTION</div><div class="ps">fake run, go deep</div></div>
-      <div class="pc oc pass" data-play="mesh"><canvas class="art" width="208" height="112"></canvas><div class="pt">MESH</div><div class="ps">crossers underneath</div></div>
-      <div class="pc oc pass" data-play="flood"><canvas class="art" width="208" height="112"></canvas><div class="pt">FLOOD</div><div class="ps">three levels, one side</div></div>
-      <div class="pc oc kick hidden" id="pb-fg" data-play="fg"><div class="pt">FIELD GOAL</div><div class="ps" id="fg-label">3 points</div></div>
-      <div class="pc oc kick hidden" id="pb-punt" data-play="punt"><div class="pt">PUNT</div><div class="ps">flip the field</div></div>
+      <div id="pc-head"><div id="pc-tabs"></div><div id="pc-hint">← → formation · 1–9 call it · then C audible · X flip · 1–5 + arrow = hot route</div></div>
+      <div id="pc-cards"><div id="pc-list"></div>
+        <div class="pc oc kick hidden" id="pb-fg" data-play="fg"><div class="pt">FIELD GOAL</div><div class="ps" id="fg-label">3 points</div></div>
+        <div class="pc oc kick hidden" id="pb-punt" data-play="punt"><div class="pt">PUNT</div><div class="ps">flip the field</div></div>
+        <div class="pc oc kick hidden" id="pb-kneel" data-play="kneel"><div class="pt">KNEEL</div><div class="ps">take a knee, run the clock</div></div>
+        <div class="pc oc kick hidden" id="pb-spike" data-play="spike"><div class="pt">SPIKE</div><div class="ps">stop the clock, lose a down</div></div>
+      </div>
     </div>
+    <div id="audible" class="hidden"></div>
+    <div id="presnap-bar" class="hidden"><span data-a="audible">AUDIBLE</span><span data-a="flip">FLIP</span></div>
+    <div id="rlabels"></div>
 
     <div id="defcall" class="hidden">
-      <div class="pc dc man" data-def="man"><canvas class="art" width="264" height="142"></canvas><div class="pt">MAN</div><div class="ps">lock up every receiver</div></div>
-      <div class="pc dc zone" data-def="zone"><canvas class="art" width="264" height="142"></canvas><div class="pt">ZONE</div><div class="ps">cover 3 · read the QB</div></div>
-      <div class="pc dc blitz" data-def="blitz"><canvas class="art" width="264" height="142"></canvas><div class="pt">BLITZ</div><div class="ps">send pressure · risk it</div></div>
-      <div class="pc dc prevent" data-def="prevent"><canvas class="art" width="264" height="142"></canvas><div class="pt">PREVENT</div><div class="ps">deep help · bend, don't break</div></div>
+      <div id="dc-head"></div>
+      <div class="pc dc man" data-def="man"><span class="key">1</span><canvas class="art" width="264" height="142"></canvas><div class="pt">MAN</div><div class="ps">lock up every receiver</div></div>
+      <div class="pc dc cover2" data-def="cover2"><span class="key">2</span><canvas class="art" width="264" height="142"></canvas><div class="pt">COVER 2</div><div class="ps">two deep · squat the flats</div></div>
+      <div class="pc dc zone" data-def="zone"><span class="key">3</span><canvas class="art" width="264" height="142"></canvas><div class="pt">COVER 3</div><div class="ps">three deep · read the QB</div></div>
+      <div class="pc dc blitz" data-def="blitz"><span class="key">4</span><canvas class="art" width="264" height="142"></canvas><div class="pt">BLITZ</div><div class="ps">send pressure · risk it</div></div>
+      <div class="pc dc firezone" data-def="firezone"><span class="key">5</span><canvas class="art" width="264" height="142"></canvas><div class="pt">FIRE ZONE</div><div class="ps">five come · three deep</div></div>
+      <div class="pc dc prevent" data-def="prevent"><span class="key">6</span><canvas class="art" width="264" height="142"></canvas><div class="pt">PREVENT</div><div class="ps">deep help · bend, don't break</div></div>
     </div>
 
     <div id="fg" class="hidden">
@@ -266,7 +288,7 @@
     g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001,g.value),t); g.linearRampToValueAtTime(peak,t+0.25); g.linearRampToValueAtTime(crowdBase,t+(dur||3)); }catch(e){} }
   function crowdSetMute(){ try{ if(crowdGain) crowdGain.gain.value=muted?0:crowdBase; }catch(e){} }
 
-  const DIFF={ rookie:{cpu:0.82,react:2.4,you:1.15,fg:0.62}, pro:{cpu:1.0,react:1.0,you:1.0,fg:1.0}, allpro:{cpu:1.16,react:0.35,you:0.88,fg:1.26} };
+  const DIFF={ rookie:{cpu:0.82,react:2.4,you:1.15,fg:0.62,rush:0.05}, pro:{cpu:1.0,react:1.0,you:1.0,fg:1.0,rush:0.10}, allpro:{cpu:1.16,react:0.35,you:0.88,fg:1.26,rush:0.14} };
   let pendingDiff='pro';
 
   let G;
@@ -530,10 +552,13 @@
     kick.classList.toggle('hidden', !can);
     if(can) document.getElementById('fg-label').textContent=fy+' yd FG · 3 pts';
     document.getElementById('pb-punt').classList.toggle('hidden', !(G.down>=4));
+    // inside the five, open on the goal-line package
+    if((GOAL_X-G.los)/PPY<=3 && pcForm!=='goal') pcForm='goal';
+    buildPlayCall(); pcSpecials();
     document.getElementById('playcall').classList.remove('hidden');
   }
   function choosePlay(id){
-    document.getElementById('playcall').classList.add('hidden');
+    document.getElementById('playcall').classList.add('hidden'); closeAudible();
     if(id==='punt'){ userPunt(); return; }
     if(id==='fg'){ if(G.convChoice){ G.convChoice=false; G.conv=null; startKick('pat'); return; } startFG(); return; }
     if(G.convChoice){ G.convChoice=false; G.twoPt=true; setupPlay(id); G.phase='presnap'; const p=PLAYS[id]; setMsg('GO FOR 2 — '+p.label+(p.kind==='pass'?' — Space throws':' — Space hikes'),1.2); return; }
@@ -559,13 +584,23 @@
       const need=(G.firstX-G.los)/PPY;
       if(need>2 && G.los<yd(80) && !desperate){ return cpuPunt(); }
     }
-    const need=(G.firstX-G.los)/PPY;
+    const need=(G.firstX-G.los)/PPY, toGo=(GOAL_X-G.los)/PPY;
     const passP = hurry ? 0.78 : milk ? 0.2 : (need>7?0.64:0.42);
-    const pool = Math.random()<passP ? PASS_PLAYS : RUN_PLAYS;
+    let pool;
+    if(milk && G.clock<30 && G.down<4) pool=['kneel'];                                   // victory formation
+    else if(hurry && lead<=0 && !G.clockStop && G.clock<16 && G.down<3 && Math.random()<0.55) pool=['spike'];
+    else if(toGo<=3) pool = Math.random()<(hurry?0.25:0.6) ? ['sneak','goalpower','dive','power','iso'] : ['goalpa','slants','quick','stick'];
+    else if(need<=2 && !hurry) pool = Math.random()<0.65 ? ['sneak','dive','power','iso','zone','goalpower'] : ['slants','stick','quick','playaction','boot'];
+    else if(G.down>=3 && need>=7) pool = ['slants','verticals','mesh','flood','smash','curls','stick','tripsflood','trips4v','levels','quick','emptydeep','dagger','fourverts','screen','bubble'];
+    else pool = Math.random()<passP ? PASS_PLAYS : RUN_PLAYS;
     const id = pool[Math.floor(Math.random()*pool.length)];
     setupPlay(id); G.phase='presnap'; G.defCall='balanced'; G.autoSnap = hurry ? 1.6 : milk ? 4.0 : 2.8;
-    document.getElementById('defcall').classList.remove('hidden');
+    showDefCall();
     setMsg(hurry?'CPU HURRY-UP — pick your D':'CPU BALL — pick your D',1.0);
+  }
+  function showDefCall(){
+    const h=document.getElementById('dc-head'); if(h) h.textContent=(G.front==='goal'?'GOAL LINE':G.front==='base'?'BASE 4-3':(G.front||'').toUpperCase())+' vs '+((FORMS[G.form]||{}).label||'');
+    document.getElementById('defcall').classList.remove('hidden');
   }
   function chooseDef(call){
     applyDefCall(call); document.getElementById('defcall').classList.add('hidden'); G.autoSnap=0.7;
@@ -576,7 +611,7 @@
     // The base 4-3 already plays its safeties deep on a pass (see baseDefense); a call
     // only adds to that. Clearing it here sent both safeties to the same spot ten yards
     // deep in the middle on every balanced or blitz call.
-    ds.forEach(d=>{ d.blitz=false; d.deepX=0; });
+    ds.forEach(d=>{ d.blitz=false; d.deepX=0; d.zone=null; });
     if(call==='blitz'){
       [...ds].sort((a,b)=>dist(a,G.carrier)-dist(b,G.carrier)).slice(0,2).forEach(d=>{ d.blitz=true; if(d.job==='cover'||d.job==='spy') d.job='rush';
         d.winAt=Math.min(d.winAt, 2.1+Math.random()*1.9); });   // a blitz is how early pressure happens
@@ -586,28 +621,92 @@
     } else if(call==='zone' && G.playType==='pass'){
       // Cover 3: the corners bail to the deep outside thirds, one safety takes the middle
       // third, the other rolls down, and everyone else sinks into the underneath zones
-      for(const d of ds) if(d.job==='cover' && d.assign){ d.assign=null; if(d.role==='CB') d.third=true; }
+      for(const d of ds) if(d.job==='cover' && d.assign){ d.assign=null; if(d.role==='CB' && !d.nickel) d.third=true; }
       const saf=ds.filter(d=>d.role==='S');
-      if(saf.length===2){ saf[0].deep=false; saf[1].deep=true; saf[1].mid=true; }
+      if(saf.length===2){ saf[0].deep=false; saf[1].deep=true; saf[1].mid=true; } else if(saf.length===1){ saf[0].deep=true; saf[0].mid=true; }
+    } else if(call==='cover2' && G.playType==='pass'){
+      // Cover 2: two safeties split the deep halves, the corners squat in the flats and
+      // jam, everyone else takes a hook or curl zone underneath
+      for(const d of ds) if(d.job==='cover' && d.assign) d.assign=null;
+      for(const d of ds) if(d.role==='CB' && !d.nickel){ d.zone='flat'; d.job='cover'; }
+      for(const d of ds) if(d.role==='S'){ d.job='cover'; d.deep=true; d.mid=false; d.zone=null; }
+    } else if(call==='firezone' && G.playType==='pass'){
+      // Fire zone: five come — a backer or the nickel on the blitz — and an end drops
+      // into the flat he left, with Cover 3 behind it
+      const bl=ds.find(d=>d.nickel)||ds.find(d=>d.role==='LB')||ds.find(d=>d.role==='MLB');
+      if(bl){ bl.blitz=true; bl.job='rush'; bl.assign=null; bl.winAt=Math.min(bl.winAt, 2.3+Math.random()*1.8); }
+      const end=ds.find(d=>d.role==='DE' && d.job==='rush'); if(end){ end.job='spy'; end.zone='flat'; }
+      for(const d of ds) if(d.job==='cover' && d.assign){ d.assign=null; if(d.role==='CB' && !d.nickel) d.third=true; }
+      const saf=ds.filter(d=>d.role==='S');
+      if(saf.length===2){ saf[0].deep=false; saf[1].deep=true; saf[1].mid=true; } else if(saf.length===1){ saf[0].deep=true; saf[0].mid=true; }
     }
   }
 
-  const PLAYS = {
-    dive:      {kind:'run',  label:'DIVE',        desc:'up the gut'},
-    sweep:     {kind:'run',  label:'SWEEP',       desc:'bounce it outside'},
-    draw:      {kind:'run',  label:'DRAW',        desc:'let them rush, cut back'},
-    // look/hold: when the CPU quarterback starts reading, and when he must be rid of it.
-    // shot: he is looking to hit something deep before he settles for less.
-    slants:    {kind:'pass', label:'SLANTS',      desc:'quick & safe',   routes:['slant','slant','slant'], back:5.0, look:0.85, hold:2.0},
-    verticals: {kind:'pass', label:'VERTS',       desc:'take a deep shot',routes:['go','post','go'],        back:6.5, look:1.5, hold:2.7, shot:true},
-    screen:    {kind:'pass', label:'SCREEN',      desc:'dump & block',   screen:true,                      back:5.5},
-    playaction:{kind:'pass', label:'PLAY ACTION', desc:'fake run, go deep',routes:['post','go','out'], pa:true, back:6.5, look:1.3, hold:2.6, shot:true},
-    // two receivers crossing underneath from opposite sides, rubbing off each other
-    mesh:      {kind:'pass', label:'MESH',        desc:'crossers underneath', routes:['cross','cross','dig'], back:5.0, look:0.9, hold:2.2},
-    // three levels to one side: go, out at eleven, and the back in the flat
-    flood:     {kind:'pass', label:'FLOOD',       desc:'three levels, one side', routes:['dig','out','go'], back:6.0, rbFlat:true, look:1.1, hold:2.5},
+  // ---- the playbook ---------------------------------------------------------------------
+  // Formations: who stands where around the five linemen. [x, y, jersey]: x is yards off
+  // the ball (negative is the backfield; in the gun the backs line up level with the
+  // quarterback), y is yards from the ball toward the formation's strength (the play
+  // flips it). The jersey number is also how the pose code knows who plays what.
+  const FORMS={
+    gun:   { label:'SHOTGUN',    gun:true,  wr:[[-0.4,-17.2,80],[-1.0,9.0,83],[-0.4,17.2,84]], te:[[-0.7,-4.4,86]], rb:[[0,1.6,22]] },
+    single:{ label:'SINGLEBACK', gun:false, wr:[[-0.4,-17.2,80],[-1.0,9.0,83],[-0.4,17.2,84]], te:[[-0.7,4.4,86]], rb:[[-4.6,0,22]] },
+    iform: { label:'I-FORM',     gun:false, wr:[[-0.4,-17.2,80],[-0.9,17.2,84]], te:[[-0.7,4.4,86]], fb:[[-2.7,0.5,44]], rb:[[-4.5,0,22]] },
+    trips: { label:'TRIPS',      gun:true,  wr:[[-0.4,-17.2,80],[-1.0,7.2,81],[-0.6,11.6,83],[-0.4,17.2,84]], te:[], rb:[[0,-1.6,22]] },
+    empty: { label:'EMPTY',      gun:true,  wr:[[-0.4,-17.2,80],[-1.0,-10.5,82],[-1.0,9.0,83],[-0.4,17.2,84]], te:[[-0.9,5.0,86]], rb:[] },
+    goal:  { label:'GOAL LINE',  gun:false, wr:[[-0.9,11.0,84]], te:[[-0.7,4.4,86],[-0.7,-4.4,87]], fb:[[-2.7,0.4,44]], rb:[[-4.6,0,22]] },
   };
-  const RUN_PLAYS=['dive','sweep','draw'], PASS_PLAYS=['slants','verticals','screen','playaction','mesh','flood'];
+  const FORM_ORDER=['gun','single','iform','trips','empty','goal'];
+  // Plays. A pass lists a route for each man it sends out (wr left to right as the
+  // formation lists them, then te, rb, fb); anyone without a route stays in to block.
+  // look/hold: when the CPU quarterback starts reading, and when he must be rid of it.
+  // shot: he is looking to hit something deep before he settles for less.
+  // A run names its hole (A, B, C gap or the edge) and which way (dir 1 = strong side).
+  const PLAYS = {
+    // ---- shotgun: three receivers, a tight end, a back ----
+    slants:    {form:'gun', kind:'pass', label:'SLANTS',      desc:'quick & safe',          routes:{wr:['slant','slant','slant']}, back:5.0, look:0.85, hold:2.0},
+    verticals: {form:'gun', kind:'pass', label:'VERTS',       desc:'take a deep shot',      routes:{wr:['go','post','go']}, back:6.5, look:1.5, hold:2.7, shot:true},
+    screen:    {form:'gun', kind:'pass', label:'SCREEN',      desc:'dump & block',          screen:'rb', back:5.5},
+    playaction:{form:'gun', kind:'pass', label:'PLAY ACTION', desc:'fake run, go deep',     routes:{wr:['post','go','out']}, pa:true, back:6.5, look:1.3, hold:2.6, shot:true},
+    // two receivers crossing underneath from opposite sides, rubbing off each other
+    mesh:      {form:'gun', kind:'pass', label:'MESH',        desc:'crossers underneath',   routes:{wr:['cross','cross','dig']}, back:5.0, look:0.9, hold:2.2},
+    // three levels to one side: go, out at eleven, and the back in the flat
+    flood:     {form:'gun', kind:'pass', label:'FLOOD',       desc:'three levels, one side', routes:{wr:['dig','out','go'], rb:['flat']}, back:6.0, look:1.1, hold:2.5},
+    smash:     {form:'gun', kind:'pass', label:'SMASH',       desc:'hitch under, corner over', routes:{wr:['hitch','corner','hitch'], rb:['flat']}, back:5.5, look:1.0, hold:2.4},
+    curls:     {form:'gun', kind:'pass', label:'CURL FLAT',   desc:'sit down in the holes', routes:{wr:['curl','curl','curl'], rb:['flat']}, back:5.5, look:1.1, hold:2.4},
+    stick:     {form:'gun', kind:'pass', label:'STICK',       desc:'tight end sits at six', routes:{wr:['go','stick','out'], te:['stick'], rb:['flat']}, back:5.0, look:0.8, hold:2.1},
+    gunzone:   {form:'gun', kind:'run',  label:'GUN ZONE',    desc:'inside zone from the gun', hole:'B', dir:1, back:4.2},
+    // ---- singleback: under centre, three wide, a tight end ----
+    zone:      {form:'single', kind:'run',  label:'INSIDE ZONE', desc:'read the front A gap', hole:'A', dir:1},
+    stretch:   {form:'single', kind:'run',  label:'STRETCH',     desc:'outside zone, cut it up', hole:'C', dir:1},
+    counter:   {form:'single', kind:'run',  label:'COUNTER',     desc:'cut back behind the pull', hole:'B', dir:-1, counter:true},
+    boot:      {form:'single', kind:'pass', label:'PA BOOT',     desc:'fake it, flood the side', routes:{wr:['go','corner','dig'], te:['flat']}, pa:true, look:1.2, hold:2.6},
+    dagger:    {form:'single', kind:'pass', label:'DAGGER',      desc:'clear the seam, dig under', routes:{wr:['dig','go','curl'], te:['stick']}, look:1.2, hold:2.6},
+    fourverts: {form:'single', kind:'pass', label:'FOUR VERTS',  desc:'stretch every deep zone', routes:{wr:['go','go','go'], te:['go']}, look:1.5, hold:2.7, shot:true},
+    // ---- I-formation: a fullback leading the back ----
+    dive:      {form:'iform', kind:'run',  label:'DIVE',        desc:'up the gut',            hole:'A', dir:1},
+    sweep:     {form:'iform', kind:'run',  label:'TOSS SWEEP',  desc:'pitch it, bounce outside', hole:'edge', dir:1, toss:true},
+    draw:      {form:'iform', kind:'run',  label:'DRAW',        desc:'let them rush, cut back', hole:'A', dir:1, draw:true},
+    power:     {form:'iform', kind:'run',  label:'POWER',       desc:'fullback kicks, guard pulls', hole:'B', dir:1, power:true},
+    iso:       {form:'iform', kind:'run',  label:'ISO',         desc:'fullback leads through', hole:'A', dir:-1},
+    pamax:     {form:'iform', kind:'pass', label:'PA MAX',      desc:'max protect, two deep shots', routes:{wr:['post','go']}, pa:true, look:1.4, hold:2.9, shot:true},
+    // ---- trips: three receivers to one side ----
+    tripsflood:{form:'trips', kind:'pass', label:'TRIPS FLOOD', desc:'go, corner, flat',      routes:{wr:['slant','flat','corner','go']}, back:5.5, look:1.1, hold:2.5},
+    bubble:    {form:'trips', kind:'pass', label:'BUBBLE',      desc:'quick screen, two blockers', screen:'wr', back:5.0},
+    trips4v:   {form:'trips', kind:'pass', label:'TRIPS VERTS', desc:'four go routes',        routes:{wr:['go','go','post','go']}, back:6.5, look:1.5, hold:2.8, shot:true},
+    levels:    {form:'trips', kind:'pass', label:'LEVELS',      desc:'in-cuts at 6, 12, 18',  routes:{wr:['slant','in','dig','post'], rb:['flat']}, back:5.5, look:1.1, hold:2.5},
+    // ---- empty: five out, nobody home ----
+    quick:     {form:'empty', kind:'pass', label:'QUICK GAME',  desc:'five quick throws',     routes:{wr:['slant','stick','hitch','slant'], te:['out']}, back:5.0, look:0.7, hold:1.8},
+    emptydeep: {form:'empty', kind:'pass', label:'EMPTY DEEP',  desc:'everybody out',         routes:{wr:['go','dig','post','go'], te:['seam']}, back:6.0, look:1.4, hold:2.6, shot:true},
+    // ---- goal line: two tight ends, a fullback ----
+    sneak:     {form:'goal', kind:'run',  label:'QB SNEAK',     desc:'behind the center',     sneak:true},
+    goalpower: {form:'goal', kind:'run',  label:'GOAL POWER',   desc:'everybody blocks',      hole:'B', dir:1, power:true},
+    goalpa:    {form:'goal', kind:'pass', label:'GOAL PA',      desc:'tight ends leak out',   routes:{wr:['fade'], te:['flat','corner']}, pa:true, look:1.0, hold:2.4},
+    // ---- the clock plays ----
+    kneel:     {form:'single', kind:'run',  label:'KNEEL', desc:'take a knee', special:'kneel', sneak:true},
+    spike:     {form:'single', kind:'pass', label:'SPIKE', desc:'stop the clock', special:'spike'},
+  };
+  const RUN_PLAYS=Object.keys(PLAYS).filter(k=>PLAYS[k].kind==='run'&&!PLAYS[k].special), PASS_PLAYS=Object.keys(PLAYS).filter(k=>PLAYS[k].kind==='pass'&&!PLAYS[k].special);
+  const HOLE_Y={A:0.75, B:2.2, C:3.65, edge:7.0};
 
   // precomputed stadium crowd (screen space)
   const crowd=[];
@@ -632,51 +731,85 @@
   let PEN_DL=0.07, PEN_LB=0.04;
   // open-field pursuit speed as a fraction of S.defSprint (the CPU back sprints at 9.4)
   const ROLE_SPEED={ CB:1.04, S:1.02, LB:0.95, MLB:0.95, DE:0.90, DT:0.84 };
-  function setupPlay(playId){
+  function setupPlay(playId, flip){
     const play=PLAYS[playId]||PLAYS.dive; const type=play.kind; const cx=G.los;
-    G.playId=playId; G.playType=type;
-    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.fumble=null; G.pile=null; G.mesh=null;
-    G.passState = type==='pass'?'drop':null; G.qbHurry=null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0;
+    const F=FORMS[play.form]||FORMS.gun;
+    G.playId=playId; G.playType=type; G.form=play.form||'gun';
+    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.fumble=null; G.pile=null; G.mesh=null; G.hole=null;
+    G.passState = type==='pass'?'drop':null; G.qbHurry=null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0; G.reads=null; G.hotSel=null;
     document.getElementById('spinpip').textContent='SPIN READY';
     const Y=v=>fieldMid+yd(v);
-    const side=Math.random()<0.5?-1:1;                   // strength: tight end, slot, play direction
+    const side=(flip===1||flip===-1)?flip:(Math.random()<0.5?-1:1);    // strength: tight end, slot, play direction
+    G.side=side;
     for(const [oy,n] of OL) G.blockers.push(mk(cx-yd(0.55),Y(oy),n));
+    const back = F.gun ? (play.back||5.5) : 1.2;          // the quarterback's depth at the snap
+    const R=play.routes||{};
+    const toC=yy=>(fieldMid-yy)>=0?1:-1;
+    // the skill players, placed from the formation; pos tells the defence what it is
+    const skill=[];
+    const place=(list,pos)=>(list||[]).forEach(([x,y,n],i)=>{ const bx = pos==='RB'&&F.gun ? -back : x;
+      skill.push({pos, i, n, x:cx+yd(bx), y:Y(side*y), route:(R[pos.toLowerCase()]||[])[i]||null}); });
+    // Order matters: blockers pick their man in list order, so the fullback and tight end
+    // (inside, where the play is) choose before the receivers split out wide. Receivers
+    // first sent a wideout seventeen yards across to take the linebacker the fullback was
+    // meant to lead onto: CPU runs fell from 3.8 yards to 1.4.
+    place(F.fb,'FB'); place(F.te,'TE'); place(F.rb,'RB'); place(F.wr,'WR');
+    const ent=s=>{ const e=mk(s.x,s.y,s.n); e.pos=s.pos; e.elig=true; return e; };
     if(type==='pass'){
-      // shotgun
-      const back=play.back||5.5;
       G.carrier={x:cx-yd(back),y:fieldMid,vx:0,vy:0,n:12,role:'qb'};
-      if(play.screen){
+      if(play.screen==='rb'){
         // the back leaks out to the flat behind a convoy: the tight end and the slot are
         // already out there to block for him, the outside receivers clear the corners away
-        G.receivers.push({x:cx-yd(back),y:Y(side*1.8),vx:0,vy:0,n:22,route:{breakT:0.45,d1:{x:-0.25,y:side*0.97},d2:{x:1,y:side*0.15},depth:2},screen:true});
-        G.receivers.push({x:cx-yd(0.4),y:Y(-WR_OUT),vx:0,vy:0,n:80,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0},depth:99}});
-        G.receivers.push({x:cx-yd(0.4),y:Y(WR_OUT),vx:0,vy:0,n:84,route:{breakT:99,d1:{x:1,y:0},d2:{x:1,y:0},depth:99}});
-        { const te=mk(cx-yd(0.2),Y(side*6.5),86), sl=mk(cx+yd(0.6),Y(side*9.5),83); te.convoy=sl.convoy=true; G.blockers.push(te,sl); }
+        for(const s of skill){
+          if(s.pos==='RB'){ const r=ent(s); r.y=Y(side*1.8); r.route={breakT:0.45,d1:{x:-0.25,y:side*0.97},d2:{x:1,y:side*0.15},depth:2}; r.screen=true; G.receivers.push(r); }
+          else if(s.pos==='WR' && Math.abs(s.y-fieldMid)>yd(14)){ const r=ent(s); r.route={breakT:99,d1:{x:1,y:0},d2:{x:1,y:0},depth:99}; G.receivers.push(r); }
+          else { const b=ent(s); b.convoy=true; if(s.pos==='TE'){ b.x=cx-yd(0.2); b.y=Y(side*6.5); } else { b.x=cx+yd(0.6); b.y=Y(side*9.5); } G.blockers.push(b); }
+        }
+      } else if(play.screen==='wr'){
+        // bubble: the inside man of the trips bows back behind the line for the throw,
+        // the two outside him block whoever is over them
+        const trips=skill.filter(s=>s.pos==='WR' && (s.y-fieldMid)*side>0).sort((a,b)=>Math.abs(a.y-fieldMid)-Math.abs(b.y-fieldMid));
+        for(const s of skill){
+          if(s===trips[0]){ const r=ent(s); r.route=makeRoute('bubble',toC(s.y)); r.screen=true; G.receivers.push(r); }
+          else if(trips.includes(s)){ const b=ent(s); b.convoy=true; G.blockers.push(b); }
+          else if(s.pos==='WR'){ const r=ent(s); r.route=makeRoute('go',toC(s.y)); G.receivers.push(r); }
+          else G.blockers.push(ent(s));
+        }
       } else {
-        // X alone on the weak side, the slot and Z to the strong side
-        const routes=play.routes||['out','slant','post'];
-        [-side*WR_OUT, side*WR_SLOT, side*WR_OUT].forEach((sy,i)=>{ const yy=Y(sy), toC=(fieldMid-yy)>=0?1:-1;
-          G.receivers.push({x:cx-yd(i===1?1.0:0.4),y:yy,vx:0,vy:0,n:[80,83,84][i],route:makeRoute(routes[i],toC)}); });
-        // the tight end and the back stay in to protect
-        if(play.rbFlat){ const yy=Y(side*1.6); G.receivers.push({x:cx-yd(back),y:yy,vx:0,vy:0,n:22,route:makeRoute('flat',(fieldMid-yy)>=0?1:-1)}); G.blockers.push(mk(cx-yd(0.7),Y(-side*TE_Y),86)); }
-        else G.blockers.push(mk(cx-yd(0.7),Y(-side*TE_Y),86), mk(cx-yd(back),Y(side*1.6),22));
+        for(const s of skill){
+          if(s.route){ const r=ent(s); r.route=makeRoute(s.route,toC(s.y)); G.receivers.push(r); }
+          else G.blockers.push(ent(s));     // stays in to protect
+        }
       }
+      // numbered left to right as you look downfield
+      G.receivers.sort((a,b)=>a.y-b.y);
+    } else if(play.sneak){
+      // the quarterback keeps it and follows the centre
+      G.carrier={x:cx-yd(1.0),y:fieldMid,vx:0,vy:0,n:12,role:'qb'};
+      for(const s of skill) G.blockers.push(ent(s));
     } else {
-      // I-formation: quarterback under centre, fullback, tailback; the tight end and both
-      // receivers block
-      let rbX=cx-yd(4.5), rbY=fieldMid;
+      // Every run is a handoff (or a pitch). The back's alignment for the three original
+      // runs is kept exactly — their numbers were tuned — and the fullback leads.
+      const rbS=skill.find(s=>s.pos==='RB');
+      let rbX=rbS?rbS.x:cx-yd(4.5), rbY=rbS?rbS.y:fieldMid;
       if(playId==='dive') rbX=cx-yd(3.9);
       else if(playId==='sweep'){ rbX=cx-yd(4.6); rbY=Y(side*2.2); }
       else if(playId==='draw') rbX=cx-yd(4.2);
-      G.carrier={x:rbX,y:rbY,vx:0,vy:0,n:22,role:'rb'};
+      G.carrier={x:rbX,y:rbY,vx:0,vy:0,n:22,role:'rb',pos:'RB'};
       G.mesh={x:rbX+yd(1.2), y:rbY};    // where the back takes it — a penetrator's target
-      { const qb=mk(cx-yd(1.2),fieldMid,12); qb.role='qb'; qb.noblock=true; G.blockers.push(qb); G.runQB=qb; }
-      const fb=mk(cx-yd(2.7),Y(playId==='sweep'?side*1.2:side*0.5),44); G.blockers.push(fb);
-      G.blockers.push(mk(cx-yd(0.7),Y(side*TE_Y),86), mk(cx-yd(0.4),Y(-side*WR_OUT),80), mk(cx-yd(0.9),Y(side*WR_OUT),84));
-      // On the sweep the playside guard and tackle pull: they run to the edge first and
-      // only then look for someone to block, which is what gives the back a convoy.
-      if(playId==='sweep') for(const b of G.blockers){ const oy=(b.y-fieldMid)/PPY;
-        if(b.n===64||b.n===66||b.n===72||b.n===76) if(oy*side>0) b.pull={x:cx+yd(1.2), y:Y(side*(6.5+Math.abs(oy))), until:0.55}; }
+      { const qb=mk(F.gun?cx-yd(back):cx-yd(1.2),fieldMid,12); qb.role='qb'; qb.noblock=true; G.blockers.push(qb); G.runQB=qb; }
+      for(const s of skill){ if(s===rbS) continue; const b=ent(s);
+        if(s.pos==='FB' && playId==='sweep') b.y=Y(side*1.2);
+        G.blockers.push(b); }
+      const dir=(play.dir||1)*side;
+      if(play.hole) G.hole=Y(dir*(HOLE_Y[play.hole]||1));
+      // Pulls. The sweep's playside guard and tackle run to the edge first; power pulls
+      // the backside guard into the hole; counter pulls the backside guard AND tackle.
+      const line=G.blockers.filter(b=>b.n===64||b.n===66||b.n===72||b.n===76);
+      if(playId==='sweep') for(const b of line){ const oy=(b.y-fieldMid)/PPY;
+        if(oy*side>0) b.pull={x:cx+yd(1.2), y:Y(side*(6.5+Math.abs(oy))), until:0.55}; }
+      if(play.power||play.counter){ const back=line.filter(b=>(b.y-fieldMid)*dir<0).sort((a,b)=>Math.abs(a.y-fieldMid)-Math.abs(b.y-fieldMid));
+        const n=play.counter?2:1; back.slice(0,n).forEach((b,k)=>{ b.pull={x:cx+yd(0.6+k*0.8), y:Y(dir*(HOLE_Y[play.hole]+0.8+k*1.4)), until:0.62}; }); }
     }
     G.defenders=baseDefense(cx, type, playId, side);
     G.cam=clampCam(G.carrier.x); G.trail=[];
@@ -685,66 +818,104 @@
     if(G.offense==='user'){
       G.userDef=null;
       for(const d of G.defenders) d.react*=G.diff.react;
-      const r=Math.random();
-      applyDefCall(r<0.22?'blitz':r<0.50?'zone':r<0.62?'prevent':'man');
+      applyDefCall(cpuDefCall());
     } else {
       // You start on the middle linebacker, the way every football game does: he sees
       // the whole play and nobody is lined up on him. Space still switches.
       G.userDef=G.defenders.find(d=>d.role==='MLB')||nearestDefToBall();
     }
   }
-  // The base 4-3, then run or pass jobs at the snap. Positions jitter a little so no two
-  // snaps are identical — a hole opens on one play and closes on the next.
+  // What the CPU defence calls against you: by down and distance, like a coordinator.
+  function cpuDefCall(){
+    const need=(G.firstX-G.los)/PPY, r=Math.random(), late=G.qtr===4 && G.clock<45 && G.cpuScore>G.userScore;
+    const tab = late ? [['prevent',0.35],['zone',0.25],['cover2',0.25],['man',0.15]]
+      : (G.down>=3 && need>=7) ? [['cover2',0.24],['zone',0.22],['man',0.18],['firezone',0.12],['blitz',0.12],['prevent',0.12]]
+      : need<=3 ? [['man',0.34],['blitz',0.28],['firezone',0.14],['zone',0.14],['cover2',0.10]]
+      : [['man',0.30],['zone',0.24],['cover2',0.18],['blitz',0.14],['firezone',0.08],['prevent',0.06]];
+    let a=0; for(const [c,p] of tab){ a+=p; if(r<a) return c; } return 'man';
+  }
+  // The defence the offence's personnel calls for, lined up over the receivers, then run
+  // or pass jobs at the snap. Positions jitter a little so no two snaps are identical.
   function baseDefense(cx, type, playId, side){
     const Y=v=>fieldMid+yd(v), D=[];
     const jx=()=>(Math.random()-0.5)*yd(0.7), jy=()=>(Math.random()-0.5)*yd(0.9);
-    const add=(x,yy,n,role,job,react)=>{ const d=def(cx+yd(x)+jx(),Y(yy)+jy(),react,n,job,null); d.role=role; D.push(d); return d; };
+    const deepMax=GOAL_X+yd(8.5);           // nobody lines up behind the end line
+    const add=(x,yy,n,role,job,react)=>{ const d=def(Math.min(deepMax,cx+yd(x)+jx()),Y(yy)+jy(),react,n,job,null); d.role=role; D.push(d); return d; };
+    const addAt=(px,py,n,role,job,react)=>{ const d=def(Math.min(deepMax,px+jx()*0.5),py+jy()*0.5,react,n,job,null); d.role=role; D.push(d); return d; };
     const run = type!=='pass';
-    const deL=add(1.0,-4.6,91,'DE',run?'pursue':'rush',0.10+Math.random()*0.20);
-    const dtL=add(0.9,-1.5,94,'DT',run?'pursue':'rush',0.10+Math.random()*0.20);
-    const dtR=add(0.9, 1.5,97,'DT',run?'pursue':'spy', 0.10+Math.random()*0.20);
-    const deR=add(1.0, 4.6,99,'DE',run?'pursue':'rush',0.10+Math.random()*0.20);
-    const lbW=add(4.6,-4.4,52,'LB','pursue',0.04+Math.random()*0.16);
-    const mlb=add(4.8, 0.0,54,'MLB','pursue',0.04+Math.random()*0.16);
-    const lbS=add(4.6, 4.4,57,'LB','pursue',0.04+Math.random()*0.16);
-    const cbL=add(6.5,-WR_OUT,24,'CB','pursue',0.12+Math.random()*0.20);
-    const cbR=add(6.5, WR_OUT,31,'CB','pursue',0.12+Math.random()*0.20);
+    const play=PLAYS[playId]||{}, F=FORMS[play.form]||FORMS.gun;
+    const nWR=F.wr.length, goal=(GOAL_X-cx)/PPY<=(play.form==='goal'?5:2.5);
+    // Personnel decides the front, as it does on Sundays: a third receiver brings on a
+    // nickel back, a fourth a dime, the goal line a fifth lineman.
+    const front = goal ? 'goal' : nWR>=4 ? 'dime' : nWR===3 ? 'nickel' : 'base';
+    G.front=front;
+    const elig=[...G.receivers, ...G.blockers.filter(b=>b.elig)].filter(e=>e.pos==='WR'||e.pos==='TE');
+    const top=elig.filter(e=>e.y<fieldMid).sort((a,b)=>a.y-b.y), bot=elig.filter(e=>e.y>=fieldMid).sort((a,b)=>b.y-a.y);
+    const rq=()=>0.10+Math.random()*0.20, rl=()=>0.04+Math.random()*0.16, rc=()=>0.12+Math.random()*0.20;
+    const deL=add(1.0,-4.6,91,'DE',run?'pursue':'rush',rq());
+    const dtL=add(0.9,-1.5,94,'DT',run?'pursue':'rush',rq());
+    const dtR=add(0.9, 1.5,97,'DT',run?'pursue':'spy', rq());
+    const deR=add(1.0, 4.6,99,'DE',run?'pursue':'rush',rq());
+    const DL=[deL,dtL,dtR,deR];
+    if(front==='goal') DL.push(add(0.9,0,93,'DT',run?'pursue':'rush',rq()));
+    const LB=[];
+    if(front==='base'||front==='goal') LB.push(add(4.6,-4.4,52,'LB','pursue',rl()), add(4.8,0,54,'MLB','pursue',rl()), add(4.6,4.4,57,'LB','pursue',rl()));
+    else if(front==='nickel') LB.push(add(4.7,-2.3,52,'LB','pursue',rl()), add(4.8,2.3,54,'MLB','pursue',rl()));
+    else LB.push(add(5.2,0,54,'MLB','pursue',rl()));
+    // corners over the widest man on each side; the nickel and dime backs over the slots
+    const cb=(r,fy,n)=> r ? addAt(r.x+yd(6.5), r.y, n,'CB','pursue',rc()) : add(6.5,fy,n,'CB','pursue',rc());
+    const CB=[cb(top[0],-WR_OUT,24), cb(bot[0],WR_OUT,31)];
+    if(front==='nickel'||front==='dime'){
+      const slots=[top[1],bot[1]].filter(Boolean).sort((a,b)=>Math.abs(b.y-fieldMid)-Math.abs(a.y-fieldMid));
+      const nb = slots[0] ? addAt(slots[0].x+yd(5.0), slots[0].y, 21,'CB','pursue',rc()) : add(5.5, side*WR_SLOT, 21,'CB','pursue',rc());
+      nb.nickel=true; CB.push(nb);
+      if(front==='dime'){ const s2=slots[1]||top[2]||bot[2];
+        const db = s2 ? addAt(s2.x+yd(5.5), s2.y, 29,'CB','pursue',rc()) : add(6.0, -side*WR_SLOT, 29,'CB','pursue',rc());
+        db.nickel=true; CB.push(db); }
+    }
     // Safeties read before they trigger: pass first, then downhill. Reacting in under a
     // tenth of a second, they met every run at five yards — 36% of all tackles, and
     // nothing ever broke past them.
-    const sL=add(12.5,-8.5,41,'S','pursue',type!=='pass'?0.32+Math.random()*0.30:Math.random()*0.10);
-    const sR=add(12.5, 8.5,45,'S','pursue',type!=='pass'?0.32+Math.random()*0.30:Math.random()*0.10);
+    const sr=()=>type!=='pass'?0.32+Math.random()*0.30:Math.random()*0.10;
+    const SF=[add(12.5,-8.5,41,'S','pursue',sr())]; if(front!=='goal') SF.push(add(12.5,8.5,45,'S','pursue',sr()));
     if(run){
       // Now and then a lineman wins his gap at once (see def().pen) — that is where
-      // tackles for loss come from — and now and then a linebacker shoots one. The 30%
-      // this used to be was tuned when the linemen stood 5-16 yards from the ball; head-up
-      // on the guards and tackles it put someone in the backfield on 3 snaps out of 4.
-      for(const d of [deL,dtL,dtR,deR]) d.pen=Math.random()<PEN_DL;
-      for(const d of [lbW,mlb,lbS]) d.pen=Math.random()<PEN_LB;
+      // tackles for loss come from — and now and then a linebacker shoots one.
+      for(const d of DL) d.pen=Math.random()<PEN_DL;
+      for(const d of LB) d.pen=Math.random()<PEN_LB;
       // A safety who bites and commits downhill is how a back who bounces outside
       // reaches the third level — the only source of explosive runs.
-      for(const d of [sL,sR]) d.bite=Math.random()<0.45 ? 0.85+Math.random()*0.75 : 0;
+      for(const d of SF) d.bite=Math.random()<0.45 ? 0.85+Math.random()*0.75 : 0;
       // The draw's whole point: the second level drops for the pass it thinks is
       // coming, and the back slips through underneath.
-      if(playId==='draw') for(const d of [lbW,mlb,lbS]) d.draw=0.7+Math.random()*0.45;
-      // No block lasts forever. Run defenders only ever got off a block on a 6% lottery,
-      // so a receiver's stalk block held a corner for the whole of a 70-yard run: that
-      // is how 4% of CPU carries became touchdowns once the back could outrun the rest.
-      // Linemen fight through in 2-3.5s, linebackers sooner, a corner off a receiver
-      // soonest — and then they are in the race to cut the runner off.
+      if(play.draw) for(const d of LB) d.draw=0.7+Math.random()*0.45;
+      // No block lasts forever: linemen fight through in 2-3.5s, linebackers sooner, a
+      // corner off a receiver soonest — and then they are in the race.
       for(const d of D){ if(!d.pen) d.winAt=shedSecs(d.role); }
     } else {
-      // Three rush, a tackle spies, the corners and the strong linebacker take the three
-      // receivers man to man with a trail cushion, the other backers drop into the
-      // short zones and the safeties split the deep half.
-      const rec=G.receivers, byY=(y)=>rec.reduce((a,r)=>Math.abs(r.y-y)<Math.abs(a.y-y)?r:a, rec[0]);
-      const man=(d,r)=>{ if(!r) return; d.job='cover'; d.assign=r; d.cush=PPY*(0.9+Math.random()*1.1); };
-      man(cbL, byY(Y(-WR_OUT))); man(cbR, byY(Y(WR_OUT)));
-      const slot=rec.find(r=>r!==cbL.assign && r!==cbR.assign);
-      man(side>0?lbS:lbW, slot);
-      for(const d of [lbW,mlb,lbS]) if(d.job!=='cover') d.job='spy';
-      for(const d of [sL,sR]){ d.job='cover'; d.deep=true; }
-      if(PLAYS[playId] && PLAYS[playId].pa) for(const d of D) if(d.job==='cover'||d.job==='spy') d.pa=0.65;   // they bite the fake
+      // Three rush and a tackle spies. Every man running a route gets a man on him —
+      // corners on the outside, the nickel and dime backs in the slot, a backer on the
+      // tight end or the back — the safeties split the deep halves, and whoever is left
+      // drops into the short zones.
+      const man=(d,r)=>{ d.job='cover'; d.assign=r; d.cush=PPY*(0.9+Math.random()*1.1); };
+      const recs=[...G.receivers].sort((a,b)=>Math.abs(b.y-fieldMid)-Math.abs(a.y-fieldMid));
+      const cost=(d,r)=>{ const t=r.pos||'WR', wide=Math.abs(r.y-fieldMid)>yd(12.5);
+        const c = d.role==='CB' ? (d.nickel ? (wide?1.1:0) : (wide?0:0.9)) : d.role==='S' ? (t==='TE'?0.7:t==='RB'?1.6:2.4) : (t==='RB'?0.1:t==='TE'?0.6:3.2);
+        return c + Math.abs(d.y-r.y)/PPY*0.10; };
+      // (the middle linebacker is yours when you defend: he starts free, as a spy, the way
+      // he did in the old base defence, rather than owning a man you may not cover)
+      const used=new Set(); const mine=G.offense==='cpu' ? LB.find(d=>d.role==='MLB') : null; if(mine) used.add(mine);
+      for(const pass of [[...CB,...LB],[...SF]]){
+        for(const r of recs){ if([...used].some(d=>d.assign===r)) continue;
+          let best=null,bc=1e9; for(const d of pass){ if(used.has(d)) continue; const c=cost(d,r); if(c<bc){bc=c;best=d;} }
+          if(best){ used.add(best); man(best,r); } } }
+      for(const d of LB) if(!used.has(d)) d.job='spy';
+      for(const d of CB) if(!used.has(d)){ d.job='spy'; }
+      // (Both free safeties stay deep. A Cover 1 robber — one dropping to ten yards to
+      // rob the crossers — took the deep help away from every catch: 23 CPU touchdowns
+      // in 400 dropbacks, median YAC 10 yards. The zone code for it stays in zoneSpot.)
+      for(const d of SF) if(!used.has(d)){ d.job='cover'; d.deep=true; }
+      if(play.pa) for(const d of D) if(d.job==='cover'||d.job==='spy') d.pa=0.65;   // they bite the fake
     }
     return D;
   }
@@ -782,6 +953,16 @@
       if(dr && dr.x>G.los+yd(8)) ty+=(dr.y-ty)*0.5;
       return {x:Math.max(G.los+yd(12)+(d.deepX||0), deepest+yd(3.5)), y:ty};
     }
+    if(d.zone==='robber'){ // the middle hole at ten yards, sinking under whatever crosses it
+      const zx=G.los+yd(9.5), zy=fieldMid+(qb.y-fieldMid)*0.5; let rr=null, rb=yd(9);
+      for(const r of G.receivers){ const dd=Math.hypot(r.x-zx,r.y-zy); if(dd<rb){rb=dd;rr=r;} }
+      return rr ? {x:zx+(rr.x-zx)*0.4, y:zy+(rr.y-zy)*0.6} : {x:zx, y:zy};
+    }
+    if(d.zone==='flat'){  // a Cover 2 corner squatting, or an end dropping on a fire zone
+      const zx=G.los+yd(4.5), zy=fieldMid+half*yd(13.5); let rr=null, rb=yd(8);
+      for(const r of G.receivers){ const dd=Math.hypot(r.x-zx,r.y-zy); if(dd<rb){rb=dd;rr=r;} }
+      return rr ? {x:zx+(rr.x-zx)*0.45, y:zy+(rr.y-zy)*0.55} : {x:zx, y:zy};
+    }
     if(d.role==='DT') return {x:G.los+yd(2), y:qb.y};     // the spy mirrors the quarterback
     // underneath: a hook or curl zone where he lined up, sinking under the route in it
     const zx=G.los+yd(7.5), zy=d.homeY; let rr=null, rb=yd(8);
@@ -795,13 +976,31 @@
   // SHORTEST pass in the game was 11 yards downfield and there was no short game at
   // all. Half of NFL throws are inside 10.
   function makeRoute(kind,toC){
-    if(kind==='go')    return {breakT:99, d1:{x:1,y:0}, d2:{x:1,y:0}, depth:99};
+    if(kind==='go'||kind==='seam') return {breakT:99, d1:{x:1,y:0}, d2:{x:1,y:0}, depth:99};
     if(kind==='slant') return {breakT:0.55,d1:{x:1,y:0},d2:norm(0.75,0.7*toC), depth:7};
     if(kind==='out')   return {breakT:1.0, d1:{x:1,y:0},d2:norm(0.5,-0.85*toC), depth:11};
     if(kind==='cross') return {breakT:0.28,d1:{x:1,y:0},d2:norm(0.18,toC), depth:6};          // shallow cross: two steps, then flat across
     if(kind==='dig')   return {breakT:1.3, d1:{x:1,y:0},d2:norm(0.08,toC), depth:12};         // in at twelve
     if(kind==='flat')  return {breakT:0.9, d1:norm(0.55,-0.85*toC),d2:norm(0.2,-toC), depth:3}; // a back leaking to the flat
+    if(kind==='in')    return {breakT:0.9, d1:{x:1,y:0},d2:norm(0.06,toC), depth:7};          // square in at seven
+    if(kind==='fade')  return {breakT:0.35,d1:{x:1,y:0},d2:norm(1,-0.2*toC), depth:99};       // drifting to the back corner
+    if(kind==='corner')return {breakT:1.3, d1:{x:1,y:0},d2:norm(0.75,-0.66*toC), depth:24};  // up twelve, then to the flag
+    // Routes that stop: a leg list, each heading held for t seconds at a share of full
+    // speed (sp), the last one open-ended. A curl runs to eleven and comes back to the
+    // ball; a hitch does it at five; a stick turns out at six and sits.
+    if(kind==='curl')  return {legs:[{t:1.45,x:1,y:0},{t:0.32,x:-0.72,y:0.69*toC,sp:0.55},{t:99,x:0,y:0,sp:0}], depth:99};
+    if(kind==='hitch') return {legs:[{t:0.72,x:1,y:0},{t:0.22,x:-0.95,y:0.3*toC,sp:0.5},{t:99,x:0,y:0,sp:0}], depth:99};
+    if(kind==='stick') return {legs:[{t:0.80,x:1,y:0},{t:0.25,x:0.1,y:-0.99*toC,sp:0.55},{t:99,x:0,y:0,sp:0}], depth:99};
+    if(kind==='comeback') return {legs:[{t:1.8,x:1,y:0},{t:0.45,x:-0.6,y:-0.8*toC,sp:0.75},{t:99,x:0,y:0,sp:0}], depth:99};
+    if(kind==='wheel') return {legs:[{t:0.85,x:0.35,y:-0.94*toC},{t:99,x:1,y:-0.08*toC}], depth:99};
+    if(kind==='bubble')return {legs:[{t:0.55,x:-0.45,y:-0.89*toC,sp:0.75},{t:99,x:1,y:-0.15*toC}], depth:99};
     return {breakT:1.2,d1:{x:1,y:0},d2:norm(0.9,0.45*toC), depth:16};   // post
+  }
+  // the heading (and share of full speed) a route asks for, t seconds after the snap
+  function routeLeg(rt,t){
+    if(!rt.legs) return t<rt.breakT?rt.d1:rt.d2;
+    const L=rt.legs; for(let i=0;i<L.length;i++){ if(t<L[i].t || i===L.length-1) return L[i]; t-=L[i].t; }
+    return L[L.length-1];
   }
   // Speed for a receiver at his current depth: full until he reaches the route's
   // depth, then decaying hard so he sits down in the zone rather than running away.
@@ -816,6 +1015,7 @@
   // blocker stayed on him, with no way to ever beat the block. Once every rusher got
   // a man assigned, that meant literally zero sacks. Only a minority of rushers win
   // their matchup, and it takes them a beat — winAt is Infinity for the rest.
+  function rushWinP(){ return G && G.offense==='user' ? ((G.diff&&G.diff.rush)||0.10) : 0.11; }
   function def(x,y,delay,n,job,assign){ return {x,y,vx:0,vy:0,n,react:delay,whiff:0,blocked:0,homeY:y,job,assign,_takenBy:null,
     engT:0, shed:false,
     // Pass rushers ALWAYS beat their block eventually — protection breaks down, and
@@ -833,18 +1033,22 @@
     // Individual speed and pursuit angle. Identical values on all eleven is what made
     // every run resolve the same way — see the angle-error note in stepDefenders.
     spd: 0.91+Math.random()*0.17, ang: (Math.random()*2-1),
-    winAt: job==='rush' ? 2.6+Math.random()*5.6
+    // ...and now and then one simply beats his man off the snap. Without that the rush
+    // never got home on its own (0 sacks in 440 CPU dropbacks, NFL 6.5%): pressure only
+    // ever came from a blitz. How often scales with difficulty when it is YOUR passer.
+    winAt: job==='rush' ? (Math.random()<rushWinP() ? 1.3+Math.random()*1.1 : 2.6+Math.random()*5.6)
                         : (Math.random()<SHED_P ? 0.85+Math.random()*1.35 : Infinity) }; }
   // ---- input ----
   const keys={}; let touchDir=null, sprintHeld=false;
   addEventListener('keydown',e=>{ const k=e.key.toLowerCase();
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+    if(G && menuKey(k)) return;
     if(k===' ') action(); if(k==='shift') sprintHeld=true;
     if(k==='q') juke(-1); if(k==='e') juke(1);   // hard lateral cut (defense: dive tackle)
     if(k==='f') toggleFullscreen();
     if(k==='t') callTimeout('user');       // stop the clock between plays
     if(k==='b') toggleBlockerControl();   // run plays: take control of a lineman and block
-    if((k==='1'||k==='2'||k==='3') && G.offense==='user'){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
+    if(/^[1-5]$/.test(k) && G.offense==='user'){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
     keys[k]=true;
   });
   addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if(k==='shift') sprintHeld=false; keys[k]=false; });
@@ -885,7 +1089,10 @@
     G.lastTackler=null; G.clockStop=false; document.getElementById('defcall').classList.add('hidden'); G.phase='live'; G.snapTime=performance.now(); G.playT=0; SFX.snap(); setMsg('',0);
     G.rec=[]; G._recT=0; stopReplay();   // fresh replay buffer each snap
     if((GOAL_X-G.los)/PPY<=22 || G.down>=3) crowdSwell(crowdBase+0.05,1.4);   // anticipation on tense downs / red zone
-    if(G.playType==='run'&&G.runQB) G.handoff={t:0, draw:G.playId==='draw'}; snapCall(); }
+    const spc=(PLAYS[G.playId]||{}).special;
+    if(spc==='kneel'){ G.clock=Math.max(0,G.clock-6); endPlay('KNEEL', G.los-yd(1)); setMsg('TAKES A KNEE',0.9); return; }
+    if(spc==='spike'){ endPlay('INCOMPLETE', G.los); setMsg('SPIKED — CLOCK STOPPED',1.0); return; }
+    if(G.playType==='run'&&G.runQB){ const pl=PLAYS[G.playId]||{}; G.handoff={t:0, draw:!!pl.draw, toss:!!pl.toss}; } snapCall(); }
   function spin(){
     if(G.phase!=='live'||G.spinCd>0) return;
     G.spinCd=2.2; G.burst=0.28;
@@ -1502,6 +1709,9 @@
         }
         score -= Math.abs(ty-c.y)/PPY*0.18*PPY;
         if(c.lane!=null && Math.abs(ty-c.lane)<yd(1.2)) score += yd(0.35);
+        // (No pull toward the called hole: steering him into it made him run into the
+        // men who were filling it — dive fell from 5.4 yards to 3.5. The play's hole
+        // shapes the blocking and the art; the back still reads what is actually open.)
         if(score>best){ best=score; bestY=ty; }
       }
       c.lane=bestY;
@@ -1534,7 +1744,7 @@
     else cpuDropAI(c,dt,elapsed);
 
     if(c.x>G.los+yd(0.3)){ G.passState='scramble'; setMsg('SCRAMBLE!',0.8); }
-    for(const r of G.receivers){ const h=elapsed<r.route.breakT?r.route.d1:r.route.d2; const sp=routeSpeed(r);
+    for(const r of G.receivers){ const h=routeLeg(r.route,elapsed); const sp=routeSpeed(r)*(h.sp==null?1:h.sp);
       r.vx=h.x*sp; r.vy=h.y*sp; r.x+=r.vx*dt; r.y+=r.vy*dt; r.y=Math.max(fieldTop,Math.min(fieldBot,r.y)); }
 
     passBlocks(dt);
@@ -1592,7 +1802,8 @@
     // full-speed tackle — so an unblocked blitzer never got home: 1 sack in 80 with your
     // own linebacker sent straight at him. He now picks the man up five yards away and
     // needs a beat to get rid of it.
-    if(pr<yd(5) && elapsed>0.3 && G.qbHurry==null) G.qbHurry=0.08+Math.random()*0.32;
+    // ...unless he never sees him: a man coming from the blind side gets home first.
+    if(pr<yd(5) && elapsed>0.3 && G.qbHurry==null) G.qbHurry = Math.random()<0.3 ? 0.45+Math.random()*0.5 : 0.08+Math.random()*0.32;
     if(G.qbHurry!=null) G.qbHurry-=dt;
     // What each man is worth: the odds of the catch — the same table resolveCatch uses,
     // on separation from the COVERAGE (the rushers guard nobody) — times the yards it
@@ -1600,7 +1811,18 @@
     // per receiver per play, and a tight window counts against a throw on top of its
     // odds, because that is where interceptions come from.
     let bi=0,bs=-1,be=-1e9; const play=PLAYS[G.playId]||{};
+    // He reads a progression, not the whole field at once. With five men out he used to
+    // see all of them every frame and throw to whichever was best: 9.5 yards a dropback
+    // against an NFL 6.3. The concept routes come first (the deep ones on a shot play),
+    // then the rest, the back last; each read takes about half a second, and once the
+    // clock in his head runs out he takes whatever is there.
+    if(!G.reads){ const depth=r=>{ const rt=r.route||{}; return rt.legs ? 9 : Math.min(30, rt.depth||10); };
+      const rank=r=>(r.pos==='RB'||r.pos==='FB') ? -50 : (play.shot ? depth(r) : 30-depth(r));   // short to long, the back last
+      G.reads=[...G.receivers].sort((a,b)=>rank(b)-rank(a)); }
+    const quick=(play.hold||2.35)<=2.15;            // quick game: on rhythm, faster through the reads
+    const seen = 1 + Math.floor(Math.max(0, elapsed-(play.look||1.1))/(quick?0.3:0.42));
     G.receivers.forEach((r,i)=>{
+      if(G.reads.indexOf(r)>=seen && elapsed<(play.hold||2.35)*0.85) return;   // not his read yet
       const o=openAt(r,c);
       if(r.misread==null) r.misread=(Math.random()+Math.random()-1)*1.3;
       const sep=o.sep + r.misread, depth=o.depth;
@@ -1616,11 +1838,11 @@
     // checkdown as the clock in his head runs down. Throwing to the first man 2.4 yards
     // clear, he found one at 0.7s on nearly every play — 86% of his throws were short
     // of ten yards and he completed 75% of them.
-    const w0=play.shot?18:12, want = w0 - (elapsed-look)*(w0-4)/(hold-look);
+    const w0=play.shot?18:(quick?7.5:8.5), want = w0 - (elapsed-look)*(w0-4)/(hold-look);
     // a screen is thrown on time, once the back has set up behind his convoy
     const scr=G.receivers.findIndex(r=>r.screen);
     if(scr>=0){ let n=1e9; for(const dd of G.defenders) if(dd.job!=='rush') n=Math.min(n,dist(dd,G.receivers[scr]));
-      if(elapsed>0.7 && n/PPY+G.receivers[scr].misread>1.8){ G.sel=scr; throwBall(); return; } }
+      if(elapsed>(PLAYS[G.playId]&&PLAYS[G.playId].screen==='wr'?0.35:0.7) && n/PPY+G.receivers[scr].misread>1.8){ G.sel=scr; throwBall(); return; } }
     const goodLook = elapsed>look && be>=want;
     if(goodLook || mustThrow){
       if(mustThrow && bs<2.0 && pr<yd(2.0)){ G.passState='scramble'; setMsg('SCRAMBLE!',0.7); return; }
@@ -1804,7 +2026,7 @@
 
   function updateRun(dt){
     const c=G.carrier;
-    if(G.handoff){ G.handoff.t+=dt; if(G.handoff.t>(G.handoff.draw?0.78:0.45)) G.handoff=null; }
+    if(G.handoff){ G.handoff.t+=dt; if(G.handoff.t>(G.handoff.draw?0.78:G.handoff.toss?0.36:0.45)) G.handoff=null; }
     // During the mesh the back is still taking the handoff, so hold him to a slow
     // approach instead of letting him sprint away before he has the ball.
     // On a draw the back holds while the front sells out upfield — that delay IS the
@@ -1812,8 +2034,10 @@
     // exactly as the front turned back around, which is why draws netted ~0.
     const meshT = (G.handoff && G.handoff.draw) ? 0.62 : 0.30;
     if(G.handoff && G.runQB && G.handoff.t<meshT){
-      const a=Math.atan2(G.runQB.y-c.y, G.runQB.x-c.x);
-      c.vx=Math.cos(a)*S.carrier*0.42; c.vy=Math.sin(a)*S.carrier*0.42;
+      // (the toss is only a pitch in the air: sending the back flat for the sideline
+      // during it put him at the edge before his pullers, stuffed three times in four)
+      const a=Math.atan2(G.runQB.y-c.y, G.runQB.x-c.x), sp=S.carrier*0.42;
+      c.vx=Math.cos(a)*sp; c.vy=Math.sin(a)*sp;
       c.x+=c.vx*dt; c.y+=c.vy*dt;
       G.cam+=(clampCam(c.x)-G.cam)*Math.min(1,dt*6);
       // The rest of the field plays the snap too. This used to return here, which froze
@@ -2027,7 +2251,7 @@
       else if(reason!=='INCOMPLETE' && Math.random()<0.008) throwFlag('facemask', spot);
     }
     recordPlay(reason, spot);
-    if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT' && reason!=='FAIR CATCH'){
+    if(reason!=='INCOMPLETE' && reason!=='OUT OF BOUNDS' && reason!=='OUT' && reason!=='FAIR CATCH' && reason!=='KNEEL'){
       // hit impact scales with how fast he was going when he got hit
       const cvx=G.carrier.vx||0, cvy=G.carrier.vy||0, hitSp=Math.hypot(cvx,cvy)/PPY;
       spawnBurst(G.carrier.x,G.carrier.y,'#fff5d6', 12+Math.round(hitSp*1.6), hitSp>6);
@@ -2101,7 +2325,7 @@
     const lead=G.cpuScore-G.userScore, late=(gameLeft()<90);
     const go2 = Math.random() < (late ? ([-2,-1,1,2,5].includes(lead)?0.62:0.2) : 0.16);
     if(go2){ G.twoPt=true; const pool=Math.random()<0.5?RUN_PLAYS:PASS_PLAYS; const id=pool[Math.floor(Math.random()*pool.length)];
-      setupPlay(id); G.phase='presnap'; G.defCall='balanced'; G.autoSnap=2.6; document.getElementById('defcall').classList.remove('hidden'); setMsg('CPU GOES FOR 2 — pick your D',1.2); }
+      setupPlay(id); G.phase='presnap'; G.defCall='balanced'; G.autoSnap=2.6; showDefCall(); setMsg('CPU GOES FOR 2 — pick your D',1.2); }
     else { // CPU extra point — kick it for real instead of silently adding a point
       G.conv=null; G.kickKind='pat'; G.kickTeam='cpu'; G.phase='fg'; buildFGFormation();
       const good=Math.random()<0.96;
@@ -2144,6 +2368,7 @@
     setupPlay('dive'); G.phase='playcall'; G.convChoice=true;
     document.getElementById('pb-punt').classList.add('hidden');
     document.getElementById('pb-fg').classList.remove('hidden'); document.getElementById('fg-label').textContent='KICK XP · 1 pt';
+    if(pcForm!=='goal' && pcForm!=='gun') pcForm='goal'; buildPlayCall(); pcSpecials();
     setMsg('TOUCHDOWN!  Run/pass for 2 — or kick the XP',1.5);
     document.getElementById('playcall').classList.remove('hidden');
   }
@@ -2291,6 +2516,7 @@
   // ---- 3D rendering (three.js r128) ----
   let scene, camera, renderer, ballMesh, pPool=[], camPos, camLook, flashes=[];
   let playerProto=null, playersReady=false, lastDt=0.016, ringPool=[], losLine, firstLine, catchMark;
+  const routeLines=[], _lab=new THREE.Vector3(), _routePts=new Float32Array(200); let _presnapBar=null;
   let _runQBG=null, _frameNo=0, _carrierG=null, downPole=null, firstPole=null; const _tuckV=new THREE.Vector3();
   const _spinAxis=new THREE.Vector3(1,0,0); let _spiral=0;   // ball spirals about its long axis
   const _fdir=new THREE.Vector3(), _qs=new THREE.Quaternion();
@@ -3019,6 +3245,13 @@
       for(const sx of [-0.2,0.2]){ const r=new THREE.Mesh(new THREE.TorusGeometry(0.345,0.028,8,24), white);
         r.rotation.y=Math.PI/2; r.position.set(sx,0,0); ballMesh.add(r); } }
     ballMesh.castShadow=true; ballMesh.visible=false; scene.add(ballMesh);
+    // the routes, drawn on the turf while you call your shot
+    // (a flat ribbon with an arrowhead: GL lines are one pixel wide and vanish at range)
+    for(let i=0;i<6;i++){ const g=new THREE.BufferGeometry(), N=92;
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array((N*2+3)*3),3));
+      const idx=[]; for(let k=0;k<N-1;k++){ const a=2*k; idx.push(a,a+1,a+2, a+1,a+3,a+2); } idx.push(N*2,N*2+1,N*2+2); g.setIndex(idx); g.setDrawRange(0,0);
+      const l=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:0.92,depthWrite:false,side:THREE.DoubleSide,fog:false}));
+      l.visible=false; l.renderOrder=2; l.frustumCulled=false; scene.add(l); routeLines.push(l); }
     loadPlayers();
     camPos=new THREE.Vector3(40,8.5,26.65); camLook=new THREE.Vector3(60,1,26.65);
     resize3D(); window.addEventListener('resize',resize3D); applyQuality();
@@ -3074,6 +3307,42 @@
       return; }
     ballMesh.position.copy(hb.localToWorld(_tuckV.copy(_ballLocal)));
     hb.getWorldQuaternion(_handQ); ballMesh.quaternion.copy(_handQ).multiply(_alignQ);
+  }
+  // Routes on the turf and a number over each receiver while you call your shot (the
+  // number is the key that picks him, and a hot route turns his route red); the numbers
+  // stay up through the dropback so you know which key throws to whom.
+  function overlays3D(repFrame){
+    const mine=!repFrame && G.offense==='user' && G.playType==='pass';
+    const showRoutes = mine && G.phase==='presnap';
+    for(let i=0;i<routeLines.length;i++){ const l=routeLines[i], r=showRoutes?G.receivers[i]:null; l.visible=!!(r&&r.route);
+      if(!l.visible) continue;
+      const rt=r.route, P=_routePts; let x=r.x, y=r.y, n=0;
+      for(let t=0;t<2.7 && n<90;t+=0.06){ const h=routeLeg(rt,t), dep=rt.depth||99, past=(x-G.los)/PPY-dep;
+        const sp=S.rec*(h.sp==null?1:h.sp)*(dep<99&&past>0?Math.max(0.14,1-past*0.55):1);
+        P[n*2]=WX(x); P[n*2+1]=WZ(y); n++;
+        if(sp<1) break; x+=h.x*sp*0.06; y+=h.y*sp*0.06; if(y<fieldTop||y>fieldBot) break; }
+      const pos=l.geometry.attributes.position.array, w=0.2, N=92;
+      for(let k=0;k<n;k++){ const a=Math.max(0,k-1), b=Math.min(n-1,k+1); let dx=P[b*2]-P[a*2], dz=P[b*2+1]-P[a*2+1]; const dl=Math.hypot(dx,dz)||1; dx/=dl; dz/=dl;
+        pos[k*6]=P[k*2]-dz*w; pos[k*6+1]=0.07; pos[k*6+2]=P[k*2+1]+dx*w; pos[k*6+3]=P[k*2]+dz*w; pos[k*6+4]=0.07; pos[k*6+5]=P[k*2+1]-dx*w; }
+      if(n>=2){ const e=n-1; let dx=P[e*2]-P[(e-1)*2], dz=P[e*2+1]-P[(e-1)*2+1]; const dl=Math.hypot(dx,dz)||1; dx/=dl; dz/=dl; const o=N*2*3, ax=P[e*2], az=P[e*2+1];
+        pos[o]=ax-dz*0.6; pos[o+1]=0.07; pos[o+2]=az+dx*0.6; pos[o+3]=ax+dz*0.6; pos[o+4]=0.07; pos[o+5]=az-dx*0.6; pos[o+6]=ax+dx*1.0; pos[o+7]=0.07; pos[o+8]=az+dz*1.0; }
+      // strip triangles up to the last point, then the arrowhead
+      l.geometry.setDrawRange(0, Math.max(0,(n-1))*6); l.geometry.attributes.position.needsUpdate=true;
+      if(!l.userData.head){ const hg=new THREE.BufferGeometry(); hg.setAttribute('position', l.geometry.attributes.position); hg.setIndex([N*2,N*2+1,N*2+2]);
+        l.userData.head=new THREE.Mesh(hg,l.material); l.userData.head.frustumCulled=false; l.userData.head.renderOrder=2; l.add(l.userData.head); }
+      l.material.color.setHex(r.hot?0xff5a47:(r.screen?0x7dff8a:0xffd24a)); }
+    const lab=document.getElementById('rlabels');
+    const showLab = mine && (G.phase==='presnap' || (G.phase==='live' && G.passState==='drop'));
+    if(lab){ if(!showLab){ if(lab.childElementCount) lab.innerHTML=''; }
+      else { while(lab.childElementCount<G.receivers.length){ const d=document.createElement('div'); d.className='rl'; lab.appendChild(d); }
+        while(lab.childElementCount>G.receivers.length) lab.lastChild.remove();
+        const W=renderer.domElement.clientWidth||760, H=renderer.domElement.clientHeight||560;
+        G.receivers.forEach((r,i)=>{ const el=lab.children[i]; _lab.set(WX(r.x),2.45,WZ(r.y)).project(camera);
+          el.style.left=((_lab.x+1)/2*W).toFixed(1)+'px'; el.style.top=((1-_lab.y)/2*H).toFixed(1)+'px';
+          if(el.textContent!==String(i+1)) el.textContent=i+1;
+          const cls='rl'+(G.phase==='live'&&i===G.sel?' sel':'')+(G.hotSel===i?' hot':''); if(el.className!==cls) el.className=cls; }); } }
+    const bar=_presnapBar||(_presnapBar=document.getElementById('presnap-bar'));
+    if(bar){ const on=!repFrame && G.offense==='user' && G.phase==='presnap'; if(bar.classList.contains('hidden')===on) bar.classList.toggle('hidden',!on); }
   }
   function render3D(){
     if(!renderer) return;
@@ -3436,7 +3705,7 @@
       const qh=_runQBG && _runQBG.userData.B && _runQBG.userData.B.RightHand;
       if(qh){ _runQBG.updateMatrixWorld(true); qh.getWorldPosition(_bh); } else _bh.set(WX(G.runQB.x),1.08,WZ(G.runQB.y));
       const cx2=WX(G.carrier.x), cz2=WZ(G.carrier.y);
-      ballMesh.position.set(_bh.x+(cx2-_bh.x)*e, _bh.y+(1.08-_bh.y)*e, _bh.z+(cz2-_bh.z)*e);
+      ballMesh.position.set(_bh.x+(cx2-_bh.x)*e, _bh.y+(1.08-_bh.y)*e+(G.handoff.toss?Math.sin(e*Math.PI)*0.9:0), _bh.z+(cz2-_bh.z)*e);
       ballMesh.rotation.set(0.3, Math.atan2(cx2-_bh.x,cz2-_bh.z), 0.5); }
     else if(_carrierG && (G.phase==='live'||G.phase==='dead') && !G._fgFlight && G.passState!=='air'){
       // In the palm, not beside it. The hand bone sits at the wrist; the ball's centre
@@ -3488,7 +3757,7 @@
       // controlling on defense. Pulled in to frame ~34 yards with the carrier nearer
       // the middle, at a lower angle so less empty grass fills the shot. Widens on a
       // dropback so the routes still fit.
-      const wide=(G.passState==='drop'||G.passState==='air')?1.22:1.0;
+      const wide=(G.passState==='drop'||G.passState==='air')?1.22:((G.phase==='presnap'&&G.playType==='pass'&&G.offense==='user')?1.32:1.0);
       const cmid=cz+(WZ(fieldMid)-cz)*0.20;
       camPos.lerp(new THREE.Vector3(cx-13*wide,8.2*wide,cmid),0.10);
       camLook.lerp(new THREE.Vector3(cx+6*wide,1.5,cz),0.13);
@@ -3500,6 +3769,7 @@
     if(sunLight){ const fx=camLook.x, fz=camLook.z;
       sunLight.target.position.set(fx,0,fz); sunLight.target.updateMatrixWorld();
       sunLight.position.set(fx+10,95,fz-8.65); }
+    overlays3D(repFrame);
     if(window.__gbNoDraw) return;          // test harnesses run the pose logic without drawing
     renderer.render(scene,camera);
   }
@@ -3635,7 +3905,7 @@
     const s=SEASON, o=seasonOpp(s), wk=s.results.length, title=wk>=REG_WEEKS;
     applyOpponent(o);
     const a=DIFF.pro, b=DIFF.allpro, mix=k=>a[k]+(b[k]-a[k])*o.str;          // Pro in week one, All-Pro in the title game
-    DIFF.season={cpu:mix('cpu'), react:mix('react'), you:mix('you'), fg:mix('fg')};
+    DIFF.season={cpu:mix('cpu'), react:mix('react'), you:mix('you'), fg:mix('fg'), rush:mix('rush')};
     audioInit(); startCrowd(); pendingDiff='season';
     document.getElementById('start').classList.add('hidden'); document.getElementById('over').classList.add('hidden');
     newGame(); document.getElementById('stage').focus();
@@ -3679,37 +3949,60 @@
   }
   // a receiver's route, stepped the way updateDrop steps it (yards and seconds)
   function artRoute(x,d,rt,T){ const pts=[[x,d]];
-    for(let t=0;t<T;t+=0.1){ const h=t<rt.breakT?rt.d1:rt.d2, past=d-rt.depth, sp=7.7*(rt.depth<99&&past>0?Math.max(0.14,1-past*0.55):1);
+    for(let t=0;t<T;t+=0.1){ const h=routeLeg(rt,t), past=d-rt.depth, sp=7.7*(h.sp==null?1:h.sp)*(rt.depth<99&&past>0?Math.max(0.14,1-past*0.55):1);
+      if(sp<0.05) break;
       x+=h.y*sp*0.1; d+=h.x*sp*0.1; if(Math.abs(x)>21) break; pts.push([x,d]); }
     return pts; }
+  // Draw any play from its formation and its routes — the same data the play runs.
   function drawPlayArt(cv, id){
     const play=PLAYS[id]; if(!play || !cv.getContext) return;
-    const {dot,line}=artKit(cv, 0.70, 18), OFF='#c9d3e2', PASS='#9cc2ff', RUN='#9cff9c';
+    const {dot,line}=artKit(cv, 0.70, 18), OFF='#c9d3e2', PASS='#9cc2ff', RUN='#9cff9c', GH='rgba(201,211,226,.85)';
+    const F=FORMS[play.form]||FORMS.gun, back=F.gun?(play.back||5.5):1.2;
     for(const [oy] of OL) dot(oy,-0.55,OFF,3.4);
+    const skill=[]; const put=(list,pos)=>(list||[]).forEach(([x,y],i)=>skill.push({pos,i,d:(pos==='RB'&&F.gun)?-back:x, x:y, route:((play.routes||{})[pos.toLowerCase()]||[])[i]||null}));
+    put(F.wr,'WR'); put(F.te,'TE'); put(F.fb,'FB'); put(F.rb,'RB');
     if(play.kind==='pass'){
-      const back=play.back||5.5; dot(0,-back,'#ffffff');
-      if(play.screen){
+      dot(0,-back,'#ffffff');
+      if(play.screen==='rb'){
         let x=1.8, d=-back; const p=[[x,d]];
         for(let t=0;t<1.3;t+=0.1){ const h=t<0.45?{x:-0.25,y:0.97}:{x:1,y:0.15}; x+=h.y*0.77; d+=h.x*0.77; p.push([x,d]); }
         line(p,PASS); dot(1.8,-back,PASS);
         line([[6.5,-0.2],[7.6,4]],OFF); line([[9.5,0.6],[10.2,5]],OFF);
         line([[-WR_OUT,-0.4],[-WR_OUT,10]],'rgba(156,194,255,.5)'); line([[WR_OUT,-0.4],[WR_OUT,10]],'rgba(156,194,255,.5)');
-      } else {
-        const rs=play.routes||['out','slant','post'];
-        [-WR_OUT, WR_SLOT, WR_OUT].forEach((x0,i)=>{ const d0=i===1?-1.0:-0.4;
-          line(artRoute(x0,d0,makeRoute(rs[i], x0<=0?1:-1), rs[i]==='go'?2.1:2.4), PASS); dot(x0,d0,PASS); });
-        if(play.rbFlat){ line(artRoute(1.6,-back,makeRoute('flat',-1),1.9), PASS); dot(1.6,-back,PASS); }
-        else dot(1.6,-back,OFF);
         dot(-TE_Y,-0.7,OFF);
+      } else if(play.screen==='wr'){
+        const trips=skill.filter(s=>s.pos==='WR' && s.x>0).sort((a,b)=>a.x-b.x);
+        for(const s of skill){
+          if(s===trips[0]){ line(artRoute(s.x,s.d,makeRoute('bubble',-1),1.4),PASS); dot(s.x,s.d,PASS); }
+          else if(trips.includes(s)){ line([[s.x,s.d],[s.x+0.4,s.d+4.5]],GH); dot(s.x,s.d,OFF); }
+          else if(s.pos==='WR'){ line(artRoute(s.x,s.d,makeRoute('go',1),2.0),'rgba(156,194,255,.5)'); dot(s.x,s.d,PASS); }
+          else dot(s.x,s.d,OFF);
+        }
+      } else {
+        for(const s of skill){
+          if(s.route){ const toC=s.x<=0?1:-1, deep=/go|seam|fade|post|corner/.test(s.route);
+            line(artRoute(s.x,s.d,makeRoute(s.route,toC), deep?2.1:2.5), PASS); dot(s.x,s.d,PASS); }
+          else dot(s.x,s.d,OFF);
+        }
         if(play.pa) line([[0,-back+0.2],[1.4,-back+1.6]],'rgba(255,255,255,.75)',[5,5],true);
       }
     } else {
-      dot(0,-1.2,'#ffffff'); dot(-WR_OUT,-0.4,OFF); dot(WR_OUT,-0.9,OFF); dot(TE_Y,-0.7,OFF);
-      if(id==='sweep'){ dot(1.2,-2.7,OFF);
-        line([[1.45,-0.55],[4.8,-1.6],[8,-0.4]],'rgba(201,211,226,.85)'); line([[2.9,-0.55],[6.2,-1.2],[9.6,0.4]],'rgba(201,211,226,.85)');
-        line([[2.2,-4.6],[7,-3.6],[11,-0.8],[12.6,3],[13,8.5]],RUN); dot(2.2,-4.6,RUN,4.2); }
-      else if(id==='draw'){ dot(0.5,-2.7,OFF); line([[0,-4.2],[0,-5.4]],RUN,[4,4],true); line([[0,-5.4],[0.3,-1.2],[0.8,4],[1.2,9]],RUN); dot(0,-4.2,RUN,4.2); }
-      else { dot(0.5,-2.7,OFF); line([[0,-3.9],[0,2],[0.4,9]],RUN); dot(0,-3.9,RUN,4.2); }
+      const qd=F.gun?-back:-1.2;
+      dot(0,qd,'#ffffff');
+      const rb=skill.find(s=>s.pos==='RB');
+      for(const s of skill) if(s!==rb) dot(s.x,s.d,OFF);
+      if(play.sneak){ line([[0,qd],[0,2.4]],RUN); return; }
+      let rx=rb?rb.x:0, rd=rb?rb.d:-4.5;
+      if(id==='dive') rd=-3.9; else if(id==='sweep'){ rd=-4.6; rx=2.2; } else if(id==='draw') rd=-4.2;
+      const hx=(play.dir||1)*(HOLE_Y[play.hole]||0.75);
+      if(id==='sweep'){ line([[1.45,-0.55],[4.8,-1.6],[8,-0.4]],GH); line([[2.9,-0.55],[6.2,-1.2],[9.6,0.4]],GH);
+        line([[0,qd],[rx,rd]],'rgba(255,255,255,.75)',[4,4],true);
+        line([[rx,rd],[7,-3.6],[11,-0.8],[12.6,3],[13,8.5]],RUN); dot(rx,rd,RUN,4.2); return; }
+      if(play.power||play.counter){ const s=-(play.dir||1); line([[s*1.45,-0.55],[s*0.2,-1.4],[hx,0.2]],GH); if(play.counter) line([[s*2.9,-0.55],[s*1.2,-1.7],[hx+Math.sign(hx)*1.2,0.6]],GH); }
+      if(play.draw){ line([[rx,rd],[rx,rd-1.2]],RUN,[4,4],true); line([[rx,rd-1.2],[hx*0.5,-1.2],[hx,4],[hx*1.2,9]],RUN); }
+      else line([[rx,rd],[hx*0.6,(rd-0.5)/2],[hx,0.5],[hx*1.15,9]],RUN);
+      dot(rx,rd,RUN,4.2);
+      const fb=skill.find(s=>s.pos==='FB'); if(fb) line([[fb.x,fb.d],[hx*0.9,1.5]],GH);
     }
   }
   function drawDefArt(cv, call){
@@ -3719,14 +4012,82 @@
     dot(0,-5,OFF,3.4);
     const DL=[[-4.6,1],[-1.5,0.9],[1.5,0.9],[4.6,1]], LB=[[-4.4,4.6],[0,4.8],[4.4,4.6]], CB=[[-WR_OUT,6.5],[WR_OUT,6.5]], SF=[[-8.5,12.5],[8.5,12.5]];
     if(call==='zone'){ for(const [x,d] of [[-15,15],[0,16.5],[15,15]]) blob(x,d,6.2,2.6,ZN); for(const [x,d] of [[-13,6],[-4.5,7.5],[4.5,7.5],[13,6]]) blob(x,d,3.6,2,ZN); }
+    if(call==='cover2'){ for(const [x,d] of [[-10,15.5],[10,15.5]]) blob(x,d,9,2.8,ZN); for(const [x,d] of [[-15,4.5],[-6,7.5],[0,8.5],[6,7.5],[15,4.5]]) blob(x,d,3.2,1.9,ZN); for(const [x,d] of CB) line([[x,d],[x*0.9,4.3]],DEF); }
+    if(call==='firezone'){ for(const [x,d] of [[-15,15],[0,16.5],[15,15]]) blob(x,d,6.2,2.6,ZN); blob(-9,4.5,3.4,1.9,ZN); blob(4.5,7.5,3.4,1.9,ZN);
+      line([[-4.4,4.6],[-1.2,-3.6]],DEF); line([[-4.6,1],[-9,4.2]],DEF,[4,4],true); for(const [x,d] of [DL[1],DL[2],DL[3]]) line([[x,d],[x*0.25,-3.6]],DEF); }
     if(call==='prevent'){ for(const [x,d] of [[-10,18.5],[10,18.5]]) blob(x,d,8,2.6,ZN); for(const [x,d] of CB) line([[x,d],[x*0.85,d+7]],DEF); }
     if(call==='man'){ for(const [x,d] of CB) line([[x,d],[x,1.2]],DEF,[4,4],true); line([[4.4,4.6],[8.6,0.6]],DEF,[4,4],true); for(const [x,d] of SF) line([[x,d],[x*1.35,d+3.5]],DEF); }
     if(call==='blitz'){ for(const [x,d] of [LB[1],DL[1],DL[2],LB[0]]) line([[x,d],[x*0.25,-3.6]],DEF); for(const [x,d] of CB) line([[x,d],[x,1.2]],DEF,[4,4],true); }
     for(const p of [...DL,...LB,...CB,...SF]) cross(p[0],p[1],DEF);
   }
   function drawAllPlayArt(){
-    document.querySelectorAll('#playcall .oc[data-play]').forEach(el=>{ const cv=el.querySelector('canvas.art'); if(cv) drawPlayArt(cv, el.dataset.play); });
+    buildPlayCall();
     document.querySelectorAll('#defcall .dc[data-def]').forEach(el=>{ const cv=el.querySelector('canvas.art'); if(cv) drawDefArt(cv, el.dataset.def); });
+  }
+  // ---- the play-call screen ---------------------------------------------------------------
+  // Formation tabs across the top, that formation's plays as cards with their routes
+  // drawn from the same data the plays run, and the kicks and clock plays on the end.
+  // Keys: left/right change formation, 1-9 call a play.
+  let pcForm='gun';
+  function pcPlays(f){ return Object.keys(PLAYS).filter(k=>PLAYS[k].form===f && !PLAYS[k].special); }
+  function buildPlayCall(){
+    const tabs=document.getElementById('pc-tabs'), list=document.getElementById('pc-list'); if(!tabs||!list) return;
+    tabs.innerHTML=FORM_ORDER.map(f=>'<button class="tab'+(f===pcForm?' on':'')+'" data-form="'+f+'">'+FORMS[f].label+'</button>').join('');
+    list.innerHTML=pcPlays(pcForm).map((id,i)=>{ const p=PLAYS[id];
+      return '<div class="pc oc '+p.kind+'" data-play="'+id+'"><span class="key">'+((i+1)%10)+'</span><canvas class="art" width="208" height="112"></canvas><div class="pt">'+p.label+'</div><div class="ps">'+p.desc+'</div></div>'; }).join('');
+    list.querySelectorAll('.oc').forEach(el=>{ const cv=el.querySelector('canvas.art'); if(cv) try{ drawPlayArt(cv, el.dataset.play); }catch(e){} });
+  }
+  function setPcForm(f){ if(!FORMS[f]) return; pcForm=f; buildPlayCall(); }
+  // the clock plays: kneel when you are ahead and can bleed it out, spike when you are
+  // hurrying and need it stopped
+  function pcSpecials(){
+    const late=(G.qtr===2||G.qtr===4) && G.clock<45;
+    document.getElementById('pb-kneel').classList.toggle('hidden', !(late && G.userScore>G.cpuScore && !G.convChoice));
+    document.getElementById('pb-spike').classList.toggle('hidden', !(late && !G.clockStop && G.down<4 && !G.convChoice));
+  }
+  // ---- pre-snap: audibles, hot routes, flipping the play ------------------------------------
+  function openAudible(){
+    const el=document.getElementById('audible'); if(!el) return;
+    const ids=pcPlays(G.form);
+    el.innerHTML='<b>AUDIBLE — '+FORMS[G.form].label+'</b>'+ids.map((id,i)=>'<span data-play="'+id+'"'+(id===G.playId?' class="on"':'')+'><i>'+(i+1)+'</i>'+PLAYS[id].label+'</span>').join('')+'<span data-play="__close"><i>C</i>CLOSE</span>';
+    el.classList.remove('hidden'); G.audibleOpen=true; G.hotSel=null;
+  }
+  function closeAudible(){ const el=document.getElementById('audible'); if(el) el.classList.add('hidden'); G.audibleOpen=false; }
+  function audibleTo(id){
+    closeAudible(); if(!PLAYS[id] || G.phase!=='presnap' || G.offense!=='user') return;
+    const conv=G.twoPt; setupPlay(id, G.side); G.phase='presnap'; G.twoPt=conv;
+    setMsg('AUDIBLE — '+PLAYS[id].label,1.1); SFX.snap && say(pick(['He is changing the play at the line.','Audible! He saw something he liked.','Checking out of it at the line.']));
+  }
+  function flipPlay(){ if(G.phase!=='presnap' || G.offense!=='user') return; const conv=G.twoPt; setupPlay(G.playId, -(G.side||1)); G.phase='presnap'; G.twoPt=conv; setMsg('FLIPPED — '+PLAYS[G.playId].label,0.9); }
+  // A hot route: pick a receiver by number, then a direction — up a go, down a curl,
+  // toward the middle a slant, toward the sideline an out (as you see them on screen).
+  function hotRoute(dir){
+    const r=G.receivers[G.hotSel]; G.hotSel=null; if(!r || G.phase!=='presnap') return;
+    const right=r.y>fieldMid, toC=(fieldMid-r.y)>=0?1:-1;
+    const kind = dir==='up' ? 'go' : dir==='down' ? 'curl' : ((dir==='left')===right ? 'slant' : 'out');
+    r.route=makeRoute(kind,toC); r.hot=kind; G.reads=null;
+    setMsg('HOT ROUTE — #'+r.n+' '+kind.toUpperCase(),1.0);
+  }
+  // keys that belong to a menu or to the pre-snap, before the game's own keys see them
+  function menuKey(k){
+    const pc=document.getElementById('playcall'), dc=document.getElementById('defcall');
+    if(G.phase==='playcall' && G.offense==='user' && pc && !pc.classList.contains('hidden')){
+      if(k==='arrowleft'||k==='arrowright'){ const i=FORM_ORDER.indexOf(pcForm), n=FORM_ORDER.length; setPcForm(FORM_ORDER[(i+(k==='arrowright'?1:n-1))%n]); return true; }
+      if(/^[0-9]$/.test(k)){ const id=pcPlays(pcForm)[k==='0'?9:+k-1]; if(id){ choosePlay(id); } return true; }
+      return false;
+    }
+    if(dc && !dc.classList.contains('hidden') && /^[1-6]$/.test(k)){ const c=[...dc.querySelectorAll('.dc')][+k-1]; if(c) chooseDef(c.dataset.def); return true; }
+    if(G.phase==='presnap' && G.offense==='user'){
+      if(G.audibleOpen){ if(/^[1-9]$/.test(k)){ const id=pcPlays(G.form)[+k-1]; if(id) audibleTo(id); return true; }
+        if(k==='c'||k==='escape'){ closeAudible(); return true; } return false; }
+      if(k==='c'){ openAudible(); return true; }
+      if(k==='x'){ flipPlay(); return true; }
+      if(G.playType==='pass' && /^[1-5]$/.test(k)){ const i=+k-1; const r=G.receivers[i]; if(r){ G.hotSel=i;
+          const right=r.y>fieldMid; setMsg('HOT ROUTE #'+r.n+':  ↑ GO   ↓ CURL   '+(right?'←':'→')+' SLANT   '+(right?'→':'←')+' OUT',3.0); } return true; }
+      if(G.hotSel!=null && /^arrow/.test(k)){ hotRoute(k.slice(5)); return true; }
+      if(k==='escape'){ G.hotSel=null; setMsg('',0); return true; }
+    }
+    return false;
   }
   function gameOver(){
     if(G.phase==='final') return; G.phase='final';
@@ -3740,7 +4101,10 @@
     say(u>c?'That\u2019s the ballgame — you win it!':(u<c?'And that\u2019s the final whistle. The CPU takes it.':'We end in a tie! What a battle!'), true);
   }
 
-  document.querySelectorAll('.oc').forEach(el=> el.addEventListener('click',()=>choosePlay(el.dataset.play)));
+  document.getElementById('playcall').addEventListener('click',e=>{ const t=e.target.closest('.tab'); if(t){ setPcForm(t.dataset.form); return; }
+    const c=e.target.closest('.oc'); if(c && !c.classList.contains('hidden')) choosePlay(c.dataset.play); });
+  document.getElementById('audible').addEventListener('click',e=>{ const c=e.target.closest('span[data-play]'); if(!c) return; if(c.dataset.play==='__close') closeAudible(); else audibleTo(c.dataset.play); });
+  document.getElementById('presnap-bar').addEventListener('click',e=>{ const c=e.target.closest('span[data-a]'); if(!c) return; if(c.dataset.a==='flip') flipPlay(); else (G.audibleOpen?closeAudible():openAudible()); });
   document.querySelectorAll('.dc').forEach(el=> el.addEventListener('click',()=>chooseDef(el.dataset.def)));
   function startWith(d){ SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff=d; document.getElementById('start').classList.add('hidden'); newGame(); document.getElementById('stage').focus(); say('Welcome to Gridiron Blitz — we are underway!',true); }
   document.getElementById('d-rookie').addEventListener('click',()=>startWith('rookie'));
@@ -3803,6 +4167,7 @@
   commBtn.addEventListener('click',()=>{ commOn=!commOn; commBtn.classList.toggle('off',!commOn); if(!commOn && typeof window!=='undefined' && window.speechSynthesis){ try{window.speechSynthesis.cancel();}catch(e){} } });
   cv.addEventListener('pointerdown',()=>{ audioInit(); document.getElementById('stage').focus(); });
 
+  window.__gbNoDraw=true; try{ window.AudioContext=undefined; window.webkitAudioContext=undefined; Object.defineProperty(window,'speechSynthesis',{value:undefined,configurable:true}); }catch(e){}
   window.__sim={ get G(){return G;}, update, keys, choosePlay, action, snap, chooseDef,
     startFG, startKick, startKickoff, startConversion, fgLock, juke, spin, setupPlay, startPossession, endPlay, startPunt, callTimeout, get ready(){return playersReady;}, get pool(){return pPool;} };
   newGame(); G.phase='start';

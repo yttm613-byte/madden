@@ -27,17 +27,22 @@ await p.route(u => u.hostname !== 'localhost', r => r.abort());
 await p.goto('http://localhost:' + (process.env.PORT || 8106) + '/index.sim.html', { waitUntil: 'load' });
 await p.waitForFunction(() => { try { return window.__sim && window.__sim.ready; } catch (e) { return false; } }, null, { timeout: 60000 });
 await p.click('#d-pro');
-const res = await p.evaluate(([N, BOT, REACT, USERQB]) => {
+// PLAYS=all cycles through every pass play in the book (read from index.html)
+const ALL = process.env.PLAYS === 'all';
+const PASSIDS = ALL ? [...(await (await fetch('http://localhost:' + (process.env.PORT || 8106) + '/index.html')).text())
+  .matchAll(/^\s{4}(\w+):\s*\{form:'\w+', kind:'pass'(?![^\n]*special)/gm)].map(m => m[1]) : ['slants', 'verticals', 'screen', 'playaction'];
+const CH = 40, res = { cpu: [], user: [] };
+for (const SIDE of ['cpu', 'user']) for (let n0 = 0; n0 < N; n0 += CH) {
+ const part = await p.evaluate(([N0, NN, BOT, REACT, USERQB, PASS, SIDE]) => {
   const S = window.__sim, PPY = (560-52)/53.3, DT = 1/60;
-  const PASS = ['slants', 'verticals', 'screen', 'playaction'];
   const run = (side) => {
     const out = [];
-    for (let n = 0; n < N; n++) {
+    for (let n = N0; n < N0 + NN; n++) {
       const G = S.G;
       G.phase = 'playcall'; G.flag = null; G._returning = false; G._retKind = null; G.conv = null; G.twoPt = false; G.fumble = null;
       G._koFlight = false; G._koPhase = null; G._fgFlight = false; G.ball = { active: false }; G._td = false; G._turn = false;
       G.offense = side; G.los = 40*PPY; G.firstX = 50*PPY; G.down = 1; G.clock = 60; G.qtr = 2;
-      const id = PASS[n % 4];
+      const id = PASS[n % PASS.length];
       S.setupPlay(id); G.phase = 'presnap'; G.autoSnap = 99;
       S.snap(); if (G.phase !== 'live') { n--; continue; }
       const hold = 0.8 + ((n*0.37) % 1.8);
@@ -75,8 +80,10 @@ const res = await p.evaluate(([N, BOT, REACT, USERQB]) => {
     }
     return out;
   };
-  return { cpu: run('cpu'), user: run('user') };
-}, [N, BOT, REACT, USERQB]);
+  return run(SIDE);
+ }, [n0, Math.min(CH, N - n0), BOT, REACT, USERQB, PASSIDS, SIDE]);
+ res[SIDE].push(...part);
+}
 console.log('defender bot:', BOT, BOT === 'human' ? 'react ' + REACT + 's' : '', '  your QB:', USERQB);
 for (const side of ['cpu', 'user']) {
   const r = res[side], att = r.filter(x => x.thrown), comp = att.filter(x => x.caught && !x.intc);
@@ -88,7 +95,7 @@ for (const side of ['cpu', 'user']) {
   const bucket = (lo, hi) => { const a = att.filter(x => x.air != null && x.air >= lo && x.air < hi); const c = a.filter(x => x.caught && !x.intc);
     return `${lo}-${hi === 99 ? '' : hi-1}: ${pct(c.length, a.length)} of ${a.length} (INT ${a.filter(x => x.intc).length})`; };
   console.log(`     by air yards: ${bucket(-9, 10)} | ${bucket(10, 20)} | ${bucket(20, 99)}   (NFL ~72% | ~55% | ~35%)`);
-  for (const id of ['slants', 'verticals', 'screen', 'playaction']) {
+  for (const id of PASSIDS) {
     const a = r.filter(x => x.id === id), at = a.filter(x => x.thrown), c = at.filter(x => x.caught && !x.intc);
     console.log(`     ${id.padEnd(10)} comp ${pct(c.length, at.length).padStart(6)}  net ${(a.reduce((s, x) => s + x.gain, 0)/Math.max(1, a.length)).toFixed(1).padStart(5)} yd  sack ${pct(a.filter(x => x.sack).length, a.length)}`);
   }

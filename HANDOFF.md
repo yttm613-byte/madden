@@ -78,13 +78,19 @@ loop()           1170   requestAnimationFrame driver
 ### The systems most worth understanding
 | System | Line | Notes |
 |---|---|---|
-| `setupPlay` | 607 | Real formations: five linemen, a tight end, receivers at the numbers and in the slot; shotgun for passes, I-formation for runs (the sweep pulls the playside guard and tackle). |
+| `FORMS` / `PLAYS` | 595 | The playbook as data. Six formations (shotgun, singleback, I-form, trips, empty, goal line) say who lines up where; 31 plays name a formation and either a route per receiver (`routes:{wr:[..],te:[..],rb:[..]}`, anyone without one blocks) or a run hole and direction (`hole:'A'/'B'/'C'/'edge'`, `dir`, `power`/`counter` pulls, `toss`, `draw`, `sneak`). `kneel` and `spike` are the clock plays. Adding a play is adding a line. |
+| `setupPlay(id, flip)` | 690 | Builds any play from its formation: skill players carry `pos` (WR/TE/RB/FB) and `elig`, receivers are numbered left to right on screen, pullers get `pull`, the called hole goes in `G.hole` (the CPU back favours it until he is through the line). `flip` mirrors the play (audible X). The original nine plays keep their exact alignments so their tuned numbers hold. |
+| `makeRoute` / `routeLeg` | 900 | Routes are either the old two-segment kind (`breakT`, `d1`, `d2`, settle `depth`) or a leg list (`legs:[{t,x,y,sp}]`) for routes that stop: curl, hitch, stick, comeback, wheel, bubble. `routeLeg(route, t)` is the one place that says where a receiver is heading; `updateDrop`, the play art and the on-field route ribbons all step it. |
+| `baseDefense` | 780 | Personnel decides the front: base 4-3 against two receivers, nickel against three, dime against four or more, a five-man goal-line front inside the three. Corners align over the widest man each side, nickel and dime backs over the slots. On a pass every route runner gets a man by a cost table (corners outside, nickel in the slot, a backer on the tight end or back, safeties last), whoever is left spies or drops. **Your middle linebacker is never given a man** — he starts free, as he always did. |
+| `applyDefCall` / `cpuDefCall` | 575 | MAN, COVER 2 (corners squat the flats via `zone:'flat'`), COVER 3, BLITZ, FIRE ZONE (a nickel or backer comes, an end drops to the flat, three deep) and PREVENT. `cpuDefCall` picks one against you by down and distance. |
+| Play-call screen | 3900 | `buildPlayCall` draws formation tabs and that formation's cards (art from `drawPlayArt`, stepped from the same route data). Keys: left/right formation, 1-9/0 call. Pre-snap: C audible (same formation), X flip, a receiver's number then an arrow for a hot route (up go, down curl, toward the middle slant, toward the sideline out). `menuKey` handles all of it before the game's keys. Routes are drawn on the turf and numbers float over the receivers (`overlays3D`). |
 | `baseDefense` | 669 | The one base 4-3 every snap, reading run or pass **at** the snap: run fits, penetration, safety bites, draw drops; on a pass three rush, a tackle spies, man on the three receivers, zones for the rest. |
 | `zoneSpot` | 733 | Where each zone defender belongs: safeties split the deep halves and cap verticals, backers take hook/curl zones where they lined up. |
 | `stepDefenders` | 1292 | The heart of the defence. Per-defender timers tick here for **everyone**, including the human-controlled defender. Open-field pursuit races at each role's speed on an intercept angle (`interceptT`). Tackle resolution lives at the bottom. |
 | `aiPursue` | 1155 | Moves a defender toward a point. Must write `vx`/`vy` or the player renders as a motionless idle pose. |
 | `blockNearest` | 1109 | Blocker-to-defender assignment and shed timing (`shedSecs` 724), pulling linemen, screen convoys. |
 | `tackleHit` / `tackleBreak` | 1259 / 1272 | Reach grows with closing speed; broken tackles are rolled from angle, speed and a per-carrier elusiveness. |
+| `cpuDropAI` | 1600 | The CPU quarterback reads a **progression**, not the whole field: concept routes first (deep ones on a shot play), the back last, about 0.42s a read (0.3s on quick-game plays, which also throw on rhythm). He misses a blind-side rusher 30% of the time, which is where CPU sacks come from. |
 | `cpuRunAI` | 1410 | CPU ball carrier. Reads the line — which gap is open now and two and five yards on — and treats a blocked man as mostly out of the way. Returns keep the old whole-field lane vision. |
 | `passBlocks` / `openAt` / `cpuDropAI` | 1510 / 1527 / 1533 | Protection until the catch; how open a receiver will be where the ball can reach him (drives both the CPU's read and your "most open" marker); the CPU quarterback's expected-value read with per-play timing (`PLAYS[].look/hold/shot`). |
 | `resolveCatch` | 1653 | Catch odds by separation **and** throw depth; interception odds likewise. After the catch everyone becomes a pursuer — see the traps below. |
@@ -172,21 +178,26 @@ like with like.
 
 | Metric | Current | NFL |
 |---|---|---|
-| CPU yards per carry (`runtrace`, BOT=chase) | 4.05–4.23 | 4.3 |
-| CPU carries stuffed at or behind the line | 21–24% | 17–20% |
-| CPU carries of 10+ / 20+ yards | 4.5–6% / 1.2–2.1% | 11% / 2.5% |
-| CPU carries against a player who rips every block (BOT=rip) | 3.2 yd, 27% stuffed | — |
-| Your completion rate (`passtrace`, random-timing QB) | 64.7–64.9% | 65% |
-| Your interceptions / net yards per dropback | 2.5% / 6.4–6.7 | 2.3% / 6.3 |
-| CPU completion rate (human-like defender) | 66–72% | 65% |
-| CPU interceptions / net yards per dropback | 1.3–2.3% / 7.4–7.8 | 2.3% / 6.3 |
-| CPU yards after catch (median) | 2.1–2.7 | ~3 |
-| CPU touchdowns from its own 40, per 600 dropbacks | 0–1 | — |
-| Your linebacker blitzing every down: sacks | ~1%, more with a well-timed rip | — |
+| CPU yards per carry, the original three runs (`runtrace`, BOT=chase) | 4.03–4.24 | 4.3 |
+| CPU carries stuffed at or behind the line (same) | 21–24% | 17–20% |
+| CPU carries of 10+ / 20+ yards (same) | 5.1–5.4% / 1.2–1.4% | 11% / 2.5% |
+| CPU yards per carry, every run in the book (`PLAYS=all`) | 3.0 (inside zone 4.9, iso 5.2, sweep 3.0; sneak and goal-line power are short-yardage by design) | — |
+| Your completion rate, original four passes (`passtrace`, random-timing QB) | 60–63% | 65% |
+| Your interceptions / sacks / net yards per dropback | ~2.1% / 5.5–7% / 6.1 | 2.3% / 6.5% / 6.3 |
+| CPU completion, every pass play (`passtrace PLAYS=all`, human-like defender) | 64–67% | 65% |
+| CPU interceptions / net yards per dropback (same) | 2.1–2.4% / 8.3–8.8 | 2.3% / 6.3 |
+| CPU completion by air yards: 0–9 / 10–19 / 20+ | 77–78% / 53–56% / 20–25% | 72% / 55% / 35% |
+| CPU yards after catch (median) | 2.2–2.4 | ~3 |
 | Punt return | 11.0–11.3 avg | ~9 |
-| Kick return | 24.1–24.2 avg (committed build: 21.7–25.2) | ~22 |
+| Kick return | 24.1–24.2 avg | ~22 |
 | Field goal, 40 / 50 yards | 89% / 71% (not re-measured) | 82% / 68% |
-| Total points, one full `yactrace` game | 37 (was 51–63) | 45 |
+| Total points, one full `yactrace` game | 30 | 45 |
+
+The CPU passing game runs about a yard a dropback hotter than the NFL against the
+harness's defender, who does nothing until the ball is thrown; a player who calls a
+coverage and moves his linebacker takes most of that back. Where the harness's
+passive defender and a real one differ, trust the per-depth completion rates over
+yards per dropback.
 
 **The measurement method matters more than the numbers.** Three separate times a
 "regression" turned out to be a broken harness rather than a broken game — a
@@ -212,8 +223,8 @@ Roughly in order of how much they would improve the game.
    catches it two yards behind the line and has to make it all up.
 4. **Scoring** was 51–63 a game; one full sim now scores 37. Not yet measured
    over enough games to call.
-5. **No audibles, no hot routes, no defensive line shifts, no kneel-downs or
-   spikes.** All standard Madden features that are simply absent.
+5. ~~No audibles, no hot routes, no kneel-downs or spikes~~ — done (see the
+   play-call screen). Still no defensive line shifts or pre-snap motion.
 6. ~~The player model is a cheap free asset.~~ Replaced by a generated model that
    meets `PLAYER_MODEL_PROMPT.md`'s spec (grade it: `node tools/adopt-model.mjs`).
    Still open: one body type scaled wider for linemen rather than a heavier build.
@@ -236,11 +247,17 @@ headless browser and measuring against NFL rates.
   `choosePlay()` and friends, so a harness can drive the game frame by frame
   without rendering.
 
+**Run a harness's plays in chunks, and run one browser at a time.** A single
+`page.evaluate` that simulates hundreds of plays slows to a crawl (a 440-dropback run
+went from 15 seconds chunked to a stalled 10+ minutes in one call), and two headless
+browsers software-rendering at once took this machine to a load of 35 with everything
+stalling. `passtrace` and `runtrace` now evaluate in chunks of 40–60 plays.
+
 Harnesses live in `tools/*.mjs` and each one measures a single thing (serve the
 repo with `http-server -p 8106` first; on the four newer ones `PORT=` points them
 at another server, which is how to A/B against a worktree of the last commit):
-`runtrace` (CPU run distribution; `BOT=chase|rip|none` for your defender),
-`passtrace` (both quarterbacks; `BOT=human|none`, `USERQB=random|smart`),
+`runtrace` (CPU run distribution; `BOT=chase|rip|none` for your defender, `PLAYS=all` for every run in the book),
+`passtrace` (both quarterbacks; `BOT=human|none`, `USERQB=random|smart`, `PLAYS=all` for every pass play),
 `returntrace` (kick and punt returns), `yactrace` (a whole game with a scripted
 player, plus yards after catch and contact-to-tackle frames), `depthtrace`
 (completion by throw depth), `tacklenow` (frames from contact to whistle),
