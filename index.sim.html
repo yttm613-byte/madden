@@ -342,6 +342,8 @@
           <span class="keys" id="team-note"></span></div>
         <div class="modecol"><button class="btn" id="d-season" style="background:linear-gradient(180deg,#ffe08a,#f0b429); box-shadow:0 6px 0 #a87a14; color:#1a1406;">Season</button>
           <span class="keys" id="season-note"></span></div>
+        <div class="modecol"><button class="btn" id="d-practice" style="background:linear-gradient(180deg,#bdf0e0,#7fd4b8); box-shadow:0 6px 0 #4f8a78; color:#08101a;">Practice</button>
+          <span class="keys">your offense, no clock</span></div>
         <div class="modecol kbd-only"><button class="btn" id="d-2p" style="background:linear-gradient(180deg,#b9d6ff,#6fa6ff); box-shadow:0 6px 0 #3b64a8; color:#08101a;">2 Players</button>
           <span class="keys" id="twopnote"></span></div>
       </div>
@@ -441,6 +443,9 @@
   // and with it false every predicate below reduces to the checks the game always made:
   // the 'user' team is human, the 'cpu' team is the AI.
   let TWO_P=false;
+  // Practice: your offense, over and over from your own 35, with no clock. A score, a
+  // turnover or a failed fourth down just starts a new series.
+  let PRACTICE=false;
   const humanTeam = t => t==='user' || (TWO_P && t==='cpu');
   const humanOff  = () => !!G && humanTeam(G.offense);
   const humanDef  = () => !!G && humanTeam(G.offense==='user'?'cpu':'user');
@@ -617,7 +622,8 @@
     G.rosters={ user: TWO_P ? makeRoster() : myTeam().roster, cpu: (SEASON&&!TWO_P) ? oppRoster(seasonOpp(SEASON)) : makeRoster() };
     applyWeather(pickWeather());
     G.timeouts={user:3,cpu:3}; G.stats={user:blankStats(),cpu:blankStats()};
-    if(intro && !(typeof window!=='undefined'&&window.__gbNoIntro)) startIntro();
+    if(PRACTICE){ G._openingRecv='user'; G._koFlight=false; G._koPhase=null; G.ball={active:false}; startPossession('user', yd(35)); }
+    else if(intro && !(typeof window!=='undefined'&&window.__gbNoIntro)) startIntro();
     else { G._openingRecv='user'; startKickoff('user'); }
   }
   const other = o => o==='user'?'cpu':'user';
@@ -830,7 +836,7 @@
     const fy=fgYards(), kick=document.getElementById('pb-fg'), can=G.down>=4 && fy<=56;
     kick.classList.toggle('hidden', !can);
     if(can) document.getElementById('fg-label').textContent=fy+' yd FG · 3 pts';
-    document.getElementById('pb-punt').classList.toggle('hidden', !(G.down>=4));
+    document.getElementById('pb-punt').classList.toggle('hidden', !(G.down>=4) || PRACTICE);
     // inside the five, open on the goal-line package
     if((GOAL_X-G.los)/PPY<=3 && pcForm!=='goal') pcForm='goal';
     buildPlayCall(); pcSpecials();
@@ -1809,7 +1815,7 @@
       try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){} }
   }
   function quitToMenu(){
-    if(!G) return; G.paused=false; G.phase='start'; SEASON=null; setTwoP(false); applyOpponent(null); resetOverButtons();
+    if(!G) return; G.paused=false; G.phase='start'; SEASON=null; PRACTICE=false; setTwoP(false); applyOpponent(null); resetOverButtons();
     ['pause','playcall','defcall','fg','audible','over'].forEach(id=>{ const e=document.getElementById(id); if(e) e.classList.add('hidden'); });
     document.getElementById('start').classList.remove('hidden'); seasonNote(); setMsg('',0);
   }
@@ -2097,7 +2103,8 @@
     if(G.phase==='playcall'){ syncHUD(); return; }
     if(G.phase==='fg'){ updateFG(dt); return; }
 
-    if(G.phase==='live') G.clock-=dt;
+    if(PRACTICE){ /* the clock never runs in practice */ }
+    else if(G.phase==='live') G.clock-=dt;
     else if(!G.clockStop){                       // a stopped clock stays stopped until the snap
       if(G.phase==='presnap') G.clock-=dt*0.3;
       else if(G.phase==='dead') G.clock-=dt*1.0;
@@ -2996,6 +3003,7 @@
   // after the celebration: the replay, and then the try
   function afterTD(){
     if(!G._tdReplayed){ G._tdReplayed=true; if(startReplay()){ G.deadT=2.9; return; } }
+    if(PRACTICE){ G._pendingConv=null; stopReplay(); practiceReset('TOUCHDOWN — NEW SERIES'); return; }
     const t=G._pendingConv; G._pendingConv=null; stopReplay(); startConversion(t);
   }
   // Teammates close enough to matter run in to the scorer; everybody else pulls up.
@@ -3061,8 +3069,11 @@
     setMsg('TOUCHDOWN!  Run/pass for 2 — or kick the XP',1.5);
     document.getElementById('playcall').classList.remove('hidden');
   }
+  function practiceReset(msg){ G._td=false; G._fg=false; G._turn=false; G._safety=false; G._returning=false; G._koFlight=false; G._koPhase=null; G.ball={active:false};
+    G.conv=null; G.twoPt=false; startPossession('user', yd(35)); setMsg(msg||'NEW SERIES',1.2); }
   function finishDead(){
     stopReplay(); G.pile=null;
+    if(PRACTICE && (G._td||G._fg||G._safety||G._turn||G.offense!=='user')){ practiceReset(G._td?'TOUCHDOWN — NEW SERIES':G._fg?'THREE POINTS — NEW SERIES':'NEW SERIES'); return; }
     if(G.clock<=0 && endOfQuarter()) return;
     const wasReturn=G._returning; G._returning=false;
     if(G._td || G._fg){ startKickoff(other(G.offense)); return; }
@@ -3072,7 +3083,7 @@
     if(G.flag && applyFlag()) return;            // penalty enforced; down already set
     const spot=G._spot; G.los=spot;
     if(spot>=G.firstX){ G.down=1; G.firstX=Math.min(spot+yd(10),GOAL_X); routeOffense(); setMsg(G.offense==='user'?'FIRST DOWN!':'CPU 1ST DOWN',0.9); if(G.offense==='user') crowdSwell(0.14,1.6); }
-    else { G.down++; if(G.down>4){ setMsg('TURNOVER ON DOWNS',1.2); startPossession(other(G.offense), flipLos(spot)); } else routeOffense(); }
+    else { G.down++; if(G.down>4){ if(PRACTICE){ practiceReset('TURNOVER ON DOWNS — NEW SERIES'); return; } setMsg('TURNOVER ON DOWNS',1.2); startPossession(other(G.offense), flipLos(spot)); } else routeOffense(); }
   }
 
   // ---- field goal (user mini-game) ----
@@ -3192,7 +3203,7 @@
     let dd; if(G.firstX>=GOAL_X && (GOAL_X-G.los)/PPY<=10) dd='Goal'; else dd=Math.max(1,Math.round((G.firstX-G.los)/PPY));
     document.getElementById('v-dd').textContent=ordinal(G.down)+' & '+dd;
     const ddc=document.getElementById('sb-dd'); ddc.classList.toggle('you',G.offense==='user'); ddc.classList.toggle('cpu',G.offense==='cpu');
-    document.getElementById('dd-lbl').textContent = TWO_P ? (G.offense==='user'?'🏈 P1 BALL':'P2 BALL 🏈') : (G.offense==='user'?'🏈 YOUR BALL':'CPU BALL 🏈');
+    document.getElementById('dd-lbl').textContent = PRACTICE ? '🏈 PRACTICE' : TWO_P ? (G.offense==='user'?'🏈 P1 BALL':'P2 BALL 🏈') : (G.offense==='user'?'🏈 YOUR BALL':'CPU BALL 🏈');
     document.getElementById('v-on').textContent=ballOn();
     const m=Math.floor(G.clock/60), s=Math.floor(G.clock%60);
     document.getElementById('v-clock').textContent='Q'+G.qtr+'  '+m+':'+String(s).padStart(2,'0');
@@ -5015,11 +5026,14 @@
     const y=document.querySelector('#sb-you .lbl'); if(y) y.textContent=TWO_P?'P1':'You';
     if(TWO_P){ const c=document.querySelector('#sb-cpu .lbl'); if(c) c.textContent='P2'; }
     twoPNote(); }
-  function startTwoPlayer(){ SEASON=null; applyOpponent(null); resetOverButtons(); setTwoP(true); audioInit(); startCrowd(); pendingDiff='pro';
+  function startTwoPlayer(){ PRACTICE=false; SEASON=null; applyOpponent(null); resetOverButtons(); setTwoP(true); audioInit(); startCrowd(); pendingDiff='pro';
     document.getElementById('start').classList.add('hidden'); newGame(true); syncHUD(); document.getElementById('stage').focus();
     say('Two players, one field — let\u2019s play some football!'+wxIntro(),true);
     togglePause(true); document.getElementById('p-resume').textContent='Kick off'; }
-  function startWith(d){ setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff=d; document.getElementById('start').classList.add('hidden'); newGame(true); document.getElementById('stage').focus(); say('Welcome to Gridiron Blitz — we are underway!'+wxIntro(),true); }
+  function startPractice(){ setTwoP(false); PRACTICE=true; SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff='pro';
+    document.getElementById('start').classList.add('hidden'); newGame(false); syncHUD(); document.getElementById('stage').focus();
+    say('Practice. Call anything you like — no clock, no pressure. Try the touch pass and the bullet.',true); }
+  function startWith(d){ PRACTICE=false; setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff=d; document.getElementById('start').classList.add('hidden'); newGame(true); document.getElementById('stage').focus(); say('Welcome to Gridiron Blitz — we are underway!'+wxIntro(),true); }
   document.getElementById('d-rookie').addEventListener('click',()=>startWith('rookie'));
   document.getElementById('d-pro').addEventListener('click',()=>startWith('pro'));
   document.getElementById('d-allpro').addEventListener('click',()=>startWith('allpro'));
@@ -5027,9 +5041,10 @@
     if(TWO_P){ document.getElementById('over').classList.add('hidden'); startTwoPlayer(); return; }      // a rematch
     if(SEASON){ if(SEASON.over){ SEASON={results:[], over:false}; saveSeason(); beginTeamSeason(); } playSeasonGame(); return; }
     document.getElementById('over').classList.add('hidden'); document.getElementById('start').classList.remove('hidden'); seasonNote(); });
-  document.getElementById('to-menu').addEventListener('click',()=>{ setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons();
+  document.getElementById('to-menu').addEventListener('click',()=>{ PRACTICE=false; setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons();
     document.getElementById('over').classList.add('hidden'); document.getElementById('start').classList.remove('hidden'); seasonNote(); });
-  document.getElementById('d-season').addEventListener('click',()=>{ setTwoP(false); startSeason(); });
+  document.getElementById('d-season').addEventListener('click',()=>{ PRACTICE=false; setTwoP(false); startSeason(); });
+  document.getElementById('d-practice').addEventListener('click',startPractice);
   document.getElementById('d-2p').addEventListener('click',startTwoPlayer);
   document.getElementById('d-team').addEventListener('click',showTeam);
   document.getElementById('over-team').addEventListener('click',showTeam);
