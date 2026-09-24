@@ -138,6 +138,17 @@
   .padps #rlabels .rl.g0{background:#8fb4ff;} .padps #rlabels .rl.g1{background:#ff6b6b;} .padps #rlabels .rl.g2{background:#f59bd6;} .padps #rlabels .rl.g3{background:#5fe0b5;}
   #rlabels .rl.sel{box-shadow:0 0 0 3px var(--gold),0 1px 4px rgba(0,0,0,.5);}
   #pause{z-index:20;}
+  #intro{position:absolute; left:50%; top:30%; transform:translate(-50%,-50%); z-index:8; min-width:min(560px,92%); text-align:center; pointer-events:none;
+    background:linear-gradient(180deg,rgba(10,16,26,.9),rgba(6,10,16,.84)); border:1px solid #2c3e57; border-radius:14px; padding:14px 22px 12px; box-shadow:0 18px 50px rgba(0,0,0,.55);
+    opacity:0; transition:opacity .35s, transform .35s;}
+  #intro.show{opacity:1;}
+  #intro .row{display:flex; align-items:center; justify-content:center; gap:18px;}
+  #intro .tm{flex:1; min-width:0; padding:8px 10px; border-radius:9px; font-family:'Anton',sans-serif; font-size:clamp(18px,3.4vw,30px); letter-spacing:.03em; line-height:1.05; color:#fff; text-shadow:0 2px 0 rgba(0,0,0,.35);}
+  #intro .tm small{display:block; font:600 10px 'Oswald',sans-serif; letter-spacing:.2em; opacity:.8; margin-top:4px;}
+  #intro .vs{font-family:'Anton',sans-serif; font-size:20px; color:var(--gold);}
+  #intro .sub{margin-top:9px; font:600 12px 'Oswald',sans-serif; letter-spacing:.18em; color:#b8c6da;}
+  #intro .toss{margin-top:7px; min-height:1.4em; font-family:'Anton',sans-serif; font-size:clamp(15px,2.6vw,21px); letter-spacing:.05em; color:var(--gold);}
+  #intro .skip{margin-top:4px; font-size:10px; letter-spacing:.16em; color:var(--muted); opacity:.8;}
   #team{z-index:18; justify-content:flex-start; gap:10px; background:rgba(6,10,16,.96);}
   #team .cols{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; align-items:flex-start; width:100%;}
   #team table{border-collapse:collapse; font-size:12px; line-height:1.42; text-align:left;}
@@ -268,6 +279,7 @@
     </div>
 
     <div id="poss"></div>
+    <div id="intro" class="hidden"></div>
     <div id="replay"><i></i>INSTANT REPLAY</div>
     <div id="fstog" title="Fullscreen (F)">⛶</div>
     <div id="qtog" title="Graphics quality">◆ ULTRA</div>
@@ -555,7 +567,47 @@
   function tag(team, n){ const m=manOn(team,n); return m? ('#'+n+' '+m.initial+'. '+m.name) : ('#'+n); }
   function defenderTag(n){ return tag(other(G.offense), n); }
 
-  function newGame(){
+  // ---- the broadcast open: a flyover of the stadium, the matchup, the coin toss ----
+  const INTRO_T=5.4;
+  function hexCss(h){ return '#'+('000000'+(h>>>0).toString(16)).slice(-6); }
+  function startIntro(){
+    // the toss decides who takes the opening kick (and so who gets the second half)
+    const forced=typeof window!=='undefined' && window.__gbToss;           // harnesses can fix it
+    const winner=(forced==='user'||forced==='cpu')?forced:(Math.random()<0.5?'user':'cpu');
+    G._openingRecv=winner; G._tossWinner=winner;
+    startKickoff(winner); G.phase='intro'; G.introT=0; setMsg('',0);
+    const el=document.getElementById('intro'), you=TEAM_KIT.user, them=TEAM_KIT.cpu;
+    const o=(SEASON&&!TWO_P)?seasonOpp(SEASON):null, wk=SEASON&&!TWO_P?(SEASON.results.length>=REG_WEEKS?'TITLE GAME':'WEEK '+(SEASON.results.length+1)):TWO_P?'TWO PLAYERS':'EXHIBITION';
+    const rec=SEASON&&!TWO_P?recStr(seasonRecord(SEASON)):'';
+    const card=(name,sub,kit)=>'<div class="tm" style="background:linear-gradient(180deg,'+hexCss(kit.jersey)+','+hexCss(kit.jersey)+'cc); border-bottom:4px solid '+hexCss(kit.trim)+'">'+name+'<small>'+sub+'</small></div>';
+    el.innerHTML='<div class="row">'+card(TWO_P?'PLAYER 1':'YOU','HOME'+(rec?' · '+rec:''),you)+'<div class="vs">VS</div>'+card(TWO_P?'PLAYER 2':(o?o.name.toUpperCase():'CPU'),'AWAY',them)+'</div>'
+      +'<div class="sub">'+wk+(WEATHER==='rain'?' · 🌧 RAIN':WEATHER==='snow'?' · ❄ SNOW':' · CLEAR')+'</div><div class="toss"></div><div class="skip">PRESS ANY KEY TO SKIP</div>';
+    el.classList.remove('hidden'); requestAnimationFrame(()=>el.classList.add('show'));
+  }
+  function introTick(dt){
+    G.introT+=dt;
+    const el=document.getElementById('intro'), toss=el&&el.querySelector('.toss');
+    if(toss && G.introT>2.6 && !toss.textContent){
+      const w=G._tossWinner, o=(SEASON&&!TWO_P)?seasonOpp(SEASON):null;
+      const name=w==='user'?(TWO_P?'PLAYER 1':'YOU'):(TWO_P?'PLAYER 2':(o?o.name.toUpperCase():'THE CPU'));
+      toss.textContent=(w==='user'&&!TWO_P?'YOU WIN THE TOSS — YOU\u2019LL RECEIVE':name+(o&&w!=='user'?' WIN':' WINS')+' THE TOSS AND WILL RECEIVE');
+      try{ SFX.snap&&SFX.snap(); }catch(e){}
+      say(w==='user' ? (TWO_P?'Player One wins the toss and will receive.':'You win the toss, and you will receive.')
+        : TWO_P ? 'Player Two wins the toss and will take the ball.' : o ? 'The '+o.name+' win the toss and will receive.' : 'The CPU wins the toss and will receive.'); }
+    if(G.introT>=INTRO_T) endIntro();
+  }
+  function endIntro(){
+    if(!G || G.phase!=='intro') return;
+    const el=document.getElementById('intro'); if(el){ el.classList.remove('show'); setTimeout(()=>el.classList.add('hidden'),380); }
+    G.phase='live'; G.snapTime=performance.now(); G.playT=0;
+    setMsg(G.koTeeT>1?'KICKOFF — SPACE FOR AN ONSIDE KICK':'KICKOFF!',1.3); crowdSwell(0.14,2.5);
+  }
+  // the flyover: from high behind one end zone, round to the sideline where the kickoff shot sits
+  function introCam(t){
+    const e=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2, th=Math.PI*0.92+e*Math.PI*0.58, R=95-e*49, h=44-e*20;
+    return { x:60+Math.cos(th)*R, y:h, z:26.65+Math.sin(th)*R, lx:40+e*18, lz:26.65 };
+  }
+  function newGame(intro){
     G={ phase:'start', diff:DIFF[pendingDiff]||DIFF.pro, userScore:0, cpuScore:0, clock:QTR_SECS, qtr:1, longest:0, down:1, los:0, firstX:0,
         offense:'user', playType:'run', passState:null, carrier:null, blockers:[], receivers:[], defenders:[],
         userDef:null, ball:{active:false}, cam:0, msgT:0, deadT:0, spinCd:0, stamina:100, burst:0,
@@ -565,7 +617,8 @@
     G.rosters={ user: TWO_P ? makeRoster() : myTeam().roster, cpu: (SEASON&&!TWO_P) ? oppRoster(seasonOpp(SEASON)) : makeRoster() };
     applyWeather(pickWeather());
     G.timeouts={user:3,cpu:3}; G.stats={user:blankStats(),cpu:blankStats()};
-    G._openingRecv='user'; startKickoff('user');
+    if(intro && !(typeof window!=='undefined'&&window.__gbNoIntro)) startIntro();
+    else { G._openingRecv='user'; startKickoff('user'); }
   }
   const other = o => o==='user'?'cpu':'user';
   function flipLos(spot){ return Math.max(yd(11), Math.min(yd(92), WORLD_W-spot)); }
@@ -1279,6 +1332,7 @@
     codes[e.code]=true;
     ACT = (kbSplit() && P2KEY[e.code]) ? 'cpu' : 'user';
     if(G && G.paused){ if(k==='p'||k==='escape'||(ACT==='cpu'&&e.code==='Enter')) togglePause(false); ACT='user'; return; }
+    if(G && G.phase==='intro'){ endIntro(); ACT='user'; return; }
     if(ACT==='cpu'){ keys[k]=true; if(G && G.phase!=='start') p2Key(e); else menuKeyP2(e.code); ACT='user'; return; }
     if(G && menuKey(k)) return;
     if(k==='p'||(k==='escape'&&G&&G.hotSel==null)){ togglePause(true); return; }
@@ -1675,6 +1729,7 @@
   }
   function padPress(s,i){
     audioInit();
+    if(G && G.phase==='intro' && !G.paused){ endIntro(); return; }
     const team=padTeam(s), P=PADS[s];
     const els=padMenuEls();
     if(els && els.length){
@@ -2033,6 +2088,7 @@
 
   function update(dt){
     updateFx(dt);
+    if(G.phase==='intro'){ introTick(dt); syncHUD(); return; }
     if(G.phase==='playcall'){ syncHUD(); return; }
     if(G.phase==='fg'){ updateFG(dt); return; }
 
@@ -4454,7 +4510,9 @@
       carryBall(_carrierG); }
     else if(G.phase==='presnap' && G.carrier){ ballMesh.visible=true; ballMesh.scale.set(...BALL_LIVE); ballMesh.position.set(WX(G.los),0.18,WZ(fieldMid)); ballMesh.rotation.set(0,0,1.4); } // ball spotted on the line
     else ballMesh.visible=false;
-    if(G._fgFlight && G.ball && G.ball.active){ const bx=WX(G.ball.x), bz=WZ(G.ball.y);
+    if(G.phase==='intro'){ const c=introCam(Math.min(1,(G.introT||0)/INTRO_T));
+      camera.position.set(c.x,c.y,c.z); camera.lookAt(c.lx,2,c.lz); camPos.copy(camera.position); camLook.set(c.lx,2,c.lz); }
+    else if(G._fgFlight && G.ball && G.ball.active){ const bx=WX(G.ball.x), bz=WZ(G.ball.y);
       // sit low behind the kick and frame the uprights up the field
       camPos.lerp(new THREE.Vector3(bx-17,6.5,WZ(fieldMid)+(bz-WZ(fieldMid))*0.4),0.14);
       camLook.lerp(new THREE.Vector3(119.5,4.5,WZ(fieldMid)),0.14);
@@ -4481,7 +4539,7 @@
       const focusX = (G.ball&&G.ball.active) ? WX(G.ball.x) : WX(tee.x);
       const midX = (focusX + WX(G.carrier.x))*0.5;
       const highBall = (G.ball&&G.ball.active)?7:3;
-      camPos.lerp(new THREE.Vector3(midX+2, 30, WZ(fieldMid)-60*narrowK()), 0.07);
+      camPos.lerp(new THREE.Vector3(midX+2, 24, WZ(fieldMid)-46*narrowK()), 0.07);
       camLook.lerp(new THREE.Vector3((focusX+midX)*0.5, highBall, WZ(fieldMid)), 0.10);
       camera.position.copy(camPos); camera.lookAt(camLook); }
     else if(G._td && G.phase==='dead' && G.carrier){ // touchdown: slow orbit around the celebration
@@ -4657,9 +4715,9 @@
     DIFF.season={cpu:mix('cpu'), react:mix('react'), you:mix('you'), fg:mix('fg'), rush:mix('rush')};
     audioInit(); startCrowd(); pendingDiff='season';
     document.getElementById('start').classList.add('hidden'); document.getElementById('over').classList.add('hidden');
-    newGame(); document.getElementById('stage').focus();
+    newGame(true); document.getElementById('stage').focus();
     say((title ? 'The title game — it all comes down to this, against the '+o.name+'.' : 'Week '+(wk+1)+': the '+o.name+' are in town.')+wxIntro(), true);
-    setMsg(title ? 'TITLE GAME vs '+o.name.toUpperCase() : 'WEEK '+(wk+1)+' vs '+o.name.toUpperCase(), 2.2);
+    if(G.phase!=='intro') setMsg(title ? 'TITLE GAME vs '+o.name.toUpperCase() : 'WEEK '+(wk+1)+' vs '+o.name.toUpperCase(), 2.2);
   }
   // ---- your team across a season ----
   // Fold this game's numbers into the season totals (team passing belongs to the QB).
@@ -4949,10 +5007,10 @@
     if(TWO_P){ const c=document.querySelector('#sb-cpu .lbl'); if(c) c.textContent='P2'; }
     twoPNote(); }
   function startTwoPlayer(){ SEASON=null; applyOpponent(null); resetOverButtons(); setTwoP(true); audioInit(); startCrowd(); pendingDiff='pro';
-    document.getElementById('start').classList.add('hidden'); newGame(); syncHUD(); document.getElementById('stage').focus();
+    document.getElementById('start').classList.add('hidden'); newGame(true); syncHUD(); document.getElementById('stage').focus();
     say('Two players, one field — let\u2019s play some football!'+wxIntro(),true);
     togglePause(true); document.getElementById('p-resume').textContent='Kick off'; }
-  function startWith(d){ setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff=d; document.getElementById('start').classList.add('hidden'); newGame(); document.getElementById('stage').focus(); say('Welcome to Gridiron Blitz — we are underway!'+wxIntro(),true); }
+  function startWith(d){ setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons(); audioInit(); startCrowd(); pendingDiff=d; document.getElementById('start').classList.add('hidden'); newGame(true); document.getElementById('stage').focus(); say('Welcome to Gridiron Blitz — we are underway!'+wxIntro(),true); }
   document.getElementById('d-rookie').addEventListener('click',()=>startWith('rookie'));
   document.getElementById('d-pro').addEventListener('click',()=>startWith('pro'));
   document.getElementById('d-allpro').addEventListener('click',()=>startWith('allpro'));
@@ -4975,7 +5033,8 @@
   document.getElementById('p-quit').addEventListener('click',quitToMenu);
   document.getElementById('pausebtn').addEventListener('click',()=>togglePause());
   addEventListener('gamepadconnected',()=>{ try{ pollPad(0); }catch(e){} });
-  addEventListener('pointerdown',e=>{ if(PAD.used) padSetUsed(false); lastInput=e.pointerType==='touch'?'touch':'key'; },true);   // back to touch/mouse prompts
+  addEventListener('pointerdown',e=>{ if(G && G.phase==='intro' && !G.paused && !e.target.closest('#pause')) endIntro();
+    if(PAD.used) padSetUsed(false); lastInput=e.pointerType==='touch'?'touch':'key'; },true);   // back to touch/mouse prompts
   // Touch had no way to kick: the kick meter covers the stage, action button included.
   document.getElementById('fg').addEventListener('pointerdown',e=>{ e.preventDefault(); if(G && G.phase==='fg') fgLock(); });
   seasonNote();
