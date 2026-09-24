@@ -102,6 +102,9 @@ loop()           1170   requestAnimationFrame driver
 | `makePlayer` | 2386 | Per-player material instances, skin tone and kit variation (visor, gloves, cleats). Team colours and numbers are applied in `render3D`. |
 | `jerseyNumberTex` | 2358 | Paints a player's roster number / surname onto the jersey decals. |
 | Pose library (`/*POSE-LIB-BEGIN*/`) | 2503 | All procedural animation: `applyPose` (30 states — stances for every position, pass set, engaged blocks, drive blocks, backpedal, shuffle, QB drop/set/throw/handoff, carry with a real tuck and stiff-arm, reach and secure, wrap, dive, fall, get-up, celebrations, kick, fair-catch signal), cross-fades between states (`poseBlendFrom`), ground contact (`poseGround`), two-bone IK (`ik2`), `footFlat` and `headLook`. Self-contained so `tools/posebook.html` can render it. |
+| Controllers (`PAD`, `pollPad`, `padPress`) | 1330 | Gamepad API, standard layout, polled once a frame from `loop`. Every menu gets a cursor (`padMenuEls`/`padNavTick`, A clicks the focused element). On a pass each receiver's button comes from `padIcons()` (the back A, widest left X, widest right B, slots Y then RB), frozen at the snap in `G.icons`. `padBar` is the context strip of what the buttons do now. Rumble fires from any rise in `G.shake`. PlayStation pads show their own glyphs (`PAD.ps`). |
+| Throws, moves, playing the ball | 1250 | A throw is a press and a release: `startThrow` → `tickWindup` → `throwBall('touch'|'bullet')`. Let go before `BULLET_T` (0.17s) and it is a touch pass (slower, lofted, `arcK` 1.75), hold and it is a bullet (faster, flat, `arcK` 0.5). The CPU still calls `throwBall()` = `'auto'`, the old calibrated throw. `laneCheck` lets defenders in the lane tip a *user's* low ball (and your own defender tip a CPU pass), using `passH`, the same arc the renderer draws. `stiffArm` (+0.40 on the next frontal tackle-break roll), `carrierDive`/`diveStep` (dive forward, a QB slides; the play ends where he lands), `swatBall` (your defender goes up; timed at the catch point it knocks the ball away or picks it). |
+| Pause, phone layout | — | `togglePause`/`quitToMenu`; P, Esc, Menu, or the ⏸ button. In portrait on a touch screen `#gl` is the top 60% of the stage and the touch controls live in the deck below it (CSS at the end of the style block); `narrowK()` pulls the chase cam back for a narrow view, and receiver labels pin to the edge when off-screen. |
 | Pose choice (in `render3D`) | 3100 | Picks each man's state from `poseRole()` and the moment in the play, and hands IK targets to the pose: a blocker's hands on the defender's chest, a receiver's hands to the ball, the tackler's arms round the carrier. Replays play back each man's recorded state. |
 
 ---
@@ -158,6 +161,21 @@ the catch after 0.3s); use that, not `BOT=none`, for anything about the pass gam
 in contact and lapses the moment he is not. To ask "does a blocker have this man",
 test `_takenBy`; to ask "is he in contact right now", test `blocked`.
 
+**A throw is a press and a release now.** `action()` during a dropback starts a
+windup; the ball leaves on the release (touch) or after 0.17s held (bullet). A
+harness that calls `action()` and never releases throws bullets; call
+`releaseThrow('key')` right after for a touch pass, or `throwBall()` for the old
+single throw the CPU uses. `passtrace` has `THROW=auto|bullet|touch|smart`.
+
+**The test page's own game loop keeps running** while a harness steps `update()`
+itself, and screenshots let it run a few frames. Set `G.paused=true` after setting
+up a play (the loop then skips `update`) or timed things like the throw windup
+fire behind your back.
+
+**A dive must not drop the body.** Dives pitch the model over its feet, which
+already lays it on the turf; the 0.55 drop the tackle falls use buried every diver
+to the ankles (defender dive tackles included) until it was set to ~0.
+
 **Per-play defender jobs outlive the play they were meant for.** `deep`,
 `contain`, `pa` and `cover` all persist through the catch unless cleared — which
 is how safeties once shadowed every receiver nine yards ahead all the way to the
@@ -184,6 +202,7 @@ like with like.
 | CPU yards per carry, every run in the book (`PLAYS=all`) | 3.0 (inside zone 4.9, iso 5.2, sweep 3.0; sneak and goal-line power are short-yardage by design) | — |
 | Your completion rate, original four passes (`passtrace`, random-timing QB) | 60–63% | 65% |
 | Your interceptions / sacks / net yards per dropback | ~2.1% / 5.5–7% / 6.1 | 2.3% / 6.5% / 6.3 |
+| Your QB by throw, every pass play (`PLAYS=all`, random timing): old auto / all bullets / all touch / smart (touch past 12 yd) | 69% 2.2% INT 4.40 / 68.6% 2.5% 4.31 (sacks 9.5%: the windup) / 65.8% 1.5% 4.27 / 69% 1.0% 4.71 yd | — |
 | CPU completion, every pass play (`passtrace PLAYS=all`, human-like defender) | 64–67% | 65% |
 | CPU interceptions / net yards per dropback (same) | 2.1–2.4% / 8.3–8.8 | 2.3% / 6.3 |
 | CPU completion by air yards: 0–9 / 10–19 / 20+ | 77–78% / 53–56% / 20–25% | 72% / 55% / 35% |

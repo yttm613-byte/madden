@@ -18,6 +18,10 @@
 import pkg from '/opt/node22/lib/node_modules/playwright/index.js'; const { chromium } = pkg;
 const N = +(process.argv[2] || 240);
 const BOT = process.env.BOT || 'human', REACT = +(process.env.REACT || 0.3), USERQB = process.env.USERQB || 'random';
+// THROW: how your QB throws. bullet = holds the button (the default when a script just
+// presses), touch = taps it, smart = touch past 12 yards and bullet short of that,
+// auto = the old single throw.
+const THROW = process.env.THROW || 'smart', SIDES = (process.env.SIDES || 'cpu,user').split(',');
 const b = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--no-sandbox'] });
 const p = await b.newPage({ viewport: { width: 600, height: 500 } });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
@@ -32,8 +36,8 @@ const ALL = process.env.PLAYS === 'all';
 const PASSIDS = ALL ? [...(await (await fetch('http://localhost:' + (process.env.PORT || 8106) + '/index.html')).text())
   .matchAll(/^\s{4}(\w+):\s*\{form:'\w+', kind:'pass'(?![^\n]*special)/gm)].map(m => m[1]) : ['slants', 'verticals', 'screen', 'playaction'];
 const CH = 40, res = { cpu: [], user: [] };
-for (const SIDE of ['cpu', 'user']) for (let n0 = 0; n0 < N; n0 += CH) {
- const part = await p.evaluate(([N0, NN, BOT, REACT, USERQB, PASS, SIDE]) => {
+for (const SIDE of SIDES) for (let n0 = 0; n0 < N; n0 += CH) {
+ const part = await p.evaluate(([N0, NN, BOT, REACT, USERQB, PASS, SIDE, THROW]) => {
   const S = window.__sim, PPY = (560-52)/53.3, DT = 1/60;
   const run = (side) => {
     const out = [];
@@ -50,9 +54,12 @@ for (const SIDE of ['cpu', 'user']) for (let n0 = 0; n0 < N; n0 += CH) {
       let caughtT = null;
       while (G.phase === 'live' && t < 16) {
         if (side === 'user' && !thrown && G.passState === 'drop') {
-          if (USERQB !== 'smart') { if (t > hold) S.action(); }
+          const go = () => { if (THROW === 'auto') { S.throwBall(); return; }
+            const r = G.receivers[G.sel], deep = r && (r.x - G.los)/PPY > 12;
+            S.action(); if (THROW === 'touch' || (THROW === 'smart' && deep)) S.releaseThrow('key'); };
+          if (USERQB !== 'smart') { if (t > hold) go(); }
           else if (t > 0.6) { const r = G.receivers[G.sel]; let n = 1e9; if (r) for (const q of G.defenders) n = Math.min(n, Math.hypot(q.x-r.x, q.y-r.y));
-            if (n > 2.5*PPY || t > 2.5) S.action(); }
+            if (n > 2.5*PPY || t > 2.5) go(); }
         }
         const d = G.userDef, c = G.carrier;
         if (side === 'cpu' && BOT === 'human' && d && c) {
@@ -76,16 +83,17 @@ for (const SIDE of ['cpu', 'user']) for (let n0 = 0; n0 < N; n0 += CH) {
       const spot = G._td && !intc ? 110*PPY : G._spot;
       const gain = intc ? 0 : ((spot - 40*PPY)/PPY);
       for (const k of ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift']) S.keys[k] = false;
-      out.push({ id, thrown, caught, intc, sack, scramble, air: air == null ? null : +air.toFixed(1), gain: +gain.toFixed(1), yac: catchX == null ? null : +((spot - catchX)/PPY).toFixed(1), td: !!G._td && !intc });
+      const kind = G.ball && G.ball.kind;
+      out.push({ id, kind, thrown, caught, intc, sack, scramble, air: air == null ? null : +air.toFixed(1), gain: +gain.toFixed(1), yac: catchX == null ? null : +((spot - catchX)/PPY).toFixed(1), td: !!G._td && !intc });
     }
     return out;
   };
   return run(SIDE);
- }, [n0, Math.min(CH, N - n0), BOT, REACT, USERQB, PASSIDS, SIDE]);
+ }, [n0, Math.min(CH, N - n0), BOT, REACT, USERQB, PASSIDS, SIDE, THROW]);
  res[SIDE].push(...part);
 }
-console.log('defender bot:', BOT, BOT === 'human' ? 'react ' + REACT + 's' : '', '  your QB:', USERQB);
-for (const side of ['cpu', 'user']) {
+console.log('defender bot:', BOT, BOT === 'human' ? 'react ' + REACT + 's' : '', '  your QB:', USERQB, '  throws:', THROW);
+for (const side of SIDES) {
   const r = res[side], att = r.filter(x => x.thrown), comp = att.filter(x => x.caught && !x.intc);
   const pct = (a, b) => (100*a/Math.max(1, b)).toFixed(1)+'%';
   const ypd = r.reduce((s, x) => s + x.gain, 0)/r.length;
