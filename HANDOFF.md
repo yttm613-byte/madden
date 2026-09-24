@@ -200,6 +200,16 @@ safeties). Deep catch odds fall 0.042 a yard past 18 (floor 0.24), in both
 **Before the snap, switch cycles the defense** (`switchDef`, `DEF_ORDER`: linebackers,
 line, safeties, corners); live, it takes the man nearest the ball.
 
+**Two player models.** `assets/gridiron_player_lod.glb` is the same build at a third of
+the triangles (`LOD=0.3 node tools/player/build.mjs assets/gridiron_player_lod.glb`,
+~2.5 minutes; same skeleton, parts and morph). It loads after the full model and
+`attachLod` gives every pooled player a second set of meshes on his own bones, with
+copies of his materials pushed into `u.mats` so tints reach both. `playerVis(u)` is
+the one place that decides which set is drawn and which parts cast shadows; players
+beyond `Q().lodDist` from the camera (ULTRA 30, HIGH 20, FAST/LITE everyone) use the
+light model. Measured at HIGH on the same scene: 1.52M → 0.77M triangles a frame. If
+you rebuild the full model, rebuild the light one too.
+
 **Only big parts cast shadows.** A player is 16 meshes and every one is a draw call,
 twice with shadows. `SHADOW_PARTS` (jersey, pants, skin, helmet, socks, cleats,
 gloves) are the only casters, and eyes, chin strap, visor and name bar are hidden past
