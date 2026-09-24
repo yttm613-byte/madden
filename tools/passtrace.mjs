@@ -32,10 +32,12 @@ if (process.env.RATINGS === 'random') await p.addInitScript(() => { window.__gbR
 await p.goto('http://localhost:' + (process.env.PORT || 8106) + '/index.sim.html', { waitUntil: 'load' });
 await p.waitForFunction(() => { try { return window.__sim && window.__sim.ready; } catch (e) { return false; } }, null, { timeout: 60000 });
 await p.click('#d-pro');
-// PLAYS=all cycles through every pass play in the book (read from index.html)
+// PLAYS=all cycles through every pass play in the book (read from index.html);
+// PLAYS=screen,bubble runs just those
 const ALL = process.env.PLAYS === 'all';
 const PASSIDS = ALL ? [...(await (await fetch('http://localhost:' + (process.env.PORT || 8106) + '/index.html')).text())
-  .matchAll(/^\s{4}(\w+):\s*\{form:'\w+', kind:'pass'(?![^\n]*special)/gm)].map(m => m[1]) : ['slants', 'verticals', 'screen', 'playaction'];
+  .matchAll(/^\s{4}(\w+):\s*\{form:'\w+', kind:'pass'(?![^\n]*special)/gm)].map(m => m[1])
+  : process.env.PLAYS ? process.env.PLAYS.split(',') : ['slants', 'verticals', 'screen', 'playaction'];
 const CH = 40, res = { cpu: [], user: [] };
 for (const SIDE of SIDES) for (let n0 = 0; n0 < N; n0 += CH) {
  const part = await p.evaluate(([N0, NN, BOT, REACT, USERQB, PASS, SIDE, THROW]) => {

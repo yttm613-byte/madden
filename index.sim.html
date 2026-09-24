@@ -1112,7 +1112,7 @@
     const play=PLAYS[playId]||PLAYS.dive; const type=play.kind; const cx=G.los;
     const F=FORMS[play.form]||FORMS.gun;
     G.playId=playId; G.playType=type; G.form=play.form||'gun';
-    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.windup=null; G.diveC=null; G.stiffT=0; G.stiffCd=0; G.fumble=null; G.pile=null; G.mesh=null; G.hole=null;
+    G.blockers=[]; G.receivers=[]; G.defenders=[]; G.ball={active:false}; G.runQB=null; G.handoff=null; G.ctrlBlocker=null; G.koKicker=null; G._koPhase=null; G.throwT=0; G.jukeT=0; G.jukeCd=0; G.windup=null; G.diveC=null; G.stiffT=0; G.stiffCd=0; G.fumble=null; G.pile=null; G.mesh=null; G.hole=null; G._scrRel=false;
     G.passState = type==='pass'?'drop':null; G.qbHurry=null; G.sel=0; G.selLock=0; G.burst=0; G.stamina=100; G.spinCd=0; G.reads=null; G.hotSel=null;
     document.getElementById('spinpip').textContent='SPIN READY';
     const Y=v=>fieldMid+yd(v);
@@ -1148,7 +1148,7 @@
         const trips=skill.filter(s=>s.pos==='WR' && (s.y-fieldMid)*side>0).sort((a,b)=>Math.abs(a.y-fieldMid)-Math.abs(b.y-fieldMid));
         for(const s of skill){
           if(s===trips[0]){ const r=ent(s); r.route=makeRoute('bubble',toC(s.y)); r.screen=true; G.receivers.push(r); }
-          else if(trips.includes(s)){ const b=ent(s); b.convoy=true; G.blockers.push(b); }
+          else if(trips.includes(s)){ const b=ent(s); b.convoy=true; b.stalk=true; G.blockers.push(b); }
           else if(s.pos==='WR'){ const r=ent(s); r.route=makeRoute('go',toC(s.y)); G.receivers.push(r); }
           else G.blockers.push(ent(s));
         }
@@ -1376,7 +1376,9 @@
     if(kind==='stick') return {legs:[{t:0.80,x:1,y:0},{t:0.25,x:0.1,y:-0.99*toC,sp:0.55},{t:99,x:0,y:0,sp:0}], depth:99};
     if(kind==='comeback') return {legs:[{t:1.8,x:1,y:0},{t:0.45,x:-0.6,y:-0.8*toC,sp:0.75},{t:99,x:0,y:0,sp:0}], depth:99};
     if(kind==='wheel') return {legs:[{t:0.85,x:0.35,y:-0.94*toC},{t:99,x:1,y:-0.08*toC}], depth:99};
-    if(kind==='bubble')return {legs:[{t:0.55,x:-0.45,y:-0.89*toC,sp:0.75},{t:99,x:1,y:-0.15*toC}], depth:99};
+    // a bubble bows back a yard and turns upfield running: caught near the line at full speed
+    // (bowing back 1.4 yards at three-quarter pace, it was caught 2.7 behind and standing)
+    if(kind==='bubble')return {legs:[{t:0.3,x:-0.35,y:-0.94*toC,sp:0.85},{t:0.25,x:0.3,y:-0.95*toC},{t:99,x:1,y:-0.12*toC}], depth:99};
     return {breakT:1.2,d1:{x:1,y:0},d2:norm(0.9,0.45*toC), depth:16};   // post
   }
   // the heading (and share of full speed) a route asks for, t seconds after the snap
@@ -2121,7 +2123,10 @@
   // for the back before he has the ball.
   function blockNearest(dt,pool,only,focus){
     const f=focus||G.carrier;
-    for(const b of G.blockers){
+    // stalk blockers claim their men first: after a bubble is caught every lineman ranks
+    // the whole field, and the first in line took the man a receiver was walled off on
+    const list = G.blockers.some(b=>b.stalk) ? G.blockers.filter(b=>b.stalk).concat(G.blockers.filter(b=>!b.stalk)) : G.blockers;
+    for(const b of list){
       if(b.noblock || b===G.ctrlBlocker) continue;   // QB hands off; user-controlled blocker is steered by you
       if(only && !only(b)) continue;
       // a pulling lineman gets to the edge first, and only then looks for a man
@@ -2132,8 +2137,15 @@
       // on proximity to the carrier assigned blockers to men 30 yards across the field
       // on kick/punt returns, where coverage is spread over the full width — they never
       // arrived, and only 0.2 of 12 coverage defenders ever got blocked.
-      for(const d of pool){ if(d.shed || (d._takenBy&&d._takenBy!==b)) continue;
-        const dd=dist(d,f)+dist(d,b)*0.6; if(dd<bd){bd=dd;best=d;} }
+      // A bubble's receivers stalk the man over them. Ranked like everyone else, by threat
+      // to the ball, the middle one took the defender over the runner and nobody ever
+      // blocked the one over HIM, who made the tackle on nearly every bubble for a yard.
+      // ...and stay on him: the man covering the runner drifts out toward the middle
+      // receiver, who used to swap onto him and set the one over himself free again.
+      const tg=b.target;
+      if(b.stalk && tg && !tg.shed && (!tg._takenBy || tg._takenBy===b) && pool.includes(tg)) best=tg;   // (a claim lapses beyond 2.4yd, so not "is he mine" but "is he nobody else's")
+      else for(const d of pool){ if(d.shed || (d._takenBy&&d._takenBy!==b)) continue;
+        const dd = b.stalk ? dist(d,f)*0.35+dist(d,b) : dist(d,f)+dist(d,b)*0.6; if(dd<bd){bd=dd;best=d;} }
       b.target=best;
       if(best){ best._takenBy=b;
         // Clock the matchup from the moment a blocker picks him up, not from actual
@@ -2517,7 +2529,9 @@
     const m=Math.hypot(hx,hy)||1; hx/=m; hy/=m;
     // Through the line he runs flat out, not only when the nearest man is 8 yards away:
     // a back who hit the second level at jogging pace was run down by every safety.
-    const open = nd>yd(8) || (!G._returning && c.x>G.los+yd(2.5) && nd>yd(2.2));
+    // (a screen is caught behind the line with blockers already out in front, and is run
+    // flat out from the catch: jogging to the line, the bubble was run down from inside)
+    const open = nd>yd(8) || (!G._returning && (c.x>G.los+yd(2.5) || c.screen) && nd>yd(2.2));
     // He tires the way you do off the sprint button: from 2.6s into a designed run he
     // fades 3% a second to 93%. Never tiring, three in five carries that reached 20 yards
     // went the distance (NFL: about one in ten); to 88%, none ever did.
@@ -2576,6 +2590,12 @@
     // who is staying in to block picks him up; the rip move is how you beat him. Nobody
     // ever blocked him, so sending him every down was a free runner at the quarterback.
     const you=G.offense==='cpu'?G.userDef:null;
+    // On the back's screen the guard and tackle on his side let their men go at half a
+    // second and lead him out: the convoy a real screen runs behind. The tight end and
+    // slot alone got it about four yards (NFL ~6).
+    if(convoy && !G._scrRel && (PLAYS[G.playId]||{}).screen==='rb' && (G.playT||0)>0.5){ G._scrRel=true;
+      const line=G.blockers.filter(b=>!b.pos && [60,64,66,72,76].includes(b.n)).sort((a,b)=>G.side*((b.y-fieldMid)-(a.y-fieldMid)));
+      for(const b of line.slice(0,2)){ if(b.target){ if(b.target._takenBy===b) b.target._takenBy=null; b.target=null; } b.convoy=true; } }
     blockNearest(dt, G.defenders.filter(d=>d.job==='rush' || (d===you && d.x<G.los+yd(1.5))), convoy?(b=>!b.convoy):null);
     if(convoy) blockNearest(dt, G.defenders.filter(d=>d.job!=='rush'), b=>b.convoy, convoy);
   }
@@ -2660,10 +2680,18 @@
     const w0=play.shot?22:(quick?7.5:8.5);
     const PL=play.shot?0.4:0, t0=look+(hold-look)*PL;
     const want = elapsed<t0 ? w0 : w0 - (elapsed-t0)*(w0-4)/Math.max(0.05,hold-t0);
-    // a screen is thrown on time, once the back has set up behind his convoy
+    // A screen is the play: he throws it on time, once the runner has set up behind his
+    // convoy, and if a man is still sitting on him a beat later he throws it into the
+    // dirt. His eyes stay on it. (The back is last in every progression, so his misread
+    // was never rolled and the test below was NaN: the back's screen was never thrown,
+    // and the "screen" was a deep ball to the go routes clearing it out — 65% complete.)
     const scr=G.receivers.findIndex(r=>r.screen);
-    if(scr>=0){ let n=1e9; for(const dd of G.defenders) if(dd.job!=='rush') n=Math.min(n,dist(dd,G.receivers[scr]));
-      if(elapsed>(PLAYS[G.playId]&&PLAYS[G.playId].screen==='wr'?0.35:0.7) && n/PPY+G.receivers[scr].misread>1.8){ G.sel=scr; throwBall(); return; } }
+    if(scr>=0){ const R=G.receivers[scr], t0=play.screen==='wr'?0.35:0.7;
+      if(R.misread==null) R.misread=(Math.random()+Math.random()-1)*1.3;
+      let n=1e9; for(const dd of G.defenders) if(dd.job!=='rush') n=Math.min(n,dist(dd,R));
+      if(elapsed>t0 && n/PPY+R.misread>1.8){ G.sel=scr; throwBall(); return; }
+      if(elapsed>t0+0.6 || mustThrow){ throwAway(scr); return; }
+      return; }
     const goodLook = elapsed>look && be>=want;
     if(goodLook || mustThrow){
       if(mustThrow && bs<2.0 && pr<yd(2.0)){ G.passState='scramble'; setMsg('SCRAMBLE!',0.7); return; }
@@ -2784,7 +2812,7 @@
     if(roll<pInt+pCatch){
       // caught in stride, not at a standstill: keeping 40% of his speed let the trailing
       // man tackle almost every receiver on the spot (median yards after catch ~1)
-      G.carrier={x:r.x,y:r.y,vx:r.vx*0.75,vy:r.vy*0.75,n:r.n,role:'wr',rt:r.rt,sf:r.sf};
+      G.carrier={x:r.x,y:r.y,vx:r.vx*0.75,vy:r.vy*0.75,n:r.n,role:'wr',rt:r.rt,sf:r.sf,screen:!!r.screen};
       const others=G.receivers.filter(x=>x!==r); G.receivers=[];
       for(const o of others){ o.target=null; o._takenBy=null; G.blockers.push(o); }
       // Everyone needs a beat to react to the ball arriving. Without it the trailing
@@ -3575,7 +3603,7 @@
   // is Mixamo-named with Mixamo bone frames, so applyPose below drives it unchanged.
   const SKIN_HEX=[0x3b2219,0x4d2c1c,0x5f3824,0x74462c,0x8c5a3a,0xa86f4c,0xc38c66,0xdcaa86,0xeec4a2];
   const SKIN_W  =[0.10,  0.13,  0.14,  0.14,  0.12,  0.10,  0.09,  0.10,  0.08];
-  const SHADOW_PARTS={Jersey:1,Pants:1,Skin:1,Helmet:1,Socks:1,Cleats:1,Gloves:1,LODBody:1}, DETAIL_PARTS={Eyes:1,ChinStrap:1,NameBar:1,Visor:1};
+  const SHADOW_PARTS={Jersey:1,Pants:1,Skin:1,Helmet:1,Socks:1,Cleats:1,Gloves:1,LODBody:1,'Hi:Skin':1,'Hi:Belt':1}, DETAIL_PARTS={Eyes:1,ChinStrap:1,NameBar:1,Visor:1};
   // How each part of the kit takes the light: roughness, metalness, environment intensity.
   // The shell is glossy, but at envMapIntensity 1.9 + metalness 0.5 it mirrored the bright
   // stadium and a BLACK helmet rendered silver. The team colour has to win.
@@ -3596,14 +3624,24 @@
     const parts=[]; lo.scene.traverse(m=>{ if(m.isSkinnedMesh && m.material && PART_RME[m.material.name]) parts.push(m); });
     if(!parts.length) return null;
     parts.sort((a,b)=>LOD_BODY_PARTS.indexOf(a.material.name)-LOD_BODY_PARTS.indexOf(b.material.name));
+    const geo=mergePartsGeometry(parts); if(!geo) return null;
+    _lodBody={geo, src:parts[0]}; return _lodBody;
+  }
+  // The full model's parts that can share a draw: the untextured ones, and the three that
+  // share the sock weave's normal map. (Jersey, pants and gloves keep their own maps.)
+  const HI_GROUPS=[['Skin','Eyes','Cleats','Helmet','HelmetStripe','Facemask','ChinStrap'], ['Belt','JerseyTrim','Socks']];
+  const _hiGeo=new Map();
+  // One skinned geometry from several parts on the same skin: each vertex carries its part
+  // (partId, an index into LOD_BODY_PARTS) and that part's surface (partRME).
+  function mergePartsGeometry(parts){
     let nv=0, ni=0; for(const m of parts){ nv+=m.geometry.attributes.position.count; ni+=m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count; }
     if(nv>65535) return null;
     const pos=new Float32Array(nv*3), nor=new Float32Array(nv*3), col=new Float32Array(nv*3), sw=new Float32Array(nv*4), si=new Uint16Array(nv*4),
-          mph=new Float32Array(nv*3), pid=new Float32Array(nv), rme=new Float32Array(nv*3), idx=new Uint16Array(ni);
+          mph=new Float32Array(nv*3), pid=new Float32Array(nv), rme=new Float32Array(nv*3), uv=new Float32Array(nv*2), idx=new Uint16Array(ni);
     let v0=0, i0=0;
     for(const m of parts){ const g=m.geometry, A=g.attributes, n=A.position.count, k=LOD_BODY_PARTS.indexOf(m.material.name), R=PART_RME[m.material.name];
       const put=(dst,attr,w,def)=>{ for(let v=0;v<n;v++) for(let c=0;c<w;c++) dst[(v0+v)*w+c] = attr ? attr.array[v*attr.itemSize+c] : def; };
-      put(pos,A.position,3,0); put(nor,A.normal,3,0); put(col,A.color,3,1); put(sw,A.skinWeight,4,0); put(si,A.skinIndex,4,0);
+      put(pos,A.position,3,0); put(nor,A.normal,3,0); put(col,A.color,3,1); put(sw,A.skinWeight,4,0); put(si,A.skinIndex,4,0); put(uv,A.uv,2,0);
       const mt=g.morphAttributes && g.morphAttributes.position && g.morphAttributes.position[0]; put(mph,mt,3,0);
       for(let v=0;v<n;v++){ pid[v0+v]=k; rme[(v0+v)*3]=R[0]; rme[(v0+v)*3+1]=R[1]; rme[(v0+v)*3+2]=R[2]; }
       if(g.index) for(let j=0;j<g.index.count;j++) idx[i0+j]=g.index.array[j]+v0; else for(let j=0;j<n;j++) idx[i0+j]=v0+j;
@@ -3612,10 +3650,10 @@
     geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));
     geo.setAttribute('color',new THREE.BufferAttribute(col,3)); geo.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));
     geo.setAttribute('skinIndex',new THREE.BufferAttribute(si,4)); geo.setAttribute('partId',new THREE.BufferAttribute(pid,1));
-    geo.setAttribute('partRME',new THREE.BufferAttribute(rme,3)); geo.setIndex(new THREE.BufferAttribute(idx,1));
+    geo.setAttribute('partRME',new THREE.BufferAttribute(rme,3)); geo.setAttribute('uv',new THREE.BufferAttribute(uv,2)); geo.setIndex(new THREE.BufferAttribute(idx,1));
     geo.morphAttributes.position=[new THREE.BufferAttribute(mph,3)];
     geo.morphTargetsRelative = parts.some(m=>m.geometry.morphTargetsRelative);
-    _lodBody={geo, src:parts[0]}; return _lodBody;
+    return geo;
   }
   function lodBodyShader(sh, mat){
     sh.uniforms.partColor=mat.userData.partColor;
@@ -3653,18 +3691,18 @@
         LOD_BODY_PARTS.forEach((n,i)=>{ (u.mats[n]=u.mats[n]||[]).push({color:cols[i]}); });
         const lm=new THREE.SkinnedMesh(body.geo, mat); lm.name='LOD_Body'; lm.frustumCulled=false;
         lm.position.copy(m.position); lm.quaternion.copy(m.quaternion); lm.scale.copy(m.scale);
-        hi.parent.add(lm); lm.bind(sk, m.bindMatrix.clone());
+        (u.meshParent||hi.parent).add(lm); lm.bind(sk, m.bindMatrix.clone());
         if(lm.morphTargetInfluences && lm.morphTargetInfluences.length){ u.morphs.push(lm); lm.morphTargetInfluences[0]=Math.max(0,u.heavy); }
         lod.push(lm); } }
     lo.scene.traverse(m=>{ if(!m.isSkinnedMesh || !m.material) return;
-      const name=m.material.name, hi=(u.parts[name]||[])[0], src=(u.mats[name]||[])[0]; if(!hi || !src) return;
+      const name=m.material.name, hi=(u.parts[name]||[])[0], src=(u.mats[name]||[])[0]; if(!hi || !src || !src.isMaterial) return;
       if(body && lod.length && PART_RME[name]) return;          // drawn by the merged body
       const sk=skelFor(m); if(!sk) return;
       const mat=src.clone(); mat.morphTargets=!!(m.geometry.morphAttributes && m.geometry.morphAttributes.position); mat.skinning=true;
       u.mats[name].push(mat);
       const lm=new THREE.SkinnedMesh(m.geometry, mat); lm.name='LOD_'+name; lm.frustumCulled=false; lm.renderOrder=hi.renderOrder;
       lm.position.copy(m.position); lm.quaternion.copy(m.quaternion); lm.scale.copy(m.scale);
-      hi.parent.add(lm); lm.bind(sk, m.bindMatrix.clone());
+      (u.meshParent||hi.parent).add(lm); lm.bind(sk, m.bindMatrix.clone());
       if(lm.morphTargetInfluences && lm.morphTargetInfluences.length){ u.morphs.push(lm); lm.morphTargetInfluences[0]=Math.max(0,u.heavy); }
       lod.push(lm); });
     u.lod=lod; u.team=null; u.numKey=null; u.lodOn=undefined;   // re-tint and re-number on the next frame, and re-pick the model
@@ -3718,6 +3756,24 @@
     if(cleatHex>=0) each('Cleats',m=>setSRGB(m,cleatHex));
     each('ChinStrap',m=>setSRGB(m,chinHex));
     // team ring (reliable team distinction at a glance)
+    // The nearest men wear the full model, and it was sixteen draw calls a man: the parts
+    // in each HI_GROUPS group now share one mesh, coloured per part like the light model.
+    const meshParent=(parts['Skin']||[])[0] ? parts['Skin'][0].parent : model;
+    for(const names of HI_GROUPS){
+      const list=names.map(n=>(parts[n]||[])[0]).filter(Boolean); if(list.length<2) continue;
+      const key=names.join('+'); if(!_hiGeo.has(key)) _hiGeo.set(key, mergePartsGeometry(list));
+      const geo=_hiGeo.get(key); if(!geo) continue;
+      const cols=LOD_BODY_PARTS.map(n=>(mats[n]&&mats[n][0]) ? mats[n][0].color.clone() : new THREE.Color(1,1,1));
+      const nmSrc=list.find(o=>o.material.normalMap);
+      const mat=new THREE.MeshStandardMaterial({vertexColors:true, skinning:true, morphTargets:true, roughness:1, metalness:0, normalMap:nmSrc?nmSrc.material.normalMap:null});
+      if(nmSrc) mat.normalScale.copy(nmSrc.material.normalScale);
+      mat.name='Hi:'+names[0]; mat.userData.partColor={value:cols}; mat.onBeforeCompile=sh=>lodBodyShader(sh,mat);
+      const mm=new THREE.SkinnedMesh(geo, mat); mm.name='Hi_'+names[0]; mm.frustumCulled=false; mm.castShadow=true;
+      meshParent.add(mm); mm.bind(list[0].skeleton, list[0].bindMatrix);
+      for(const n of names){ for(const o of (parts[n]||[])){ if(o.parent) o.parent.remove(o); const k=hiMeshes.indexOf(o); if(k>=0) hiMeshes.splice(k,1); }
+        mats[n]=[{color:cols[LOD_BODY_PARTS.indexOf(n)]}]; }
+      hiMeshes.push(mm);
+    }
     // (the ring and the soft shadow blob under him are drawn for everyone at once by
     // groundMarks(); u.ring only holds whether his is showing and in which colour)
     const ring={visible:false, material:{color:new THREE.Color(0x3a86ff)}};
@@ -3732,7 +3788,7 @@
     // the model carries a 'heavy' morph target (belly, neck, seat, thighs, arms): the
     // game dials it in per position so linemen are big men, not stretched receivers
     const morphs=[]; model.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetInfluences.length) morphs.push(o); });
-    grp.userData={ring,mats,parts,hiMeshes,lod:null,lodOn:false,wearsVisor,detailOn:true,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, morphs, heavy:-1};
+    grp.userData={ring,mats,parts,hiMeshes,meshParent,lod:null,lodOn:false,wearsVisor,detailOn:true,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, morphs, heavy:-1};
     initRig(grp.userData, model);
     grp.visible=false; scene.add(grp); return grp;
   }
@@ -4190,37 +4246,57 @@
     const g=actx.createGain(); g.gain.value=0; g.gain.setTargetAtTime(0.045,actx.currentTime,0.8);
     src.connect(hp).connect(lp).connect(g).connect(actx.destination); src.start(); wxSnd={src,g};
   }catch(e){} }
+  // Many static meshes that look alike, drawn as one: each part is [mesh, uvScaleX, uvScaleY]
+  // (its own position/rotation/scale is baked in; a texture's per-mesh repeat is baked into
+  // the UVs, so they can share one texture). The stands, towers, benches, pylons and posts
+  // were ~40 draw calls a frame for scenery that never moves.
+  function mergeMeshes(parts, mat){
+    let nv=0, ni=0; for(const [m] of parts){ const g=m.geometry; nv+=g.attributes.position.count; ni+=g.index?g.index.count:g.attributes.position.count; }
+    const pos=new Float32Array(nv*3), nor=new Float32Array(nv*3), uv=new Float32Array(nv*2), idx=nv>65535?new Uint32Array(ni):new Uint16Array(ni);
+    const v=new THREE.Vector3(), nm=new THREE.Matrix3(); let v0=0, i0=0;
+    for(const [m,sx,sy] of parts){ m.updateMatrix(); const g=m.geometry, P=g.attributes.position, N=g.attributes.normal, U=g.attributes.uv; nm.getNormalMatrix(m.matrix);
+      for(let i=0;i<P.count;i++){ v.fromBufferAttribute(P,i).applyMatrix4(m.matrix); pos[(v0+i)*3]=v.x; pos[(v0+i)*3+1]=v.y; pos[(v0+i)*3+2]=v.z;
+        v.fromBufferAttribute(N,i).applyMatrix3(nm).normalize(); nor[(v0+i)*3]=v.x; nor[(v0+i)*3+1]=v.y; nor[(v0+i)*3+2]=v.z;
+        if(U){ uv[(v0+i)*2]=U.getX(i)*(sx||1); uv[(v0+i)*2+1]=U.getY(i)*(sy||1); } }
+      if(g.index) for(let j=0;j<g.index.count;j++) idx[i0+j]=g.index.array[j]+v0; else for(let j=0;j<P.count;j++) idx[i0+j]=v0+j;
+      v0+=P.count; i0+=g.index?g.index.count:P.count; g.dispose(); }
+    const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+    geo.setAttribute('uv',new THREE.BufferAttribute(uv,2)); geo.setIndex(new THREE.BufferAttribute(idx,1));
+    return new THREE.Mesh(geo, mat);
+  }
   function goalpost3D(x){
     const m=new THREE.MeshStandardMaterial({color:0xffe44a,emissive:0x6a560e,emissiveIntensity:0.6,roughness:0.3,metalness:0.35});
     const z0=26.65, crossH=3.3, halfW=3.05, g=new THREE.Group();
-    const base=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.2,crossH,14), m); base.position.set(x,crossH/2,z0); base.castShadow=true; g.add(base);
+    const frame=[];
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.2,crossH,14), m); base.position.set(x,crossH/2,z0); frame.push([base]);
     const pad=new THREE.Mesh(new THREE.CylinderGeometry(0.33,0.33,1.5,14), new THREE.MeshStandardMaterial({color:0xc22,roughness:0.85})); pad.position.set(x,0.75,z0); g.add(pad);
-    const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,halfW*2,14), m); bar.rotation.x=Math.PI/2; bar.position.set(x,crossH,z0); bar.castShadow=true; g.add(bar);
-    [-halfW,halfW].forEach(z=>{ const up=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,6.8,14), m); up.position.set(x,crossH+3.4,z0+z); up.castShadow=true; g.add(up); });
+    const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,halfW*2,14), m); bar.rotation.x=Math.PI/2; bar.position.set(x,crossH,z0); frame.push([bar]);
+    [-halfW,halfW].forEach(z=>{ const up=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,6.8,14), m); up.position.set(x,crossH+3.4,z0+z); frame.push([up]); });
+    const fm=mergeMeshes(frame, m); fm.castShadow=true; g.add(fm);
     scene.add(g); return g;
   }
   function buildStands(){
-    const ct=crowdTexture();
+    const ct=crowdTexture(), crowd=[], roofs=[], skirts=[];
     function stand(cx,cz,w,d,ox,oz){
-      const t1=ct.clone(); t1.needsUpdate=true; t1.repeat.set(Math.max(4,w/7),3);
-      const lower=new THREE.Mesh(new THREE.BoxGeometry(w,14,d), new THREE.MeshStandardMaterial({map:t1,roughness:1})); lower.position.set(cx,7,cz); scene.add(lower);
-      const t2=ct.clone(); t2.needsUpdate=true; t2.repeat.set(Math.max(4,w/7),2.4);
-      const upper=new THREE.Mesh(new THREE.BoxGeometry(w*0.98,11,d*0.78), new THREE.MeshStandardMaterial({map:t2,roughness:1}));
-      upper.position.set(cx+ox*d*0.55,18.5,cz+oz*d*0.55); scene.add(upper);
-      const roof=new THREE.Mesh(new THREE.BoxGeometry(w+5,1.4,d*0.95), new THREE.MeshStandardMaterial({color:0x0f1521,roughness:0.9,metalness:0.25}));
-      roof.position.set(cx+ox*d*0.55,25,cz+oz*d*0.55); scene.add(roof);
-      const skirt=new THREE.Mesh(new THREE.BoxGeometry(w+2,4,d+2), new THREE.MeshStandardMaterial({color:0x121826,roughness:1})); skirt.position.set(cx,2,cz); scene.add(skirt);
+      const lower=new THREE.Mesh(new THREE.BoxGeometry(w,14,d)); lower.position.set(cx,7,cz); crowd.push([lower, Math.max(4,w/7), 3]);
+      const upper=new THREE.Mesh(new THREE.BoxGeometry(w*0.98,11,d*0.78)); upper.position.set(cx+ox*d*0.55,18.5,cz+oz*d*0.55); crowd.push([upper, Math.max(4,w/7), 2.4]);
+      const roof=new THREE.Mesh(new THREE.BoxGeometry(w+5,1.4,d*0.95)); roof.position.set(cx+ox*d*0.55,25,cz+oz*d*0.55); roofs.push([roof]);
+      const skirt=new THREE.Mesh(new THREE.BoxGeometry(w+2,4,d+2)); skirt.position.set(cx,2,cz); skirts.push([skirt]);
     }
     stand(60,-24,196,30, 0,-1); stand(60,77,196,30, 0,1);
     stand(-26,26.65,30,164, -1,0); stand(144,26.65,30,164, 1,0);
+    scene.add(mergeMeshes(crowd, new THREE.MeshStandardMaterial({map:ct,roughness:1})));
+    scene.add(mergeMeshes(roofs, new THREE.MeshStandardMaterial({color:0x0f1521,roughness:0.9,metalness:0.25})));
+    scene.add(mergeMeshes(skirts, new THREE.MeshStandardMaterial({color:0x121826,roughness:1})));
   }
   let _glowTex=null;
   function glowTex(){ if(_glowTex) return _glowTex; const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d');
     const gr=g.createRadialGradient(32,32,0,32,32,32); gr.addColorStop(0,'rgba(255,250,228,0.95)'); gr.addColorStop(0.4,'rgba(255,244,210,0.32)'); gr.addColorStop(1,'rgba(255,244,210,0)');
     g.fillStyle=gr; g.fillRect(0,0,64,64); _glowTex=new THREE.CanvasTexture(c); return _glowTex; }
+  const _towers={poles:[], banks:[]};
   function lightTower(x,z){
-    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,30,8), new THREE.MeshStandardMaterial({color:0x2a2f3a,roughness:0.8})); pole.position.set(x,15,z); scene.add(pole);
-    const bank=new THREE.Mesh(new THREE.BoxGeometry(9,4.5,1.2), new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff2c0,emissiveIntensity:1.2})); bank.position.set(x,30,z); bank.lookAt(60,0,26.65); scene.add(bank);
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,30,8)); pole.position.set(x,15,z); _towers.poles.push([pole]);
+    const bank=new THREE.Mesh(new THREE.BoxGeometry(9,4.5,1.2)); bank.position.set(x,30,z); bank.lookAt(60,0,26.65); _towers.banks.push([bank]);
     const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(),color:0xfff4e0,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
     glow.scale.set(16,9,1); glow.position.set(x,30,z); scene.add(glow);
     const lp=new THREE.PointLight(0xfff4e0,0.6,300,1.5); lp.position.set(x,30,z); scene.add(lp);
@@ -4228,11 +4304,14 @@
   // team benches + a row of standing sideline players to frame the field with life
   function buildSidelines(){
     // benches/tents only — no stick-figure sideline players (they clashed with the real models)
+    const benches=[], tents=[];
     function sideline(z){
-      const bench=new THREE.Mesh(new THREE.BoxGeometry(34,0.8,2.4), new THREE.MeshStandardMaterial({color:0x10151f,roughness:1})); bench.position.set(60,0.5,z); scene.add(bench);
-      const tent=new THREE.Mesh(new THREE.BoxGeometry(16,0.4,3.6), new THREE.MeshStandardMaterial({color:0x1a2230,roughness:1})); tent.position.set(60,4.6,z); scene.add(tent);
+      const bench=new THREE.Mesh(new THREE.BoxGeometry(34,0.8,2.4)); bench.position.set(60,0.5,z); benches.push([bench]);
+      const tent=new THREE.Mesh(new THREE.BoxGeometry(16,0.4,3.6)); tent.position.set(60,4.6,z); tents.push([tent]);
     }
     sideline(-3.0); sideline(56.3);
+    scene.add(mergeMeshes(benches, new THREE.MeshStandardMaterial({color:0x10151f,roughness:1})));
+    scene.add(mergeMeshes(tents, new THREE.MeshStandardMaterial({color:0x1a2230,roughness:1})));
   }
   function buildFlashes(){
     const geo=new THREE.PlaneGeometry(0.7,0.7);
@@ -4281,7 +4360,8 @@
     catchMark.rotation.x=-Math.PI/2; catchMark.position.y=0.05; catchMark.visible=false; scene.add(catchMark);
     // goal-line pylons (orange, slightly emissive)
     { const pm=new THREE.MeshStandardMaterial({color:0xff7a18,emissive:0x903e00,emissiveIntensity:0.7,roughness:0.6});
-      for(const px of [10,110]) for(const pz of [0.15,53.15]){ const p=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.5,0.16),pm); p.position.set(px,0.25,pz); scene.add(p); } }
+      const py=[]; for(const px of [10,110]) for(const pz of [0.15,53.15]){ const p=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.5,0.16)); p.position.set(px,0.25,pz); py.push([p]); }
+      scene.add(mergeMeshes(py, pm)); }
     // sideline chain crew markers: orange down pole at the LOS, yellow-flag pole at the first-down spot
     function chainPole(top){ const grp2=new THREE.Group();
       const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,2.4,8), new THREE.MeshStandardMaterial({color:0xdddddd,roughness:0.5})); pole.position.y=1.2; grp2.add(pole);
@@ -4293,15 +4373,19 @@
     buildSidelines();
     buildFlashes();
     lightTower(-30,-30); lightTower(150,-30); lightTower(-30,83); lightTower(150,83);
+    scene.add(mergeMeshes(_towers.poles, new THREE.MeshStandardMaterial({color:0x2a2f3a,roughness:0.8})));
+    scene.add(mergeMeshes(_towers.banks, new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff2c0,emissiveIntensity:1.2})));
     nearPosts=goalpost3D(0.5); goalpost3D(119.5);
     ballMesh=new THREE.Mesh(new THREE.SphereGeometry(0.4,20,16), new THREE.MeshStandardMaterial({color:0x3d1f0c,roughness:0.66,metalness:0.02})); ballMesh.scale.set(...BALL_LIVE);
     { const white=new THREE.MeshStandardMaterial({color:0xe8e4d8,roughness:0.58});
       // laces run along the ball's long axis (X); the old box ran across it
-      const laces=new THREE.Mesh(new THREE.BoxGeometry(0.30,0.055,0.05), white); laces.position.set(0,0.38,0); ballMesh.add(laces);
-      for(let i=-2;i<=2;i++){ const st=new THREE.Mesh(new THREE.BoxGeometry(0.028,0.05,0.13), white); st.position.set(i*0.062,0.40,0); ballMesh.add(st); }
+      const trim=[];
+      const laces=new THREE.Mesh(new THREE.BoxGeometry(0.30,0.055,0.05)); laces.position.set(0,0.38,0); trim.push([laces]);
+      for(let i=-2;i<=2;i++){ const st=new THREE.Mesh(new THREE.BoxGeometry(0.028,0.05,0.13)); st.position.set(i*0.062,0.40,0); trim.push([st]); }
       // the two white stripes near each end
-      for(const sx of [-0.2,0.2]){ const r=new THREE.Mesh(new THREE.TorusGeometry(0.345,0.028,8,24), white);
-        r.rotation.y=Math.PI/2; r.position.set(sx,0,0); ballMesh.add(r); } }
+      for(const sx of [-0.2,0.2]){ const r=new THREE.Mesh(new THREE.TorusGeometry(0.345,0.028,8,24));
+        r.rotation.y=Math.PI/2; r.position.set(sx,0,0); trim.push([r]); }
+      ballMesh.add(mergeMeshes(trim, white)); }       // laces, stitches and stripes: one draw, not eight
     ballMesh.castShadow=true; ballMesh.visible=false; scene.add(ballMesh);
     // the routes, drawn on the turf while you call your shot
     // (a flat ribbon with an arrowhead: GL lines are one pixel wide and vanish at range)
@@ -4878,7 +4962,8 @@
       camera.lookAt(camLook); }
     if(nearPosts) nearPosts.visible = camera.position.x > 4;   // never shoot the play through the near uprights
     updateWeather(lastDt||0.016);
-    for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; } else if(Math.random()<0.025){ f.material.opacity=0.95; f.lookAt(camera.position); } }
+    // (a flash at zero opacity is still a draw call: 44 of them, a quarter lit at a time)
+    for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; } else if(Math.random()<0.025){ f.material.opacity=0.95; f.lookAt(camera.position); } f.visible=f.material.opacity>0.02; }
     // slide the tight shadow frustum onto the action, keeping the light direction fixed
     if(sunLight){ const fx=camLook.x, fz=camLook.z;
       sunLight.target.position.set(fx,0,fz); sunLight.target.updateMatrixWorld();
