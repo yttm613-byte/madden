@@ -16,9 +16,11 @@ await p.route(u => u.hostname !== 'localhost', r => r.abort());
 await p.goto('http://localhost:' + (process.env.PORT || 8106) + '/index.sim.html', { waitUntil: 'load' });
 await p.waitForFunction(() => { try { return window.__sim && window.__sim.ready; } catch (e) { return false; } }, null, { timeout: 60000 });
 await p.click('#d-pro');
-const r = await p.evaluate((N) => {
+// in chunks: one long evaluate slows to a crawl
+const r = { kick: [], punt: [] };
+for (let n0 = 0; n0 < 2*N; n0 += 40) { const part = await p.evaluate(([N0, NN]) => {
   const S = window.__sim, PPY = (560-52)/53.3, out = { kick: [], punt: [] };
-  for (let n = 0; n < 2*N; n++) {
+  for (let n = N0; n < N0 + NN; n++) {
     const G = S.G, kind = n % 2 ? 'punt' : 'kick';
     G.phase = 'playcall'; G.flag = null; G.fumble = null; G.conv = null; G.twoPt = false; G._td = false; G._turn = false; G.clock = 60; G.qtr = 2;
     if (kind === 'kick') S.startKickoff('cpu');
@@ -31,7 +33,7 @@ const r = await p.evaluate((N) => {
     if (G._td) out[kind].push(100); else if (m) out[kind].push(+m[1]);
   }
   return out;
-}, N);
+}, [n0, Math.min(40, 2*N - n0)]); r.kick.push(...part.kick); r.punt.push(...part.punt); }
 for (const k of ['kick', 'punt']) { const a = r[k]; const mean = a.reduce((s, x) => s+x, 0)/Math.max(1, a.length);
   console.log(`${k} returns: n=${a.length} mean ${mean.toFixed(1)} yd  (NFL ${k === 'kick' ? '~22-23' : '~9'})  min ${Math.min(...a)} max ${Math.max(...a)}`); }
 console.log('page errors:', errs.length);

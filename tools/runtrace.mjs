@@ -21,15 +21,20 @@ await p.route(u => u.hostname !== 'localhost', r => r.abort());
 await p.goto('http://localhost:' + (process.env.PORT || 8106) + '/index.sim.html', { waitUntil: 'load' });
 await p.waitForFunction(() => { try { return window.__sim && window.__sim.ready; } catch (e) { return false; } }, null, { timeout: 60000 });
 await p.click('#d-pro');
-const r = await p.evaluate(([N, BOT]) => {
+// PLAYS=all runs every run play in the book (read from index.html), not just the original three
+const RUNIDS = process.env.PLAYS === 'all' ? [...(await (await fetch('http://localhost:' + (process.env.PORT || 8106) + '/index.html')).text())
+  .matchAll(/^\s{4}(\w+):\s*\{form:'\w+', kind:'run'(?![^\n]*special)/gm)].map(m => m[1]) : ['dive', 'sweep', 'draw'];
+// in chunks: one long evaluate slows to a crawl as the page never gets to breathe
+const r = [];
+for (let n0 = 0; n0 < N; n0 += 60) r.push(...await p.evaluate(([N0, NN, BOT, RUNIDS]) => {
   const S = window.__sim, PPY = (560-52)/53.3, DT = 1/60, out = [];
-  const plays = ['dive', 'sweep', 'draw'];
-  for (let n = 0; n < N; n++) {
+  const plays = RUNIDS;
+  for (let n = N0; n < N0 + NN; n++) {
     const G = S.G;
     G.phase = 'playcall'; G.flag = null; G._returning = false; G._retKind = null; G.conv = null; G.twoPt = false; G.fumble = null;
     G._koFlight = false; G._koPhase = null; G._fgFlight = false; G.ball = { active: false }; G._td = false; G._turn = false;
     G.offense = 'cpu'; G.los = 40*PPY; G.firstX = 50*PPY; G.down = 1; G.clock = 60; G.qtr = 2;
-    const id = plays[n % 3];
+    const id = plays[n % plays.length];
     S.setupPlay(id); G.phase = 'presnap'; G.autoSnap = 99;
     S.snap(); if (G.phase !== 'live') { n--; continue; }       // a pre-snap flag: restage
     let t = 0, fum = false;
@@ -47,7 +52,7 @@ const r = await p.evaluate(([N, BOT]) => {
     out.push({ id, gain: +gain.toFixed(1), td: !!G._td });
   }
   return out;
-}, [N, BOT]);
+}, [n0, Math.min(60, N - n0), BOT, RUNIDS]));
 console.log('defender bot:', BOT);
 const g = r.map(x => x.gain).sort((a, b) => a-b);
 const pct = f => (100*g.filter(f).length/g.length).toFixed(1)+'%';
@@ -56,6 +61,6 @@ console.log(`CPU carries: ${g.length}   mean ${mean.toFixed(2)} yd (NFL 4.3)   m
 console.log(`  stuffed at/behind the line: ${pct(x => x <= 0)} (NFL ~17-20%)`);
 console.log(`  10+ yards: ${pct(x => x >= 10)} (NFL ~11%)    20+ yards: ${pct(x => x >= 20)} (NFL ~2.5%)    touchdowns: ${r.filter(x => x.td).length}`);
 console.log(`  min ${g[0]}  p10 ${g[Math.floor(g.length*0.1)]}  p90 ${g[Math.floor(g.length*0.9)]}  max ${g[g.length-1]}`);
-for (const id of ['dive', 'sweep', 'draw']) { const a = r.filter(x => x.id === id).map(x => x.gain); if (a.length) console.log(`  ${id.padEnd(6)} n=${a.length} mean ${(a.reduce((s, x) => s+x, 0)/a.length).toFixed(2)}  stuffed ${(100*a.filter(x => x <= 0).length/a.length).toFixed(0)}%  10+ ${(100*a.filter(x => x >= 10).length/a.length).toFixed(0)}%`); }
+for (const id of RUNIDS) { const a = r.filter(x => x.id === id).map(x => x.gain); if (a.length) console.log(`  ${id.padEnd(6)} n=${a.length} mean ${(a.reduce((s, x) => s+x, 0)/a.length).toFixed(2)}  stuffed ${(100*a.filter(x => x <= 0).length/a.length).toFixed(0)}%  10+ ${(100*a.filter(x => x >= 10).length/a.length).toFixed(0)}%`); }
 console.log('page errors:', errs.length);
 await b.close();
