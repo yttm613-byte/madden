@@ -7,7 +7,7 @@ const src = fs.readFileSync('index.html', 'utf8');
 const ANCHOR = '  newGame(); G.phase=\'start\';';
 if (!src.includes(ANCHOR)) { console.error('anchor not found in index.html'); process.exit(1); }
 
-const TEST = `  window.__gb={get G(){return G;},get ready(){return playersReady;},get pool(){return pPool;},get scene(){return scene;},get camera(){return camera;},get renderer(){return renderer;},startFG,startKick,fgLock,choosePlay,snap,action,setupPlay,juke,recordFrame,startReplay,stopReplay,cycleQuality,toggleFullscreen,startConversion,tryFumble,startPossession,update,keys,render3D,get q(){return qKey;}};\n`;
+const TEST = `  window.__gb={get G(){return G;},get ready(){return playersReady;},get pool(){return pPool;},get scene(){return scene;},get camera(){return camera;},get renderer(){return renderer;},startFG,startKick,fgLock,choosePlay,snap,action,setupPlay,juke,recordFrame,startReplay,stopReplay,cycleQuality,toggleFullscreen,startConversion,tryFumble,startPossession,update,keys,render3D,pollPad,padBar,togglePause,get PAD(){return PAD;},get q(){return qKey;}};\n`;
 // The sim build is for harnesses that step the game themselves: it never draws a frame,
 // makes no sound and speaks no commentary. Software-rendering the scene and synthesising
 // the crowd between a harness's calls was most of the CPU a long run used.
