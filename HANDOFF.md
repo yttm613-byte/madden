@@ -224,7 +224,13 @@ mesh a man, the team rings and shadow blobs under everyone became two instanced 
 (`groundMarks`; `u.ring` is only a `{visible, material.color}` holder now), and each
 player's meshes share **one skeleton** (cloned, every part had its own copy of the 65
 bones, recomputed and re-uploaded as a bone texture every frame — 300-odd a frame):
-450 → 186–224 draw calls on the same seeded scene, triangles about the same. Toggle
+450 → 186–224 draw calls on the same seeded scene, triangles about the same. Then the
+full model got the same treatment for the few men near the camera (`HI_GROUPS`: the
+seven untextured parts in one mesh, the three that share the sock weave's normal map in
+another — 16 draws a man → 7), static scenery that looks alike became one mesh apiece
+(`mergeMeshes`: stands, roofs, towers, benches, pylons, goalpost frames, the football's
+trim), and the 44 crowd flashes are hidden while dark: a scene with five men near the
+camera went 164 → 106. Toggle
 `shadowParts`/`detailParts`, never `traverse` every mesh. Two r128 traps met on the
 way: an `InstancedMesh`'s colour buffer is sized from `count` the first time `setColorAt`
 runs (call it before shrinking `count`), and r128 only carries an instance colour to the
@@ -251,6 +257,20 @@ reached 20 yards scored. Things that did not work: making blocks sticky (a linem
 keeps his man ignores the one chasing the ball: sweeps 79% stuffed), and starting the
 linebacker's shed clock at contact rather than at pick-up (median 5 yards, the
 linebackers never made a tackle).
+
+**Screens were not screens.** The CPU only threw the back's screen once the man on the
+back was 1.8 yards off him, and the test used the back's misread — rolled only when a
+receiver comes up in the progression, where the back is always last — so it was NaN and
+never true: he read the field instead and threw the clearing go routes (65% complete,
+10-15 yards, labelled "screen"). Now `cpuDropAI` keeps his eyes on a called screen, throws
+it on time, and throws it away if it is still smothered 0.6s later. The bubble's
+receivers are `stalk` blockers: they take the man over them (threat to the ball counts
+for a third of the usual), stay on him, and claim him before the line ranks the field
+after the catch (every lineman used to grab the nearest threat first and knock the
+receiver off his man). A screen is run flat out from the catch (`c.screen`), the
+bubble is caught near the line running rather than 2.7 yards behind it standing, and on
+the back's screen the guard and tackle on his side let their men go at 0.5s and join the
+convoy (`passBlocks`, `G._scrRel`).
 
 **Per-play defender jobs outlive the play they were meant for.** `deep`,
 `contain`, `pa` and `cover` all persist through the catch unless cleared — which
@@ -285,6 +305,7 @@ like with like.
 | CPU sacked (your line rushes four ~65% of the time, wins sooner against him, and he needs 0.22–1.0s to react) | 4.5% (three runs; was 0.2–1.1%) | 6.5% |
 | CPU interceptions / net yards per dropback (same) | 0.5–1.9% / 7.2–8.6 | 2.3% / 6.3 |
 | CPU completion by air yards: 0–9 / 10–19 / 20+ | 78–79% / 55–57% / 33–42% | 72% / 55% / 35% |
+| CPU screens (`passtrace SIDES=cpu PLAYS=screen,bubble`): the back's / the bubble | 91% for 5.1 yd / 91–94% for 4.7–5.0 yd (were 65–70% for 10–15 yd, all thrown deep to the go routes / 87–89% for 1.3) | ~80% for ~6 / ~4–5 yd |
 | CPU throws of 20+ air yards (share of attempts) | 18–20% (was 1–3%: see the deep-shot trap) | ~15% |
 | CPU yards after catch (median) | 2.2–2.4 | ~3 |
 | Punt return | 11.0–11.3 avg | ~9 |
@@ -323,8 +344,9 @@ Roughly in order of how much they would improve the game.
 2. ~~The AI pass rush never sacks the CPU quarterback~~ — 4.5% now (see the
    baselines). He still gets the ball out in ~1.5s on average (NFL ~2.7s) and
    rarely throws more than ~18 yards downfield.
-3. **Screens net ~3 yards** against an NFL ~6. The convoy blocks now; the back
-   catches it two yards behind the line and has to make it all up.
+3. ~~Screens net ~3 yards~~ — the back's screen nets ~5 (91% complete; NFL ~6) with the
+   guard and tackle on his side releasing into it at 0.5s, the bubble ~5 (NFL 4-5). See
+   the screens trap.
 4. **Scoring** was 51–63 a game; one full sim now scores 37. Not yet measured
    over enough games to call.
 5. ~~No audibles, no hot routes, no kneel-downs or spikes~~ — done (see the
