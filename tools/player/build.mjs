@@ -116,7 +116,9 @@ for (const P of PARTS) {
   project(P.f, m, P.h);
   if (P.hide) { const before = m.tris.length/3; m = cull(m, P.hide); log(`  culled ${before - m.tris.length/3} hidden tris`); }
   m = largestComponents(m, 64, 40);
-  m = decimate(m, P.target, { log: s => log(s), protect: P.protect || null });
+  // LOD=0.3 builds a lighter model for far players: every part decimated to that share
+  // of its triangle target (same skeleton, weights and parts, so it poses identically)
+  m = decimate(m, Math.max(60, Math.round(P.target * (+process.env.LOD || 1))), { log: s => log(s), protect: P.protect || null });
   project(P.f, m, P.h, 2);
   // Cut exactly along every material boundary, then give each triangle the first
   // material whose test its centroid passes (the cuts make that test exact).

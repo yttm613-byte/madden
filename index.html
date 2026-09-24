@@ -3357,10 +3357,13 @@
   let sunLight=null;
   // ---- graphics quality tiers (default Ultra; drop a tier if the GPU struggles) ----
   const QUALITY={
-    ultra:{ label:'ULTRA', pr:2.0, shadow:4096, shadowDist:34, poseDist:52 },
-    high: { label:'HIGH',  pr:1.5, shadow:2048, shadowDist:22, poseDist:42 },
-    fast: { label:'FAST',  pr:1.0, shadow:1024, shadowDist:12, poseDist:30 },
-    lite: { label:'LITE',  pr:0.8, shadow:0,    shadowDist:0,  poseDist:22 },   // no shadows, 80% resolution
+    ultra:{ label:'ULTRA', pr:2.0, shadow:4096, shadowDist:34, poseDist:52, lodDist:30 },
+    high: { label:'HIGH',  pr:1.5, shadow:2048, shadowDist:22, poseDist:42, lodDist:20 },
+    fast: { label:'FAST',  pr:1.0, shadow:1024, shadowDist:12, poseDist:30, lodDist:0 },
+    lite: { label:'LITE',  pr:0.8, shadow:0,    shadowDist:0,  poseDist:22, lodDist:0 },   // no shadows, 80% resolution
+    // lodDist: players farther than this from the camera use the light model (a third of
+    // the triangles, same skeleton); 0 puts everyone on it — FAST and LITE are the tiers a
+    // struggling device has already stepped down to.
   };
   const QORDER=['ultra','high','fast','lite'];
   // Everyone used to start on ULTRA (twice the screen's resolution, 4096 shadows) with
@@ -3534,6 +3537,32 @@
   // is Mixamo-named with Mixamo bone frames, so applyPose below drives it unchanged.
   const SKIN_HEX=[0x3b2219,0x4d2c1c,0x5f3824,0x74462c,0x8c5a3a,0xa86f4c,0xc38c66,0xdcaa86,0xeec4a2];
   const SKIN_W  =[0.10,  0.13,  0.14,  0.14,  0.12,  0.10,  0.09,  0.10,  0.08];
+  const SHADOW_PARTS={Jersey:1,Pants:1,Skin:1,Helmet:1,Socks:1,Cleats:1,Gloves:1}, DETAIL_PARTS={Eyes:1,ChinStrap:1,NameBar:1,Visor:1};
+  // Which of a man's meshes are drawn and which cast shadows: full or light model
+  // (u.lodOn), small details up close only (u.detailOn), shadows near the camera only.
+  function playerVis(u){
+    const show=o=>{ const n=o.material.name; return (n!=='Visor'||u.wearsVisor) && (u.detailOn || !DETAIL_PARTS[n]); };
+    for(const o of u.hiMeshes){ o.visible = !u.lodOn && show(o); o.castShadow = !!u.shadowOn && !u.lodOn && !!SHADOW_PARTS[o.material.name]; }
+    for(const o of (u.lod||[])){ o.visible = !!u.lodOn && show(o); o.castShadow = !!u.shadowOn && !!u.lodOn && !!SHADOW_PARTS[o.material.name]; }
+  }
+  // Put the light model on a player: its meshes ride his own bones, with copies of his
+  // own materials (so skin tone, kit and numbers carry over, and later tints reach both).
+  function attachLod(g, lo){
+    const u=g.userData; if(!u || u.lod) return;
+    const boneBy={}; u.model.traverse(o=>{ if(o.isBone) boneBy[o.name]=o; });
+    const lod=[];
+    lo.scene.traverse(m=>{ if(!m.isSkinnedMesh || !m.material) return;
+      const name=m.material.name, hi=(u.parts[name]||[])[0], src=(u.mats[name]||[])[0]; if(!hi || !src) return;
+      const bones=m.skeleton.bones.map(b=>boneBy[b.name]); if(bones.some(b=>!b)) return;
+      const mat=src.clone(); mat.morphTargets=!!(m.geometry.morphAttributes && m.geometry.morphAttributes.position); mat.skinning=true;
+      u.mats[name].push(mat);
+      const lm=new THREE.SkinnedMesh(m.geometry, mat); lm.name='LOD_'+name; lm.frustumCulled=false; lm.renderOrder=hi.renderOrder;
+      lm.position.copy(m.position); lm.quaternion.copy(m.quaternion); lm.scale.copy(m.scale);
+      hi.parent.add(lm); lm.bind(new THREE.Skeleton(bones, m.skeleton.boneInverses.map(x=>x.clone())), m.bindMatrix.clone());
+      if(lm.morphTargetInfluences && lm.morphTargetInfluences.length){ u.morphs.push(lm); lm.morphTargetInfluences[0]=Math.max(0,u.heavy); }
+      lod.push(lm); });
+    u.lod=lod; u.team=null; u.numKey=null; u.lodOn=undefined;   // re-tint and re-number on the next frame, and re-pick the model
+  }
   function makePlayer(){
     const grp=new THREE.Group();
     const model=THREE.SkeletonUtils.clone(playerProto.scene);
@@ -3549,12 +3578,11 @@
     // Only the parts big enough to throw a visible shadow cast one. Every part used to,
     // and a player is 16 meshes: the shadow pass drew all 16 for each of 22 men, eyes,
     // chin strap and number patches included — shadows nobody could ever see.
-    const SHADOW_PARTS={Jersey:1,Pants:1,Skin:1,Helmet:1,Socks:1,Cleats:1,Gloves:1}, shadowParts=[], detailParts=[];
+    const hiMeshes=[];
     model.traverse(o=>{ if(!o.isMesh||!o.material) return;
       o.frustumCulled=false;
       o.material=o.material.clone(); const n=o.material.name;
-      o.castShadow=!!SHADOW_PARTS[n]; if(o.castShadow) shadowParts.push(o);
-      if(n==='Eyes'||n==='ChinStrap'||n==='NameBar'||n==='Visor') detailParts.push(o);
+      o.castShadow=!!SHADOW_PARTS[n]; hiMeshes.push(o);
       (mats[n]=mats[n]||[]).push(o.material); (parts[n]=parts[n]||[]).push(o); });
     const each=(n,f)=>{ for(const m of (mats[n]||[])) f(m); };
     const surf=(n,r,mt,env)=>each(n,m=>{ m.roughness=r; m.metalness=mt; m.envMapIntensity=env; });
@@ -3603,7 +3631,7 @@
     // the model carries a 'heavy' morph target (belly, neck, seat, thighs, arms): the
     // game dials it in per position so linemen are big men, not stretched receivers
     const morphs=[]; model.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetInfluences.length) morphs.push(o); });
-    grp.userData={ring,mats,parts,shadowParts,detailParts,wearsVisor,detailOn:true,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, morphs, heavy:-1};
+    grp.userData={ring,mats,parts,hiMeshes,lod:null,lodOn:false,wearsVisor,detailOn:true,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, morphs, heavy:-1};
     initRig(grp.userData, model);
     grp.visible=false; scene.add(grp); return grp;
   }
@@ -3986,6 +4014,8 @@
       const aniso=upgradeTextures(playerProto.scene);
       if(window.__gbDebug) console.log('texture anisotropy:',aniso);
       for(let i=0;i<24;i++) pPool.push(makePlayer());
+      if(!(typeof window!=='undefined' && window.__gbNoLod))
+        new THREE.GLTFLoader().load('assets/gridiron_player_lod.glb', lo=>{ try{ for(const g of pPool) attachLod(g, lo); }catch(e){ console.warn('lod model', e); } }, undefined, ()=>{});
       for(let i=0;i<6;i++){ const r=new THREE.Mesh(new THREE.RingGeometry(0.95,1.3,28),
         new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.DoubleSide,transparent:true,opacity:0.85,fog:false}));
         r.rotation.x=-Math.PI/2; r.position.y=0.06; r.visible=false; scene.add(r); ringPool.push(r); }
@@ -4336,12 +4366,11 @@
         // afford full detail.
         const qd=Q(), dxc=Math.abs(WX(e.x)-camera.position.x);
         const far = dxc>qd.poseDist;
-        if(u.shadowOn!==(dxc<qd.shadowDist)){ u.shadowOn=dxc<qd.shadowDist;
-          for(const o of u.shadowParts) o.castShadow=u.shadowOn; }
         // Details a few pixels across past ~26 yards (eyes, chin strap, visor, name bar)
-        // are not drawn out there: four fewer draw calls for every man down the field.
-        { const det = repFrame || dxc<26; if(u.detailOn!==det){ u.detailOn=det;
-            for(const o of u.detailParts) o.visible = det && (o.material.name!=='Visor' || u.wearsVisor); } }
+        // are not drawn out there, and past lodDist he is drawn with the light model.
+        { const det = repFrame || dxc<26, sh = dxc<qd.shadowDist;
+          const lodOn = !!(u.lod && u.lod.length) && Math.hypot(WX(e.x)-camera.position.x, WZ(e.y)-camera.position.z) > qd.lodDist;
+          if(u.lodOn!==lodOn || u.detailOn!==det || u.shadowOn!==sh){ u.lodOn=lodOn; u.detailOn=det; u.shadowOn=sh; playerVis(u); } }
         // ---- what is this man doing? -------------------------------------------------
         // The pose is chosen from his position and the moment in the play; the heading,
         // the IK targets (a man's chest, the ball, the ground) and the head's target come
@@ -4847,10 +4876,48 @@
   function saveSeason(){ try{ localStorage.setItem('gb-season', JSON.stringify(SEASON)); }catch(e){} }
   function seasonRecord(s){ let w=0,l=0,t=0; for(const r of s.results){ if(r.you>r.them) w++; else if(r.you<r.them) l++; else t++; } return {w,l,t}; }
   function recStr(r){ return r.w+'–'+r.l+(r.t?'–'+r.t:''); }
-  function seasonOpp(s){ return OPPONENTS[Math.min(s.results.length, OPPONENTS.length-1)]; }
+  function seasonOpp(s){
+    if(s.results.length>=REG_WEEKS && s.titleOpp){ const t=OPPONENTS.find(o=>o.abbr===s.titleOpp); if(t) return t; }
+    return OPPONENTS[Math.min(s.results.length, OPPONENTS.length-1)]; }
+  // ---- the rest of the league ----
+  // Every week the other teams play each other too (one has a bye), won by the stronger
+  // side more often than not, so the season has standings and the title game is against
+  // whoever finished on top of them.
+  function leagueInit(s){ if(!s.league){ s.league={}; } for(const o of OPPONENTS) if(!s.league[o.abbr]) s.league[o.abbr]={w:0,l:0,pf:0,pa:0}; }
+  function leagueRec(s, abbr, pf, pa){ const L=s.league[abbr]; if(!L) return; L.pf+=pf; L.pa+=pa; if(pf>pa) L.w++; else if(pf<pa) L.l++; }
+  function simWeek(s, wk, userOpp){
+    leagueInit(s);
+    const rnd=rng32(hashStr('week'+wk+':season'+((MYTEAM&&MYTEAM.seasonNo)||1)+':'+(s.seed||0)));
+    let teams=OPPONENTS.filter(o=>o.abbr!==userOpp);
+    for(let i=teams.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); const t=teams[i]; teams[i]=teams[j]; teams[j]=t; }
+    // an odd team out sits: whoever has played the most, so everyone's schedule evens out
+    if(teams.length%2){ const gp=o=>{ const L=s.league[o.abbr]; return L.w+L.l; }; let bi=0; teams.forEach((o,i)=>{ if(gp(o)>gp(teams[bi])) bi=i; }); teams.splice(bi,1); }
+    for(let i=0;i+1<teams.length;i+=2){ const A=teams[i], B=teams[i+1], pA=1/(1+Math.exp(-(A.str-B.str)*3));
+      const hi=17+Math.floor(rnd()*22), lo=Math.max(0, hi-1-Math.floor(rnd()*20)), aw=rnd()<pA;
+      leagueRec(s, A.abbr, aw?hi:lo, aw?lo:hi); leagueRec(s, B.abbr, aw?lo:hi, aw?hi:lo); }
+  }
+  function standings(s){ leagueInit(s);
+    const me=seasonRecord(s), rows=[{abbr:'YOU', you:true, w:me.w, l:me.l, pf:0, pa:0}];
+    for(const r of s.results) if(r.opp){ rows[0].pf+=r.you; rows[0].pa+=r.them; }
+    for(const o of OPPONENTS){ const L=s.league[o.abbr]; rows.push({abbr:o.abbr, name:o.name, str:o.str, w:L.w, l:L.l, pf:L.pf, pa:L.pa}); }
+    const pct=r=>(r.w+r.l)?r.w/(r.w+r.l):0;
+    return rows.sort((a,b)=>(pct(b)-pct(a)) || ((b.pf-b.pa)-(a.pf-a.pa)) || ((b.str||0)-(a.str||0))); }
+  function standLine(s, n){ return standings(s).slice(0,n||5).map((r,i)=>(i+1)+'. '+(r.you?'<b>YOU</b>':r.abbr)+' '+r.w+'–'+r.l).join(' · '); }
+  // the season's best player, from the season totals
+  function seasonMVP(){ const T=myTeam(), S=T.stats||{}, R=T.roster; let best=null, bs=0;
+    for(const k in S){ const p=S[k], n=+k; let sc=((p.rush||0)+(p.recYds||0))/10+(p.td||0)*6+(p.tkl||0)+(p.sacks||0)*3+(p.ints||0)*5;
+      if(n===12) sc+=(p.passYds||0)/25+(p.passTD||0)*4-(p.intsThrown||0)*2;
+      if(sc>bs && R[n]){ bs=sc; best=n; } }
+    if(best==null) return '';
+    const p=S[best], m=R[best], bits=[];
+    if(best===12 && p.passYds) bits.push(Math.round(p.passYds)+' passing yds, '+(p.passTD||0)+' TD');
+    if(p.rush) bits.push(Math.round(p.rush)+' rushing yds'); if(p.recYds) bits.push(Math.round(p.recYds)+' receiving yds');
+    if(p.td && best!==12) bits.push(p.td+' TD'); if(p.tkl) bits.push(p.tkl+' tackles'); if(p.sacks) bits.push(p.sacks+' sacks'); if(p.ints) bits.push(p.ints+' INT');
+    return '#'+best+' '+m.initial+'. '+m.name+' — '+bits.slice(0,3).join(', '); }
   function cpuLabel(){ const el=document.querySelector('#sb-cpu .lbl'); return (el && el.textContent) || 'CPU'; }
   function seasonNote(){ const el=document.getElementById('season-note'); if(!el) return; const s=loadSeason();
-    el.textContent = (!s || s.over) ? 'seven games, then the title game' : 'week '+(s.results.length+1)+' · '+recStr(seasonRecord(s))+' · next: '+seasonOpp(s).name; }
+    el.textContent = (!s || s.over) ? 'seven games, then the title game' : 'week '+(s.results.length+1)+' · '+recStr(seasonRecord(s))
+      +(s.results.length?' · '+(()=>{ const i=standings(s).findIndex(r=>r.you); return ['1st','2nd','3rd'][i]||((i+1)+'th'); })()+' in the league':'')+' · next: '+seasonOpp(s).name; }
   // an opponent's colours and name on the scoreboard (null: the exhibition CPU)
   function applyOpponent(o){
     Object.assign(TEAM_KIT.cpu, o ? o.kit : CPU_KIT0);
@@ -4859,9 +4926,9 @@
   }
   function resetOverButtons(){ document.getElementById('again').textContent='Run it back'; document.getElementById('to-menu').style.display='none';
     const t=document.getElementById('over-team'); if(t) t.style.display='none'; }
-  function startSeason(){ let s=loadSeason();
+  function startSeason(){ let s=loadSeason(); if(s && !s.seed) s.seed=(Math.random()*1e9)|0;
     if((!s || s.over) && myTeam().offseasonDue){ document.getElementById('start').classList.add('hidden'); showOffseason(startSeason); return; }
-    if(!s || s.over){ s={results:[], over:false}; beginTeamSeason(); } SEASON=s; saveSeason(); playSeasonGame(); }
+    if(!s || s.over){ s={results:[], over:false, seed:(Math.random()*1e9)|0}; beginTeamSeason(); } SEASON=s; saveSeason(); playSeasonGame(); }
   function playSeasonGame(){
     const s=SEASON, o=seasonOpp(s), wk=s.results.length, title=wk>=REG_WEEKS;
     applyOpponent(o);
@@ -5001,7 +5068,9 @@
     const hist=(T.history||[]).slice(-6).map(h=>'Season '+h.season+': '+h.w+'–'+h.l+(h.t?'–'+h.t:'')+(h.champ?' 🏆 champions':h.title?' · lost the title game':'')).join(' · ');
     return '<div class="cols">'+table(UNITS.slice(0,6),'OFFENSE')+table(UNITS.slice(6),'DEFENSE')+'</div>'
       +(L.length?'<div class="lead" style="margin-top:8px">Season leaders — '+L.join(' · ')+'</div>':'<div class="lead" style="margin-top:8px;opacity:.7">Play a season and your stat leaders show up here. Men who play well get better.</div>')
-      +(hist?'<div class="lead" style="opacity:.8">'+hist+'</div>':''); }
+      +(hist?'<div class="lead" style="opacity:.8">'+hist+'</div>':'')
+      +(()=>{ const sp=SEASON||loadSeason(); if(!sp || !sp.results || !sp.results.length) return '';
+          return '<div class="lead" style="margin-top:4px">League — '+standings(sp).map((r,i)=>(i+1)+'. '+(r.you?'<b>YOU</b>':r.abbr)+' '+r.w+'–'+r.l).join(' · ')+'</div>'; })(); }
   function showTeam(){ const T=myTeam(), sp=SEASON||loadSeason(); ensureAges(T);
     document.getElementById('team-sub').textContent='Season '+(T.seasonNo||1)+(sp&&sp.results&&sp.results.length&&!sp.over?' · '+recStr(seasonRecord(sp))+' after '+sp.results.length+' game'+(sp.results.length>1?'s':''):'')+' · team rating '+teamOvr();
     document.getElementById('team-body').innerHTML=teamHTML();
@@ -5009,19 +5078,25 @@
   function teamOvr(){ const R=myTeam().roster; let s=0,n=0; for(const [,ns] of UNITS) for(const k of ns){ if(R[k]){ s+=R[k].ovr; n++; } } return n?Math.round(s/n):0; }
   function teamNote(){ const el=document.getElementById('team-note'); if(el) el.textContent='team rating '+teamOvr()+' · season '+(myTeam().seasonNo||1); }
   function seasonAfterGame(u,c){
-    const s=SEASON, o=seasonOpp(s), title=s.results.length>=REG_WEEKS;
+    const s=SEASON, o=seasonOpp(s), title=s.results.length>=REG_WEEKS, wk=s.results.length;
     s.results.push({opp:o.abbr, you:u, them:c});
+    if(!title){ leagueInit(s); leagueRec(s, o.abbr, c, u); simWeek(s, wk, o.abbr); }
     foldSeason(); const prog=progressTeam();
     const r=seasonRecord(s); let line, next=null;
     if(title){ s.over=true; line = u>c ? 'CHAMPIONS! You beat the '+o.name+' · '+recStr(r) : 'The '+o.name+' take the title · '+recStr(r); }
     else if(s.results.length>=REG_WEEKS){
-      if(r.w>=4){ line='Regular season '+recStr(r)+' — you are in the title game!'; next='PLAY THE TITLE GAME'; }
+      if(r.w>=4){ const top=standings(s).find(x=>!x.you); s.titleOpp=top?top.abbr:null;
+        line='Regular season '+recStr(r)+' — you are in the title game, against the '+seasonOpp(s).name+'!'; next='PLAY THE TITLE GAME'; }
       else { s.over=true; line='Season over at '+recStr(r)+' — four wins get you to the title game.'; }
     } else { line='Record '+recStr(r)+' · next: the '+seasonOpp(s).name; next='NEXT GAME · WEEK '+(s.results.length+1); }
     saveSeason();
+    const mvp = s.over ? seasonMVP() : '';
     if(s.over){ const T=myTeam(); T.history=T.history||[]; T.history.push({season:T.seasonNo||1, w:r.w, l:r.l, t:r.t, title, champ:title&&u>c}); T.offseasonDue=true; saveTeam(); }
     const sub=document.getElementById('final-sub');
-    sub.innerHTML='<div style="margin:8px 0 2px;font-weight:600;font-size:15px">'+line+'</div>'+sub.innerHTML+progHTML(prog);
+    sub.innerHTML='<div style="margin:8px 0 2px;font-weight:600;font-size:15px">'+line+'</div>'
+      +(title?'':'<div style="font-size:12.5px;opacity:.85;margin-bottom:4px">Standings: '+standLine(s,5)+'</div>')
+      +(mvp?'<div style="font-size:13px;margin-bottom:4px">🏆 Season MVP: <b>'+mvp+'</b></div>':'')
+      +sub.innerHTML+progHTML(prog);
     document.getElementById('over-team').style.display='';
     document.getElementById('again').textContent = next || 'NEW SEASON';
     document.getElementById('to-menu').style.display='';
@@ -5247,8 +5322,8 @@
   document.getElementById('d-allpro').addEventListener('click',()=>startWith('allpro'));
   document.getElementById('again').addEventListener('click',()=>{
     if(TWO_P){ document.getElementById('over').classList.add('hidden'); startTwoPlayer(); return; }      // a rematch
-    if(SEASON){ if(SEASON.over && myTeam().offseasonDue){ document.getElementById('over').classList.add('hidden'); showOffseason(()=>{ SEASON={results:[], over:false}; saveSeason(); beginTeamSeason(); playSeasonGame(); }); return; }
-      if(SEASON.over){ SEASON={results:[], over:false}; saveSeason(); beginTeamSeason(); } playSeasonGame(); return; }
+    if(SEASON){ if(SEASON.over && myTeam().offseasonDue){ document.getElementById('over').classList.add('hidden'); showOffseason(()=>{ SEASON={results:[], over:false, seed:(Math.random()*1e9)|0}; saveSeason(); beginTeamSeason(); playSeasonGame(); }); return; }
+      if(SEASON.over){ SEASON={results:[], over:false, seed:(Math.random()*1e9)|0}; saveSeason(); beginTeamSeason(); } playSeasonGame(); return; }
     document.getElementById('over').classList.add('hidden'); document.getElementById('start').classList.remove('hidden'); seasonNote(); });
   document.getElementById('to-menu').addEventListener('click',()=>{ PRACTICE=false; setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons();
     document.getElementById('over').classList.add('hidden'); document.getElementById('start').classList.remove('hidden'); seasonNote(); });

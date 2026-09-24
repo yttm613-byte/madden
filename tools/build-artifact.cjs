@@ -53,6 +53,8 @@ s = s.replace('<style>', '<style>\n' + fontCss + '\n');
 const glb = b64('assets/gridiron_player.glb');
 const hdr = b64('assets/env.hdr');
 s = s.replace("'assets/gridiron_player.glb'", "'data:model/gltf-binary;base64," + glb + "'");
+// the light model for distant players (and for everyone on the FAST/LITE tiers)
+if (fs.existsSync('assets/gridiron_player_lod.glb')) s = s.replace("'assets/gridiron_player_lod.glb'", "'data:model/gltf-binary;base64," + b64('assets/gridiron_player_lod.glb') + "'");
 s = s.replace("'assets/env.hdr'", "'data:application/octet-stream;base64," + hdr + "'");
 
 // ---- 4. three.js and its loaders, inline and in order (LAST) ---------------------

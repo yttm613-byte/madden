@@ -15,7 +15,8 @@ const b = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--us
 const p = await b.newPage({ viewport: { width: 400, height: 460 } });
 const errs = []; p.on('pageerror', e => errs.push('PAGE ' + e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 await p.route(u => u.hostname !== 'localhost', r => r.abort());
-await p.goto('http://localhost:8106/tools/posebook.html', { waitUntil: 'load' });
+// MODEL=../assets/other.glb renders another build of the player (e.g. the LOD one)
+await p.goto('http://localhost:8106/tools/posebook.html' + (process.env.MODEL ? '?model=' + encodeURIComponent(process.env.MODEL) : ''), { waitUntil: 'load' });
 await p.waitForFunction(() => window.__ready || window.__err, null, { timeout: 90000 });
 const err = await p.evaluate(() => window.__err); if (err) { console.error('LOAD ERROR', err); process.exit(1); }
 const shots = [];
