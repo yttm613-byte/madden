@@ -138,6 +138,10 @@
   .padps #rlabels .rl.g0{background:#8fb4ff;} .padps #rlabels .rl.g1{background:#ff6b6b;} .padps #rlabels .rl.g2{background:#f59bd6;} .padps #rlabels .rl.g3{background:#5fe0b5;}
   #rlabels .rl.sel{box-shadow:0 0 0 3px var(--gold),0 1px 4px rgba(0,0,0,.5);}
   #pause{z-index:20;}
+  /* until the players have downloaded, a game cannot start: it would play out on an empty field */
+  #start.loading .btn:not(#d-team){opacity:.4; pointer-events:none; filter:grayscale(.6);}
+  #loadnote{font:600 13px 'Oswald',sans-serif; letter-spacing:.1em; color:var(--gold); min-height:1.2em;}
+  #start:not(.loading) #loadnote{display:none;}
   #tip{position:absolute; left:50%; top:21%; transform:translateX(-50%); z-index:9; max-width:min(560px,90%); padding:8px 14px 8px 12px; border-radius:9px;
     background:rgba(8,14,24,.9); border:1px solid #2c3e57; border-left:4px solid var(--gold); color:#dfe8f5; font:500 13px/1.5 'Oswald',sans-serif; letter-spacing:.02em;
     box-shadow:0 10px 30px rgba(0,0,0,.45); opacity:0; transition:opacity .25s; pointer-events:none;}
@@ -338,7 +342,7 @@
       <div id="fg-hint">Press SPACE / tap to lock</div>
     </div>
 
-    <div class="overlay" id="start">
+    <div class="overlay loading" id="start">
       <h1 class="title">GRIDIRON<br>BLITZ<small>HEAD TO HEAD</small></h1>
       <div class="keys kbd-only" id="quickhelp">Arrows/WASD run · <b>Space</b> hikes, throws, spins · <b>Shift</b> sprints · <b>Q/E</b> juke · <a href="#" id="howto" style="color:var(--gold)">How to play ▸</a></div>
       <div class="keys kbd-only hidden" id="fullhelp">
@@ -362,6 +366,7 @@
         <div class="modecol kbd-only"><button class="btn" id="d-2p" style="background:linear-gradient(180deg,#b9d6ff,#6fa6ff); box-shadow:0 6px 0 #3b64a8; color:#08101a;">2 Players</button>
           <span class="keys" id="twopnote"></span></div>
       </div>
+      <div id="loadnote">LOADING PLAYERS…</div>
       <div id="padnote" class="hidden"></div>
       <div class="keys portrait-tip">Tip: turn your phone sideways for the widest view of the field.</div>
       <div class="keys touch-only" style="font-size:12px;opacity:.85">Drag anywhere on the left to move · the red button hikes, throws, spins, or switches defender · <b>JUKE</b> cuts away from the nearest tackler (on defense it <b>DIVES</b>, or <b>RIPS</b> free of a block) · tap a receiver's number before the snap for a hot route.</div>
@@ -4009,6 +4014,7 @@
   }
   /*POSE-LIB-END*/
   function loadPlayers(){
+    const note=document.getElementById('loadnote');
     new THREE.GLTFLoader().load('assets/gridiron_player.glb', (gltf)=>{
       playerProto=gltf;
       const aniso=upgradeTextures(playerProto.scene);
@@ -4019,8 +4025,9 @@
       for(let i=0;i<6;i++){ const r=new THREE.Mesh(new THREE.RingGeometry(0.95,1.3,28),
         new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.DoubleSide,transparent:true,opacity:0.85,fog:false}));
         r.rotation.x=-Math.PI/2; r.position.y=0.06; r.visible=false; scene.add(r); ringPool.push(r); }
-      playersReady=true;
-    }, undefined, (e)=>{ console.error('player glb load failed', e); });
+      playersReady=true; document.getElementById('start').classList.remove('loading');
+    }, (ev)=>{ if(note && ev && ev.total) note.textContent='LOADING PLAYERS… '+Math.min(99,Math.round(100*ev.loaded/ev.total))+'%'; },
+    (e)=>{ console.error('player glb load failed', e); if(note) note.innerHTML='Could not load the players — <a href="" style="color:var(--gold)">reload</a> to try again'; });
   }
   let wxRain=null, wxSnow=null, wxCover=null, wxField=null, wxSky=null, wxT=0, wxSnd=null;
   function initWeather3D(){
