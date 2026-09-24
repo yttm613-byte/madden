@@ -1803,8 +1803,8 @@
 
   // ---- loop ----
   let last=performance.now();
-  function loop(now){ let dt=(now-last)/1000; last=now; if(dt>0.05) dt=0.05;
-    try{ pollPad(dt); }catch(e){}
+  function loop(now){ let dt=(now-last)/1000; last=now; const raw=Math.min(0.5,Math.max(0,dt)); if(dt>0.05) dt=0.05;
+    try{ pollPad(dt); autoQuality(raw); }catch(e){}   // quality judges real frame time, not the clamped game step
     if(G && G.paused){ lastDt=0; render3D(); padBar(); requestAnimationFrame(loop); return; }
     if(G && G.slowT>0){ G.slowT-=dt; dt*=0.3; }          // bullet time on a big hit
     lastDt=dt;
@@ -2952,19 +2952,41 @@
     ultra:{ label:'ULTRA', pr:2.0, shadow:4096, shadowDist:34, poseDist:52 },
     high: { label:'HIGH',  pr:1.5, shadow:2048, shadowDist:22, poseDist:42 },
     fast: { label:'FAST',  pr:1.0, shadow:1024, shadowDist:12, poseDist:30 },
+    lite: { label:'LITE',  pr:0.8, shadow:0,    shadowDist:0,  poseDist:22 },   // no shadows, 80% resolution
   };
-  const QORDER=['ultra','high','fast'];
-  let qKey='ultra'; try{ const s=localStorage.getItem('gb_quality'); if(s&&QUALITY[s]) qKey=s; }catch(e){}
+  const QORDER=['ultra','high','fast','lite'];
+  // Everyone used to start on ULTRA (twice the screen's resolution, 4096 shadows) with
+  // nothing to step down on a phone or a school laptop unless you found the button.
+  // A first visit on a touch screen or a small machine starts a notch down, and the
+  // game steps down on its own while the frame rate stays low — until you pick a
+  // setting yourself, which it then leaves alone.
+  let qKey='ultra', qAuto=true;
+  try{ const s=localStorage.getItem('gb_quality'); if(s&&QUALITY[s]) qKey=s;
+    else if((window.matchMedia&&matchMedia('(pointer:coarse)').matches) || (navigator.hardwareConcurrency||8)<=4) qKey='high';
+    if(localStorage.getItem('gb_quality_manual')==='1') qAuto=false; }catch(e){}
   const Q=()=>QUALITY[qKey];
   function applyQuality(){
     const q=Q();
     if(renderer){ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, q.pr)); resize3D(); }
     if(sunLight){ if(sunLight.shadow.map){ sunLight.shadow.map.dispose(); sunLight.shadow.map=null; }
-      sunLight.shadow.mapSize.set(q.shadow,q.shadow); }
-    const b=document.getElementById('qtog'); if(b) b.textContent='◆ '+q.label;
+      sunLight.castShadow = q.shadow>0; if(q.shadow>0) sunLight.shadow.mapSize.set(q.shadow,q.shadow); }
+    const b=document.getElementById('qtog'); if(b) b.textContent='◆ '+q.label+(qAuto?'':'');
     try{ localStorage.setItem('gb_quality',qKey); }catch(e){}
   }
-  function cycleQuality(){ qKey=QORDER[(QORDER.indexOf(qKey)+1)%QORDER.length]; applyQuality(); }
+  function cycleQuality(){ qKey=QORDER[(QORDER.indexOf(qKey)+1)%QORDER.length]; qAuto=false;
+    try{ localStorage.setItem('gb_quality_manual','1'); }catch(e){} applyQuality(); }
+  // frame time, smoothed, while a game is on the screen
+  let _ftEma=16, _qLow=0, _qHold=6;
+  function autoQuality(dt){
+    if(!qAuto || navigator.webdriver || !G || G.paused || G.phase==='start' || G.phase==='final' || document.hidden) return;
+    _ftEma += (dt*1000-_ftEma)*0.05;
+    if(_qHold>0){ _qHold-=dt; return; }                 // let a change settle before judging it
+    if(_ftEma>24){ _qLow+=dt;                           // under ~42 fps for a few seconds
+      if(_qLow>2.5){ const i=QORDER.indexOf(qKey);
+        if(i<QORDER.length-1){ qKey=QORDER[i+1]; applyQuality(); caption('GRAPHICS: '+Q().label+' — for a smoother game'); }
+        _qLow=0; _qHold=5; } }
+    else _qLow=Math.max(0,_qLow-dt*0.5);
+  }
   const TEAM_KIT={
     user:{jersey:0x1e58d8, trim:0xf0b429, helmet:0xe8ecf4, stripe:0x1e58d8, mask:0x10131a, sock:0x1e58d8, pants:0xe9ebef, belt:0x1e58d8},   // home: royal, gold trim, silver lid
     cpu: {jersey:0xa5131d, trim:0xe6e8ee, helmet:0x15171d, stripe:0xa5131d, mask:0x0e1014, sock:0x15171d, pants:0x1b1d24, belt:0x15171d},   // away: deep red on black
@@ -3626,7 +3648,7 @@
     scene.add(new THREE.AmbientLight(0x4a5a78,0.5));    // soft cool fill
     const sun=new THREE.DirectionalLight(0xfff4dc,1.45); sun.position.set(70,95,18); sun.castShadow=true;   // brighter key light
     sun.target.position.set(60,0,26.65); scene.add(sun.target);
-    sun.shadow.mapSize.set(Q().shadow,Q().shadow); sun.shadow.bias=-0.00018; sun.shadow.normalBias=0.012; sun.shadow.radius=1.4;
+    sun.shadow.mapSize.set(Q().shadow||1024,Q().shadow||1024); sun.castShadow=Q().shadow>0; sun.shadow.bias=-0.00018; sun.shadow.normalBias=0.012; sun.shadow.radius=1.4;
     // Tight frustum that follows the play: the same 2048 map covers ~30yd instead of
     // the whole 140yd field, which is a big jump in shadow detail on the players.
     const sc=sun.shadow.camera; sc.left=-26; sc.right=26; sc.top=20; sc.bottom=-20; sc.near=1; sc.far=200; scene.add(sun);
