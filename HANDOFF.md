@@ -185,6 +185,15 @@ two-player game both sides are people. Use `humanOff()`/`humanDef()` for "is thi
 side human" and `actOff()`/`actDef()` for "is the player who pressed this on offense".
 `G.offense==='user'` is still right for wording, stats and scoring (whose points).
 
+**Deep shots need a smooth reward and a little patience.** On a shot play the CPU
+quarterback's value for an open man grows with depth (`(depth-12)*0.55`), and his bar
+stays at 22 through the first 40% of his read window before it decays. The old flat
++6 bonus from 18 yards, with catch odds falling past 18, made him fire at exactly 18
+yards every time: 18.0 average air yards on every shot play and almost no 20+ throws.
+Play action now runs its go route outside (the old post and seam both ran into the
+safeties). Deep catch odds fall 0.042 a yard past 18 (floor 0.24), in both
+`resolveCatch` and the quarterback's read, which must stay in sync.
+
 **Only big parts cast shadows.** A player is 16 meshes and every one is a draw call,
 twice with shadows. `SHADOW_PARTS` (jersey, pants, skin, helmet, socks, cleats,
 gloves) are the only casters, and eyes, chin strap, visor and name bar are hidden past
@@ -226,7 +235,8 @@ like with like.
 | CPU completion, every pass play (`passtrace PLAYS=all`, human-like defender) | 63–68% | 65% |
 | CPU sacked (your line rushes four ~65% of the time, wins sooner against him, and he needs 0.22–1.0s to react) | 4.5% (three runs; was 0.2–1.1%) | 6.5% |
 | CPU interceptions / net yards per dropback (same) | 0.5–1.9% / 7.2–8.6 | 2.3% / 6.3 |
-| CPU completion by air yards: 0–9 / 10–19 / 20+ | 77–78% / 53–56% / 20–25% | 72% / 55% / 35% |
+| CPU completion by air yards: 0–9 / 10–19 / 20+ | 78–79% / 55–57% / 33–42% | 72% / 55% / 35% |
+| CPU throws of 20+ air yards (share of attempts) | 18–20% (was 1–3%: see the deep-shot trap) | ~15% |
 | CPU yards after catch (median) | 2.2–2.4 | ~3 |
 | Punt return | 11.0–11.3 avg | ~9 |
 | Kick return | 24.1–24.2 avg | ~22 |

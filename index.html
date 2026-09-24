@@ -972,7 +972,7 @@
     slants:    {form:'gun', kind:'pass', label:'SLANTS',      desc:'quick & safe',          routes:{wr:['slant','slant','slant']}, back:5.0, look:0.85, hold:2.0},
     verticals: {form:'gun', kind:'pass', label:'VERTS',       desc:'take a deep shot',      routes:{wr:['go','post','go']}, back:6.5, look:1.5, hold:2.7, shot:true},
     screen:    {form:'gun', kind:'pass', label:'SCREEN',      desc:'dump & block',          screen:'rb', back:5.5},
-    playaction:{form:'gun', kind:'pass', label:'PLAY ACTION', desc:'fake run, go deep',     routes:{wr:['post','go','out']}, pa:true, back:6.5, look:1.3, hold:2.6, shot:true},
+    playaction:{form:'gun', kind:'pass', label:'PLAY ACTION', desc:'fake run, go deep',     routes:{wr:['go','post','out']}, pa:true, back:6.5, look:1.3, hold:2.6, shot:true},
     // two receivers crossing underneath from opposite sides, rubbing off each other
     mesh:      {form:'gun', kind:'pass', label:'MESH',        desc:'crossers underneath',   routes:{wr:['cross','cross','dig']}, back:5.0, look:0.9, hold:2.2},
     // three levels to one side: go, out at eleven, and the back in the flat
@@ -2528,8 +2528,12 @@
       if(r.misread==null) r.misread=(Math.random()+Math.random()-1)*1.3;
       const sep=o.sep + r.misread, depth=o.depth;
       let p = sep>2.2?0.95 : sep>1.3?0.85 : sep>0.8?0.66 : 0.44;
-      p *= depth<9 ? 1 : depth<18 ? 1-(depth-9)*0.03 : Math.max(0.26, 0.73-(depth-18)*0.035);
-      const ev = p*(Math.max(0,depth)+4) - (sep<1.3 ? 3 : 0) + (play.shot && depth>=18 && sep>1.3 ? 6 : 0);
+      p *= depth<9 ? 1 : depth<18 ? 1-(depth-9)*0.03 : Math.max(0.24, 0.73-(depth-18)*0.042);
+      // On a shot play an open man is worth more the deeper he is. This was a flat +6
+      // from 18 yards on, and the catch odds fall off past that, so he fired the moment
+      // anyone crossed 18: every deep shot in the game was an 18-yard throw and fewer
+      // than 2% of all passes went 20+ (NFL ~15%).
+      const ev = p*(Math.max(0,depth)+4) - (sep<1.3 ? 3 : 0) + (play.shot && sep>1.3 ? Math.max(0,depth-12)*0.55 : 0);
       if(ev>be){be=ev;bs=sep;bi=i;} });
     // Protection holds for ~2.6s, so there is time to wait for a look; he used to give up
     // at 1.8s and force it, which is where most of his interceptions came from.
@@ -2539,7 +2543,12 @@
     // checkdown as the clock in his head runs down. Throwing to the first man 2.4 yards
     // clear, he found one at 0.7s on nearly every play — 86% of his throws were short
     // of ten yards and he completed 75% of them.
-    const w0=play.shot?18:(quick?7.5:8.5), want = w0 - (elapsed-look)*(w0-4)/(hold-look);
+    // ...and on a shot play he holds out for it through the first 40% of his window
+    // before he starts settling for less (measured: 17% of throws 20+ yards at 42%,
+    // 7% sacks, 7.3 yards a dropback)
+    const w0=play.shot?22:(quick?7.5:8.5);
+    const PL=play.shot?0.4:0, t0=look+(hold-look)*PL;
+    const want = elapsed<t0 ? w0 : w0 - (elapsed-t0)*(w0-4)/Math.max(0.05,hold-t0);
     // a screen is thrown on time, once the back has set up behind his convoy
     const scr=G.receivers.findIndex(r=>r.screen);
     if(scr>=0){ let n=1e9; for(const dd of G.defenders) if(dd.job!=='rush') n=Math.min(n,dist(dd,G.receivers[scr]));
@@ -2648,7 +2657,7 @@
     else {
       pCatch = sepY>2.2?0.95 : sepY>1.3?0.85 : sepY>0.8?0.66 : 0.44;
       pInt   = sepY>2.2?0.004 : sepY>1.3?0.012 : sepY>0.8?0.024 : 0.046;
-      pCatch *= airY<9 ? 1 : airY<18 ? 1-(airY-9)*0.03 : Math.max(0.26, 0.73-(airY-18)*0.035);
+      pCatch *= airY<9 ? 1 : airY<18 ? 1-(airY-9)*0.03 : Math.max(0.24, 0.73-(airY-18)*0.042);
       pInt   *= 1 + Math.max(0, Math.min(1.6, (airY-8)*0.06));
       pCatch *= 1 - Math.min(0.45, (rd/PPY)*0.15);
       pCatch = Math.min(0.985, pCatch*(1+rz(r.rt,'hnd')*0.004)*wx().cat);   // his hands, and the weather
