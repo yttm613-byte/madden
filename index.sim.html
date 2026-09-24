@@ -962,7 +962,7 @@
     else if(toGo<=3) pool = Math.random()<(hurry?0.25:0.6) ? ['sneak','goalpower','dive','power','iso'] : ['goalpa','slants','quick','stick'];
     else if(need<=2 && !hurry) pool = Math.random()<0.65 ? ['sneak','dive','power','iso','zone','goalpower'] : ['slants','stick','quick','playaction','boot'];
     else if(G.down>=3 && need>=7) pool = ['slants','verticals','mesh','flood','smash','curls','stick','tripsflood','trips4v','levels','quick','emptydeep','dagger','fourverts','screen','bubble'];
-    else pool = Math.random()<passP ? PASS_PLAYS : RUN_PLAYS;
+    else pool = Math.random()<passP ? PASS_PLAYS : OPEN_RUNS;
     const id = pool[Math.floor(Math.random()*pool.length)];
     setupPlay(id); G.phase='presnap'; G.defCall='balanced'; G.autoSnap = hurry ? 1.6 : milk ? 4.0 : 2.8;
     showDefCall();
@@ -1078,6 +1078,9 @@
     spike:     {form:'single', kind:'pass', label:'SPIKE', desc:'stop the clock', special:'spike'},
   };
   const RUN_PLAYS=Object.keys(PLAYS).filter(k=>PLAYS[k].kind==='run'&&!PLAYS[k].special), PASS_PLAYS=Object.keys(PLAYS).filter(k=>PLAYS[k].kind==='pass'&&!PLAYS[k].special);
+  // the runs a coach calls on an ordinary down: not the sneak or the goal-line power, which
+  // were a fifth of every CPU run from midfield and gained half a yard apiece
+  const OPEN_RUNS=RUN_PLAYS.filter(k=>PLAYS[k].form!=='goal');
   const HOLE_Y={A:0.75, B:2.2, C:3.65, edge:7.0};
 
   // precomputed stadium crowd (screen space)
@@ -1100,7 +1103,9 @@
   // told you the play before the snap.
   const OL=[[0,60],[-1.45,64],[1.45,66],[-2.9,72],[2.9,76]];      // yards from the ball, jersey
   const WR_OUT=17.2, WR_SLOT=9.0, TE_Y=4.4;
-  let PEN_DL=0.07, PEN_LB=0.04;
+  // how often a lineman / a linebacker wins his gap at the snap (0.07 / 0.04 stuffed 26% of
+  // CPU carries at or behind the line, against an NFL 17-20%)
+  let PEN_DL=0.05, PEN_LB=0.03;
   // open-field pursuit speed as a fraction of S.defSprint (the CPU back sprints at 9.4)
   const ROLE_SPEED={ CB:1.04, S:1.02, LB:0.95, MLB:0.95, DE:0.90, DT:0.84 };
   function setupPlay(playId, flip){
@@ -1259,8 +1264,9 @@
       for(const d of DL) d.pen=Math.random()<PEN_DL;
       for(const d of LB) d.pen=Math.random()<PEN_LB;
       // A safety who bites and commits downhill is how a back who bounces outside
-      // reaches the third level — the only source of explosive runs.
-      for(const d of SF) d.bite=Math.random()<0.45 ? 0.85+Math.random()*0.75 : 0;
+      // reaches the third level — the only source of explosive runs. (Two in three do:
+      // at 45% the deep pair stopped two runs in three that reached five yards.)
+      for(const d of SF) d.bite=Math.random()<0.65 ? 0.85+Math.random()*0.75 : 0;
       // The draw's whole point: the second level drops for the pass it thinks is
       // coming, and the back slips through underneath.
       if(play.draw) for(const d of LB) d.draw=0.7+Math.random()*0.45;
@@ -1295,10 +1301,12 @@
     return D;
   }
   // How long a man takes to get off a block once one is on him: linemen fight through in
-  // 2-3.5s, linebackers sooner, a corner or safety off a receiver soonest.
+  // 2-3.5s, linebackers sooner, a corner or safety off a receiver soonest. (Linebackers
+  // held to 2.5s let every carry through the second level: runs of 3-4 yards were half
+  // the NFL's share and 5-9 half as many again.)
   function shedSecs(role){
     return role==='DE'||role==='DT' ? 1.9+Math.random()*1.6
-         : role==='CB'||role==='S'  ? 0.8+Math.random()*1.1 : 1.2+Math.random()*1.3;
+         : role==='CB'||role==='S'  ? 0.8+Math.random()*1.1 : 1.1+Math.random()*1.2;
   }
   // Where a zone defender belongs while the quarterback holds the ball. Everyone not
   // rushing or in man coverage used to run to ONE point, ten yards deep between the
@@ -2287,10 +2295,11 @@
   // Without it every carry resolved in the same narrow band — measured across 75 runs:
   // min +1, max +30, exactly ONE carry over 10 yards. The NFL runs ~17% at or behind
   // the line and ~11% for 10+. A deterministic tackle radius cannot produce either.
+  // His elusiveness sets how slippery he is this play (an average man rolls exactly
+  // what everyone used to: uniform 0-1).
+  function brkOf(c){ if(c.brk===undefined){ const z=rz(c.rt,'elu')/7; c.brk=Math.max(0,Math.min(1, z ? 0.5+z*0.17+(Math.random()-0.5)*0.8 : Math.random())); c.brkN=0; c.brkCd=0; } return c.brk; }
   function tackleBreak(d,c){
-    // His elusiveness sets how slippery he is this play (an average man rolls exactly
-    // what everyone used to: uniform 0-1).
-    if(c.brk===undefined){ const z=rz(c.rt,'elu')/7; c.brk=Math.max(0,Math.min(1, z ? 0.5+z*0.17+(Math.random()-0.5)*0.8 : Math.random())); c.brkN=0; c.brkCd=0; }
+    brkOf(c);
     if(c.brkCd>0 || c.brkN>=3) return false;        // not five in a row, and never a cartoon
     const cs=Math.hypot(c.vx||0,c.vy||0)/PPY, dsp=Math.hypot(d.vx||0,d.vy||0)/PPY;
     let p = 0.07 + c.brk*0.15;                      // this carrier's elusiveness, this play
@@ -2299,12 +2308,13 @@
     if(dsp>7.2) p -= 0.07;                          // a full-speed square hit sticks
     if((d.blocked||0)>0) p += 0.10;                 // still shedding a blocker as he arrives
     // A corner or safety meeting a back in space misses more than a lineman in traffic
-    // does — that one-on-one is where every long run in football comes from.
-    if((d.role==='S'||d.role==='CB') && c.x>G.los+yd(4)) p += 0.09;
+    // does — that one-on-one is where every long run in football comes from. More so a
+    // running back on a designed run than a receiver after the catch.
+    if((d.role==='S'||d.role==='CB') && c.x>G.los+yd(4)) p += (G.playType==='run' && !G._returning) ? 0.16 : 0.09;
     p -= rz(d.rt,'tkl')*0.0025;                     // a sure tackler lets fewer go
     // a stiff arm only lands on a man in front of or beside you, never from behind
     let stiff=false;
-    if(humanOff() && (G.stiffT||0)>0){ const sp=Math.hypot(c.vx||0,c.vy||0)||1, dx=d.x-c.x, dy=d.y-c.y, dl=Math.hypot(dx,dy)||1;
+    if((G.stiffT||0)>0){ const sp=Math.hypot(c.vx||0,c.vy||0)||1, dx=d.x-c.x, dy=d.y-c.y, dl=Math.hypot(dx,dy)||1;
       if(((c.vx||0)*dx+(c.vy||0)*dy)/(sp*dl) > -0.25){ p+=0.40; stiff=true; } }
     if(Math.random() >= Math.max(0.02,Math.min(stiff?0.64:0.34,p))) return false;
     c.brkN++; c.brkCd=0.7;
@@ -2491,6 +2501,16 @@
       c.lane=bestY;
       hy=Math.max(-0.75,Math.min(0.75,(bestY-c.y)/yd(3.5)));
       if(near && nd<yd(4)){ const dy=c.y-near.y; hy += (dy>=0?1:-1)*(1-nd/yd(4))*0.8; }
+      // Past the line a back makes a move on the man closing on him, a third of a second
+      // before they meet: a jump cut or a stiff arm, rolled once per defender, more often
+      // the more elusive he is. Without it a run that reached the safety was decided by
+      // the tackle roll alone, and only one carry in eight that reached five yards made
+      // ten (NFL: about three in ten).
+      if(G.playType==='run' && near && !near.moved && c.x>G.los+yd(3)){
+        const rvx=(near.vx||0)-(c.vx||0), rvy=(near.vy||0)-(c.vy||0), cl=-((near.x-c.x)*rvx+(near.y-c.y)*rvy)/Math.max(1,nd);
+        if(cl>yd(2) && nd<yd(4.2) && nd/cl<0.32){ near.moved=true;
+          if(Math.random()<0.8*(0.55+0.9*brkOf(c))) cpuMove(c,near); }
+      }
     }
     if(c.y<fieldTop+yd(7)) hy+=0.5; if(c.y>fieldBot-yd(7)) hy-=0.5;
     hy=Math.max(-1.0,Math.min(1.0,hy));
@@ -2498,11 +2518,24 @@
     // Through the line he runs flat out, not only when the nearest man is 8 yards away:
     // a back who hit the second level at jogging pace was run down by every safety.
     const open = nd>yd(8) || (!G._returning && c.x>G.los+yd(2.5) && nd>yd(2.2));
-    const speed = (open?S.cpuSprint:S.cpuRun)*G.diff.cpu*(c.sf||1);
+    // He tires the way you do off the sprint button: from 2.6s into a designed run he
+    // fades 3% a second to 93%. Never tiring, three in five carries that reached 20 yards
+    // went the distance (NFL: about one in ten); to 88%, none ever did.
+    const tire = (G.playType==='run' && !G._returning) ? Math.max(0.93, 1-Math.max(0,(G.playT||0)-2.6)*0.03) : 1;
+    const speed = (open?S.cpuSprint:S.cpuRun)*G.diff.cpu*(c.sf||1)*tire;
     c.vx=hx*speed; c.vy=hy*speed; c.x+=c.vx*dt; c.y+=c.vy*dt;
     if(near && nd<S.spinR*1.05 && G.spinCd<=0 && Math.random()<0.5*dt) spin();   // ~0.5/s, not 0.04 PER FRAME (=2.4/s)
   }
 
+  function cpuMove(c,d){
+    if(Math.random()<0.55 && (G.jukeCd||0)<=0){          // jump cut, away from him
+      const dir=d.y>c.y?-1:1;
+      G.jukeCd=1.2; G.jukeT=0.34; G.jukeDir=dir; c.y+=dir*yd(0.45);
+      // it beats a man flying in at full speed; one who comes in under control (you,
+      // off the sprint button) stays with it more often than not
+      if(Math.hypot(d.vx||0,d.vy||0)>yd(8.2) || Math.random()<0.4){ d.whiff=Math.max(d.whiff||0,0.5); setMsg('MAKES HIM MISS!',0.7); }
+    } else if((G.stiffCd||0)<=0){ G.stiffCd=1.2; G.stiffT=0.55; }   // the next frontal tackle roll gets the stiff-arm bonus
+  }
   function updateDrop(dt,elapsed){
     const c=G.carrier;
     tickWindup(dt);
@@ -4462,7 +4495,7 @@
               if(nearD && nd<yd(2.4) && !(u.spinT>0)){ const h=g.rotation.y, lx=Math.cos(h), lz=-Math.sin(h);
                 const dx=WX(nearD.x)-WX(e.x), dz=WZ(nearD.y)-WZ(e.y), onLeft=(dx*lx+dz*lz)>0, free=P.ballArm==='L'?'R':'L';
                 if((onLeft?'L':'R')===free){ tgt=1; P.stiffArm=free; } }
-              if(live && (G.stiffT||0)>0 && humanOff()){ tgt=1; P.stiffArm=P.ballArm==='L'?'R':'L'; }   // stiff arm on the button
+              if(live && (G.stiffT||0)>0){ tgt=1; P.stiffArm=P.ballArm==='L'?'R':'L'; }   // stiff arm (yours on the button, or the CPU back's)
               u.stiffW=(u.stiffW||0)+(tgt-(u.stiffW||0))*Math.min(1,lastDt*9); P.stiff=u.stiffW;
             }
           }
@@ -5409,7 +5442,7 @@
 
   window.__gbNoDraw=true; window.__gbRatings=window.__gbRatings||'neutral'; window.__gbWeather=window.__gbWeather||'clear'; window.__gbNoIntro=true; window.__gbNoTips=true; window.__gbNoLod=true; try{ window.AudioContext=undefined; window.webkitAudioContext=undefined; Object.defineProperty(window,'speechSynthesis',{value:undefined,configurable:true}); }catch(e){}
   window.__sim={ get G(){return G;}, update, keys, choosePlay, action, snap, chooseDef,
-    startFG, startKick, startKickoff, startConversion, fgLock, juke, spin, setupPlay, startPossession, endPlay, startPunt, callTimeout, throwBall, swatBall, stiffArm, carrierDive, releaseThrow, makeRoster, rateUp, get ready(){return playersReady;}, get pool(){return pPool;} };
+    startFG, startKick, startKickoff, startConversion, fgLock, juke, spin, setupPlay, startPossession, endPlay, startPunt, callTimeout, throwBall, swatBall, stiffArm, carrierDive, releaseThrow, makeRoster, rateUp, ev:(s)=>eval(s), get ready(){return playersReady;}, get pool(){return pPool;} };
   newGame(); G.phase='start';
   document.getElementById('playcall').classList.add('hidden'); document.getElementById('defcall').classList.add('hidden');
   init3D(); applyWeather(WEATHER);

@@ -91,7 +91,7 @@ loop()           1170   requestAnimationFrame driver
 | `blockNearest` | 1109 | Blocker-to-defender assignment and shed timing (`shedSecs` 724), pulling linemen, screen convoys. |
 | `tackleHit` / `tackleBreak` | 1259 / 1272 | Reach grows with closing speed; broken tackles are rolled from angle, speed and a per-carrier elusiveness. |
 | `cpuDropAI` | 1600 | The CPU quarterback reads a **progression**, not the whole field: concept routes first (deep ones on a shot play), the back last, about 0.42s a read (0.3s on quick-game plays, which also throw on rhythm). He misses a blind-side rusher 30% of the time, which is where CPU sacks come from. |
-| `cpuRunAI` | 1410 | CPU ball carrier. Reads the line — which gap is open now and two and five yards on — and treats a blocked man as mostly out of the way. Returns keep the old whole-field lane vision. |
+| `cpuRunAI` / `cpuMove` | 2490 | CPU ball carrier. Reads the line — which gap is open now and two and five yards on — and treats a blocked man as mostly out of the way. Past LOS+3 he makes a move on the man closing on him (jump cut or stiff arm, once per defender), and on a designed run he tires from 2.6s. Returns keep the old whole-field lane vision. |
 | `passBlocks` / `openAt` / `cpuDropAI` | 1510 / 1527 / 1533 | Protection until the catch; how open a receiver will be where the ball can reach him (drives both the CPU's read and your "most open" marker); the CPU quarterback's expected-value read with per-play timing (`PLAYS[].look/hold/shot`). |
 | `resolveCatch` | 1653 | Catch odds by separation **and** throw depth; interception odds likewise. After the catch everyone becomes a pursuer — see the traps below. |
 | `callTimeout` / `cpuTimeoutCheck` / `cpuChoosePlay` | 3030 / 3042 / 527 | Clock football: three timeouts a half each (T, or tap the clock), the CPU stopping the clock when behind late, hurrying up or milking it, and going for it on fourth down when a field goal will not save it. |
@@ -221,6 +221,23 @@ shadow casters. Toggle `shadowParts`/`detailParts`, never `traverse` every mesh.
 already lays it on the turf; the 0.55 drop the tackle falls use buried every diver
 to the ankles (defender dive tackles included) until it was set to ~0.
 
+**The run game is a shape, not an average.** 3.6 yards a carry was a quarter stuffed, a
+fat 5-9 band and almost nothing past 10: the safeties, never blocked, stopped two in three
+runs that reached five yards, and the CPU called its sneak and goal-line power (half a
+yard apiece) on a fifth of ordinary downs. What fixed it, each measured with `runshape`:
+the CPU calls only `OPEN_RUNS` on normal downs; fewer penetrators (`PEN_DL` 0.05,
+`PEN_LB` 0.03, stuffs 26% → 20%); linebackers shed a little sooner (1.1–2.3s, fills the
+3-4 yard band); two safeties in three bite; a corner or safety in space misses a back
+more often on a designed run (+0.16, receivers after the catch keep +0.09); the CPU
+back makes a move on the man closing on him past LOS+3 (`cpuMove`: a jump cut, which
+only beats a man arriving at full speed — you, coming in off the sprint button, stay with
+it 60% of the time — or a stiff arm, which now works for the CPU too); and he **tires**
+from 2.6s into a designed run (3%/s to 93%), without which three in five carries that
+reached 20 yards scored. Things that did not work: making blocks sticky (a lineman who
+keeps his man ignores the one chasing the ball: sweeps 79% stuffed), and starting the
+linebacker's shed clock at contact rather than at pick-up (median 5 yards, the
+linebackers never made a tackle).
+
 **Per-play defender jobs outlive the play they were meant for.** `deep`,
 `contain`, `pa` and `cover` all persist through the catch unless cleared — which
 is how safeties once shadowed every receiver nine yards ahead all the way to the
@@ -241,10 +258,12 @@ like with like.
 
 | Metric | Current | NFL |
 |---|---|---|
-| CPU yards per carry, the original three runs (`runtrace`, BOT=chase) | 4.03–4.24 | 4.3 |
-| CPU carries stuffed at or behind the line (same) | 21–24% | 17–20% |
-| CPU carries of 10+ / 20+ yards (same) | 5.1–5.4% / 1.2–1.4% | 11% / 2.5% |
-| CPU yards per carry, every run in the book (`PLAYS=all`) | 3.0 (inside zone 4.9, iso 5.2, sweep 3.0; sneak and goal-line power are short-yardage by design) | — |
+| CPU yards per carry, the original three runs (`runtrace`, BOT=chase) | 4.66 (was 4.03–4.24) | 4.3 |
+| CPU carries stuffed at or behind the line (same) | 16% (was 21–24%) | 17–20% |
+| CPU carries of 10+ / 20+ yards (same) | 10.0% / 2.1% (was 5.1–5.4% / 1.2–1.4%) | 11% / 2.5% |
+| **The shape of every open-field run** (`runshape`, nine plays, ~2,600 carries a run): median / stuffed / 5+ / 10+ / 20+ | 2.7–3.2 / 19–21% / 31–38% / 7–9% / ~2% (before: 2.8 / 25–26% / 30–36% / 4–5% / 1%) | 3 / 17–20% / ~38% / ~11% / 2.5–3% |
+| Gains by band, same (≤-1, 0, 1-2, 3-4, 5-6, 7-9, 10-14, 15-19, 20+) | 9 8 21 16 16 13 5 1 2 % | 10 8 21 21 13 11 8 3 3 % |
+| Carries of 20+ that go the distance, same | 0–13 of ~50 a run, typically 3 (was 40 of 68: the back never tired) | ~1 in 10 |
 | Your completion rate, original four passes (`passtrace`, random-timing QB) | 60–63% | 65% |
 | Your interceptions / sacks / net yards per dropback | ~2.1% / 5.5–7% / 6.1 | 2.3% / 6.5% / 6.3 |
 | Your QB by throw, every pass play (`PLAYS=all`, random timing): old auto / all bullets / all touch / smart (touch past 12 yd) | 69% 2.2% INT 4.40 / 68.6% 2.5% 4.31 (sacks 9.5%: the windup) / 65.8% 1.5% 4.27 / 69% 1.0% 4.71 yd | — |
@@ -281,10 +300,12 @@ surprising result.
 
 Roughly in order of how much they would improve the game.
 
-1. **Only ~5% of runs go 10+ yards** against an NFL 11%. The mean and the stuff
-   rate are right now; the explosive tail is still thin. Racing the contain
-   corners in the open field took 20+ carries to 0.2%, so the tail is sensitive
-   to them — measure before touching `contain`.
+1. **Runs of 3-4 and 10-19 yards are still thin** (16% and 6% of carries, NFL 21% and
+   11%); the old gap — 4% of runs going 10+ and a quarter stuffed — is closed (see the
+   baselines and the run-game trap). Racing the contain corners in the open field took
+   20+ carries to 0.2%, so the tail is sensitive to them — measure before touching
+   `contain`. Measure with `runshape`, several runs: repeat runs of 2,600 carries differ
+   by more than sampling error (5+ from 31% to 38%), so one run proves nothing.
 2. ~~The AI pass rush never sacks the CPU quarterback~~ — 4.5% now (see the
    baselines). He still gets the ball out in ~1.5s on average (NFL ~2.7s) and
    rarely throws more than ~18 yards downfield.
@@ -332,6 +353,9 @@ Harnesses live in `tools/*.mjs` and each one measures a single thing (serve the
 repo with `http-server -p 8106` first; on the four newer ones `PORT=` points them
 at another server, which is how to A/B against a worktree of the last commit):
 `runtrace` (CPU run distribution; `BOT=chase|rip|none` for your defender, `PLAYS=all` for every run in the book),
+`runshape` (the gain histogram of every open-field run against the NFL's, who tackles at what gain, how many 5-yard
+carries make 10 and how many 20-yard ones score; `PRE='js'` tries a value in the page first — the sim build's
+`__sim.ev` — without editing the game),
 `passtrace` (both quarterbacks; `BOT=human|none`, `USERQB=random|smart`, `PLAYS=all` for every pass play),
 `returntrace` (kick and punt returns), `yactrace` (a whole game with a scripted
 player, plus yards after catch and contact-to-tackle frames), `depthtrace`
