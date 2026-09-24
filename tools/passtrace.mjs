@@ -28,6 +28,7 @@ const errs = []; p.on('pageerror', e => errs.push(e.message));
 // Only the local server: the page tries a CDN first, and a proxy that stalls instead of
 // refusing makes 'load' wait 30s before it falls back to the vendored copy.
 await p.route(u => u.hostname !== 'localhost', r => r.abort());
+if (process.env.RATINGS === 'random') await p.addInitScript(() => { window.__gbRatings = 'random'; });
 await p.goto('http://localhost:' + (process.env.PORT || 8106) + '/index.sim.html', { waitUntil: 'load' });
 await p.waitForFunction(() => { try { return window.__sim && window.__sim.ready; } catch (e) { return false; } }, null, { timeout: 60000 });
 await p.click('#d-pro');
@@ -47,6 +48,7 @@ for (const SIDE of SIDES) for (let n0 = 0; n0 < N; n0 += CH) {
       G._koFlight = false; G._koPhase = null; G._fgFlight = false; G.ball = { active: false }; G._td = false; G._turn = false;
       G.offense = side; G.los = 40*PPY; G.firstX = 50*PPY; G.down = 1; G.clock = 60; G.qtr = 2;
       const id = PASS[n % PASS.length];
+      if (window.__gbRatings === 'random') G.rosters = { user: S.makeRoster(), cpu: S.makeRoster() };
       S.setupPlay(id); G.phase = 'presnap'; G.autoSnap = 99;
       S.snap(); if (G.phase !== 'live') { n--; continue; }
       const hold = 0.8 + ((n*0.37) % 1.8);

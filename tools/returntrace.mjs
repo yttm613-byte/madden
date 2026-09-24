@@ -13,6 +13,7 @@ const errs = []; p.on('pageerror', e => errs.push(e.message));
 // Only the local server: the page tries a CDN first, and a proxy that stalls instead of
 // refusing makes 'load' wait 30s before it falls back to the vendored copy.
 await p.route(u => u.hostname !== 'localhost', r => r.abort());
+if (process.env.RATINGS === 'random') await p.addInitScript(() => { window.__gbRatings = 'random'; });
 await p.goto('http://localhost:' + (process.env.PORT || 8106) + '/index.sim.html', { waitUntil: 'load' });
 await p.waitForFunction(() => { try { return window.__sim && window.__sim.ready; } catch (e) { return false; } }, null, { timeout: 60000 });
 await p.click('#d-pro');
@@ -22,6 +23,7 @@ for (let n0 = 0; n0 < 2*N; n0 += 40) { const part = await p.evaluate(([N0, NN]) 
   const S = window.__sim, PPY = (560-52)/53.3, out = { kick: [], punt: [] };
   for (let n = N0; n < N0 + NN; n++) {
     const G = S.G, kind = n % 2 ? 'punt' : 'kick';
+    if (window.__gbRatings === 'random') G.rosters = { user: S.makeRoster(), cpu: S.makeRoster() };
     G.phase = 'playcall'; G.flag = null; G.fumble = null; G.conv = null; G.twoPt = false; G._td = false; G._turn = false; G.clock = 60; G.qtr = 2;
     if (kind === 'kick') S.startKickoff('cpu');
     else { G.offense = 'user'; G.los = 35*PPY; G.firstX = 45*PPY; G.down = 4; G._koFlight = false; S.choosePlay('punt'); }
