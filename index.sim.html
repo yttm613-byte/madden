@@ -4847,10 +4847,48 @@
   function saveSeason(){ try{ localStorage.setItem('gb-season', JSON.stringify(SEASON)); }catch(e){} }
   function seasonRecord(s){ let w=0,l=0,t=0; for(const r of s.results){ if(r.you>r.them) w++; else if(r.you<r.them) l++; else t++; } return {w,l,t}; }
   function recStr(r){ return r.w+'–'+r.l+(r.t?'–'+r.t:''); }
-  function seasonOpp(s){ return OPPONENTS[Math.min(s.results.length, OPPONENTS.length-1)]; }
+  function seasonOpp(s){
+    if(s.results.length>=REG_WEEKS && s.titleOpp){ const t=OPPONENTS.find(o=>o.abbr===s.titleOpp); if(t) return t; }
+    return OPPONENTS[Math.min(s.results.length, OPPONENTS.length-1)]; }
+  // ---- the rest of the league ----
+  // Every week the other teams play each other too (one has a bye), won by the stronger
+  // side more often than not, so the season has standings and the title game is against
+  // whoever finished on top of them.
+  function leagueInit(s){ if(!s.league){ s.league={}; } for(const o of OPPONENTS) if(!s.league[o.abbr]) s.league[o.abbr]={w:0,l:0,pf:0,pa:0}; }
+  function leagueRec(s, abbr, pf, pa){ const L=s.league[abbr]; if(!L) return; L.pf+=pf; L.pa+=pa; if(pf>pa) L.w++; else if(pf<pa) L.l++; }
+  function simWeek(s, wk, userOpp){
+    leagueInit(s);
+    const rnd=rng32(hashStr('week'+wk+':season'+((MYTEAM&&MYTEAM.seasonNo)||1)+':'+(s.seed||0)));
+    let teams=OPPONENTS.filter(o=>o.abbr!==userOpp);
+    for(let i=teams.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); const t=teams[i]; teams[i]=teams[j]; teams[j]=t; }
+    // an odd team out sits: whoever has played the most, so everyone's schedule evens out
+    if(teams.length%2){ const gp=o=>{ const L=s.league[o.abbr]; return L.w+L.l; }; let bi=0; teams.forEach((o,i)=>{ if(gp(o)>gp(teams[bi])) bi=i; }); teams.splice(bi,1); }
+    for(let i=0;i+1<teams.length;i+=2){ const A=teams[i], B=teams[i+1], pA=1/(1+Math.exp(-(A.str-B.str)*3));
+      const hi=17+Math.floor(rnd()*22), lo=Math.max(0, hi-1-Math.floor(rnd()*20)), aw=rnd()<pA;
+      leagueRec(s, A.abbr, aw?hi:lo, aw?lo:hi); leagueRec(s, B.abbr, aw?lo:hi, aw?hi:lo); }
+  }
+  function standings(s){ leagueInit(s);
+    const me=seasonRecord(s), rows=[{abbr:'YOU', you:true, w:me.w, l:me.l, pf:0, pa:0}];
+    for(const r of s.results) if(r.opp){ rows[0].pf+=r.you; rows[0].pa+=r.them; }
+    for(const o of OPPONENTS){ const L=s.league[o.abbr]; rows.push({abbr:o.abbr, name:o.name, str:o.str, w:L.w, l:L.l, pf:L.pf, pa:L.pa}); }
+    const pct=r=>(r.w+r.l)?r.w/(r.w+r.l):0;
+    return rows.sort((a,b)=>(pct(b)-pct(a)) || ((b.pf-b.pa)-(a.pf-a.pa)) || ((b.str||0)-(a.str||0))); }
+  function standLine(s, n){ return standings(s).slice(0,n||5).map((r,i)=>(i+1)+'. '+(r.you?'<b>YOU</b>':r.abbr)+' '+r.w+'–'+r.l).join(' · '); }
+  // the season's best player, from the season totals
+  function seasonMVP(){ const T=myTeam(), S=T.stats||{}, R=T.roster; let best=null, bs=0;
+    for(const k in S){ const p=S[k], n=+k; let sc=((p.rush||0)+(p.recYds||0))/10+(p.td||0)*6+(p.tkl||0)+(p.sacks||0)*3+(p.ints||0)*5;
+      if(n===12) sc+=(p.passYds||0)/25+(p.passTD||0)*4-(p.intsThrown||0)*2;
+      if(sc>bs && R[n]){ bs=sc; best=n; } }
+    if(best==null) return '';
+    const p=S[best], m=R[best], bits=[];
+    if(best===12 && p.passYds) bits.push(Math.round(p.passYds)+' passing yds, '+(p.passTD||0)+' TD');
+    if(p.rush) bits.push(Math.round(p.rush)+' rushing yds'); if(p.recYds) bits.push(Math.round(p.recYds)+' receiving yds');
+    if(p.td && best!==12) bits.push(p.td+' TD'); if(p.tkl) bits.push(p.tkl+' tackles'); if(p.sacks) bits.push(p.sacks+' sacks'); if(p.ints) bits.push(p.ints+' INT');
+    return '#'+best+' '+m.initial+'. '+m.name+' — '+bits.slice(0,3).join(', '); }
   function cpuLabel(){ const el=document.querySelector('#sb-cpu .lbl'); return (el && el.textContent) || 'CPU'; }
   function seasonNote(){ const el=document.getElementById('season-note'); if(!el) return; const s=loadSeason();
-    el.textContent = (!s || s.over) ? 'seven games, then the title game' : 'week '+(s.results.length+1)+' · '+recStr(seasonRecord(s))+' · next: '+seasonOpp(s).name; }
+    el.textContent = (!s || s.over) ? 'seven games, then the title game' : 'week '+(s.results.length+1)+' · '+recStr(seasonRecord(s))
+      +(s.results.length?' · '+(()=>{ const i=standings(s).findIndex(r=>r.you); return ['1st','2nd','3rd'][i]||((i+1)+'th'); })()+' in the league':'')+' · next: '+seasonOpp(s).name; }
   // an opponent's colours and name on the scoreboard (null: the exhibition CPU)
   function applyOpponent(o){
     Object.assign(TEAM_KIT.cpu, o ? o.kit : CPU_KIT0);
@@ -4859,9 +4897,9 @@
   }
   function resetOverButtons(){ document.getElementById('again').textContent='Run it back'; document.getElementById('to-menu').style.display='none';
     const t=document.getElementById('over-team'); if(t) t.style.display='none'; }
-  function startSeason(){ let s=loadSeason();
+  function startSeason(){ let s=loadSeason(); if(s && !s.seed) s.seed=(Math.random()*1e9)|0;
     if((!s || s.over) && myTeam().offseasonDue){ document.getElementById('start').classList.add('hidden'); showOffseason(startSeason); return; }
-    if(!s || s.over){ s={results:[], over:false}; beginTeamSeason(); } SEASON=s; saveSeason(); playSeasonGame(); }
+    if(!s || s.over){ s={results:[], over:false, seed:(Math.random()*1e9)|0}; beginTeamSeason(); } SEASON=s; saveSeason(); playSeasonGame(); }
   function playSeasonGame(){
     const s=SEASON, o=seasonOpp(s), wk=s.results.length, title=wk>=REG_WEEKS;
     applyOpponent(o);
@@ -5001,7 +5039,9 @@
     const hist=(T.history||[]).slice(-6).map(h=>'Season '+h.season+': '+h.w+'–'+h.l+(h.t?'–'+h.t:'')+(h.champ?' 🏆 champions':h.title?' · lost the title game':'')).join(' · ');
     return '<div class="cols">'+table(UNITS.slice(0,6),'OFFENSE')+table(UNITS.slice(6),'DEFENSE')+'</div>'
       +(L.length?'<div class="lead" style="margin-top:8px">Season leaders — '+L.join(' · ')+'</div>':'<div class="lead" style="margin-top:8px;opacity:.7">Play a season and your stat leaders show up here. Men who play well get better.</div>')
-      +(hist?'<div class="lead" style="opacity:.8">'+hist+'</div>':''); }
+      +(hist?'<div class="lead" style="opacity:.8">'+hist+'</div>':'')
+      +(()=>{ const sp=SEASON||loadSeason(); if(!sp || !sp.results || !sp.results.length) return '';
+          return '<div class="lead" style="margin-top:4px">League — '+standings(sp).map((r,i)=>(i+1)+'. '+(r.you?'<b>YOU</b>':r.abbr)+' '+r.w+'–'+r.l).join(' · ')+'</div>'; })(); }
   function showTeam(){ const T=myTeam(), sp=SEASON||loadSeason(); ensureAges(T);
     document.getElementById('team-sub').textContent='Season '+(T.seasonNo||1)+(sp&&sp.results&&sp.results.length&&!sp.over?' · '+recStr(seasonRecord(sp))+' after '+sp.results.length+' game'+(sp.results.length>1?'s':''):'')+' · team rating '+teamOvr();
     document.getElementById('team-body').innerHTML=teamHTML();
@@ -5009,19 +5049,25 @@
   function teamOvr(){ const R=myTeam().roster; let s=0,n=0; for(const [,ns] of UNITS) for(const k of ns){ if(R[k]){ s+=R[k].ovr; n++; } } return n?Math.round(s/n):0; }
   function teamNote(){ const el=document.getElementById('team-note'); if(el) el.textContent='team rating '+teamOvr()+' · season '+(myTeam().seasonNo||1); }
   function seasonAfterGame(u,c){
-    const s=SEASON, o=seasonOpp(s), title=s.results.length>=REG_WEEKS;
+    const s=SEASON, o=seasonOpp(s), title=s.results.length>=REG_WEEKS, wk=s.results.length;
     s.results.push({opp:o.abbr, you:u, them:c});
+    if(!title){ leagueInit(s); leagueRec(s, o.abbr, c, u); simWeek(s, wk, o.abbr); }
     foldSeason(); const prog=progressTeam();
     const r=seasonRecord(s); let line, next=null;
     if(title){ s.over=true; line = u>c ? 'CHAMPIONS! You beat the '+o.name+' · '+recStr(r) : 'The '+o.name+' take the title · '+recStr(r); }
     else if(s.results.length>=REG_WEEKS){
-      if(r.w>=4){ line='Regular season '+recStr(r)+' — you are in the title game!'; next='PLAY THE TITLE GAME'; }
+      if(r.w>=4){ const top=standings(s).find(x=>!x.you); s.titleOpp=top?top.abbr:null;
+        line='Regular season '+recStr(r)+' — you are in the title game, against the '+seasonOpp(s).name+'!'; next='PLAY THE TITLE GAME'; }
       else { s.over=true; line='Season over at '+recStr(r)+' — four wins get you to the title game.'; }
     } else { line='Record '+recStr(r)+' · next: the '+seasonOpp(s).name; next='NEXT GAME · WEEK '+(s.results.length+1); }
     saveSeason();
+    const mvp = s.over ? seasonMVP() : '';
     if(s.over){ const T=myTeam(); T.history=T.history||[]; T.history.push({season:T.seasonNo||1, w:r.w, l:r.l, t:r.t, title, champ:title&&u>c}); T.offseasonDue=true; saveTeam(); }
     const sub=document.getElementById('final-sub');
-    sub.innerHTML='<div style="margin:8px 0 2px;font-weight:600;font-size:15px">'+line+'</div>'+sub.innerHTML+progHTML(prog);
+    sub.innerHTML='<div style="margin:8px 0 2px;font-weight:600;font-size:15px">'+line+'</div>'
+      +(title?'':'<div style="font-size:12.5px;opacity:.85;margin-bottom:4px">Standings: '+standLine(s,5)+'</div>')
+      +(mvp?'<div style="font-size:13px;margin-bottom:4px">🏆 Season MVP: <b>'+mvp+'</b></div>':'')
+      +sub.innerHTML+progHTML(prog);
     document.getElementById('over-team').style.display='';
     document.getElementById('again').textContent = next || 'NEW SEASON';
     document.getElementById('to-menu').style.display='';
@@ -5247,8 +5293,8 @@
   document.getElementById('d-allpro').addEventListener('click',()=>startWith('allpro'));
   document.getElementById('again').addEventListener('click',()=>{
     if(TWO_P){ document.getElementById('over').classList.add('hidden'); startTwoPlayer(); return; }      // a rematch
-    if(SEASON){ if(SEASON.over && myTeam().offseasonDue){ document.getElementById('over').classList.add('hidden'); showOffseason(()=>{ SEASON={results:[], over:false}; saveSeason(); beginTeamSeason(); playSeasonGame(); }); return; }
-      if(SEASON.over){ SEASON={results:[], over:false}; saveSeason(); beginTeamSeason(); } playSeasonGame(); return; }
+    if(SEASON){ if(SEASON.over && myTeam().offseasonDue){ document.getElementById('over').classList.add('hidden'); showOffseason(()=>{ SEASON={results:[], over:false, seed:(Math.random()*1e9)|0}; saveSeason(); beginTeamSeason(); playSeasonGame(); }); return; }
+      if(SEASON.over){ SEASON={results:[], over:false, seed:(Math.random()*1e9)|0}; saveSeason(); beginTeamSeason(); } playSeasonGame(); return; }
     document.getElementById('over').classList.add('hidden'); document.getElementById('start').classList.remove('hidden'); seasonNote(); });
   document.getElementById('to-menu').addEventListener('click',()=>{ PRACTICE=false; setTwoP(false); SEASON=null; applyOpponent(null); resetOverButtons();
     document.getElementById('over').classList.add('hidden'); document.getElementById('start').classList.remove('hidden'); seasonNote(); });

@@ -95,6 +95,6 @@ fetch('../index.html').then(r=>r.text()).then(src=>{
   if(a<0||b<0) throw new Error('POSE-LIB markers not found');
   const body=src.slice(a,b);
   LIB=new Function('THREE','G','getDt', 'let lastDt=1/60; const __dt=()=>getDt();\n'+body+'\n;return {initRig,poseReset,applyPose,poseGround,poseFinish,setBone,setBoneE};')(THREE,G,()=>lastDt);
-  new THREE.GLTFLoader().load('../assets/gridiron_player.glb', g=>{ proto=g; window.__ready=true; }, undefined, e=>{ window.__err=String(e); });
+  new THREE.GLTFLoader().load(new URLSearchParams(location.search).get('model')||'../assets/gridiron_player.glb', g=>{ proto=g; window.__ready=true; }, undefined, e=>{ window.__err=String(e); });
 }).catch(e=>{ window.__err=String(e&&e.message||e); });
 </script></body></html>
