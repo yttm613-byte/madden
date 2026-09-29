@@ -95,6 +95,16 @@ its materials are named things like `Mat.3`, `default`, `Default`,
 covers three separate meshes. The only reliable way to identify a part is to
 colour-code the material and render the player. Do not infer from names.
 
+**The helmet you see is not the model's.** Every unskinned mesh in the asset —
+72k triangles, 48% of the player — was one helmet assembly hanging off a static
+node beside the skeleton, so it never followed the head. `swapHelmet` removes it
+at load and builds one from parameters (`HELM`, `HELM_MASKS`), fitted to the old
+shell's measured bounds and parented to the Head bone. Its materials borrow the
+source names (`Mat.3`, `default`, `Plastic_Matte`, `frosted_glass`) on purpose,
+so the existing material and kit passes tint and finish it unchanged. Measure
+that fit off vertices, never `Box3.applyMatrix4`: the old helmet's node chain is
+rotated, and a transformed bounding box came out 1.6x too big.
+
 **The eyeballs share the skin's material name.** They are told apart by triangle
 count (`< 4000`), not by name, because the optimiser renames meshes to
 `Object_NN`.
@@ -143,29 +153,34 @@ surprising result.
 ### Rendering cost
 
 Twenty-two players are on the field, so anything per-player is multiplied by
-twenty-two. Measured in a headless browser off `renderer.info`, mid-play:
+twenty-two. Measured in a headless browser off `renderer.info`, mid-play. The
+per-player row is exact; the per-frame rows are single plays and swing a lot with
+where the camera sits, so compare like with like:
 
 | | Was | Now |
 |---|---|---|
-| Triangles per frame, chase camera | 3.30M | 0.82M |
-| Triangles per frame, wide kick camera | 3.31M | 0.32M |
-| Draw calls | ~560 | ~535 |
+| Triangles per player: full / LOD1 / LOD2 | 150k / — / — | 81k / 27k / 11k |
+| Triangles per frame, chase camera | 3.30M | ~0.5M |
+| Draw calls | ~560 | ~385 |
 
 What holds those numbers down, in order of how much they matter:
 
-- **`assets/player-lod.bin`** — two reduced copies of every primitive in the
-  player mesh (30% and 9% of the source), swapped in by distance in `render3D`.
-  The source model is 150k triangles; a player thirty yards out is sixty pixels
-  tall. **If you change the player model, re-run `npm run build:lod`** or every
-  player renders at full detail again (the game only says so in the console).
+- **The procedural helmet** (`swapHelmet`) — replaces the source model's 72k
+  triangle, eleven-mesh helmet with ~3k triangles in four draw calls. That took
+  the player from 150k triangles to ~81k and from 21 draw calls to 14.
+- **`assets/player-lod.bin`** — two reduced copies of every skinned primitive
+  (30% and 10% of the source), swapped in by distance in `render3D`. A player
+  thirty yards out is sixty pixels tall. **If you change the player model, re-run
+  `npm run build:lod`** or every player renders at full detail again (the game
+  only says so in the console).
 - **The quality tier is chosen by the frame timer** (`autoQuality`), not fixed.
   It drives pixel ratio, shadow map size, shadow filter and the LOD distances.
   The ◆ button overrides it and that choice is remembered.
 - **The pool is culled to the camera frustum** each frame. A player who is
   off-camera is 21 draw calls plus a trip through the shadow map.
-- Draw calls are now the floor: 21 primitives per player is what the source
-  model ships, and cutting it needs the meshes merged per material — which
-  means atlasing the nine textures first.
+- Draw calls are now the floor: 14 per player (the body ships as 10 skinned
+  primitives, plus the helmet's 4). Cutting further needs the body meshes merged
+  per material — which means atlasing its textures first.
 
 ---
 
@@ -189,9 +204,10 @@ Roughly in order of how much they would improve the game.
    absent.
 6. **The player model is a cheap free asset.** Torn head geometry that needed
    Laplacian denoising to be usable, a mitten hand rig with only thumb and index
-   bonned, a college uniform baked into the texture, and 46% of its triangle
-   budget spent on the helmet shell. It is worked around, not fixed.
-   `PLAYER_MODEL_PROMPT.md` in the repo is a spec for a replacement.
+   bonned, and a college uniform baked into the texture. It is worked around, not
+   fixed. (Its helmet was the worst part and has been replaced — see "The helmet
+   you see is not the model's" above.) `PLAYER_MODEL_PROMPT.md` in the repo is a
+   spec for a replacement.
 
 ---
 

@@ -199,8 +199,13 @@ function push(arr){
   return rec;
 }
 
-let srcTot = 0, lodTot = [0, 0];
-for (const mesh of g.meshes) for (const p of mesh.primitives){
+// Only primitives on skinned nodes. Every unskinned mesh in this model is the helmet
+// assembly, which the game removes and replaces with a procedural helmet (swapHelmet
+// in index.html) — reduced copies of it would be downloaded and never drawn.
+const skinnedMesh = new Set(g.nodes.filter(n => n.mesh !== undefined && n.skin !== undefined).map(n => n.mesh));
+let srcTot = 0, lodTot = [0, 0], skipped = 0;
+for (const [mi, mesh] of g.meshes.entries()) for (const p of mesh.primitives){
+  if (!skinnedMesh.has(mi)){ skipped += g.accessors[p.indices].count / 3; continue; }
   const prim = { attrs: {}, items: {}, index: null };
   for (const k of WANT) if (p.attributes[k] !== undefined){
     prim.attrs[k] = readAccessor(g, bin, p.attributes[k], k === 'JOINTS_0');
@@ -236,7 +241,7 @@ const out = Buffer.concat([
   header, Buffer.alloc(hpad), ...chunks,
 ]);
 fs.writeFileSync(OUT, out);
-console.log('\nsource   ', Math.round(srcTot), 'tris');
+console.log('\nsource   ', Math.round(srcTot), 'tris  (skipped', Math.round(skipped), 'unskinned: the helmet assembly)');
 LEVELS.forEach((r, i) => console.log('lod' + i + '     ', Math.round(lodTot[i]), 'tris  (' +
   (100 * lodTot[i] / srcTot).toFixed(1) + '% of source)'));
 console.log('wrote', path.relative(process.cwd(), OUT), (out.length / 1048576).toFixed(2), 'MB');

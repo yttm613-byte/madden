@@ -2165,6 +2165,186 @@
     }catch(e){ /* keep the original */ }
     _normCache.set(tex,out); return out;
   }
+  // ---- procedural helmet ---------------------------------------------------------
+  // Everything in the source model that is not skinned — eleven meshes, 72k triangles,
+  // 48% of the whole player — is one helmet assembly: a three-layer shell, the cage,
+  // chin cup, jaw pads, hardware and visor. It hangs off a static node beside the
+  // skeleton instead of the Head bone, so it never followed the head: every running
+  // stride turned the head inside a helmet that stayed put. makePlayer removes the lot
+  // and builds this instead — ~3k triangles in four draw calls, parented to the Head
+  // bone, facemask varying by player. Geometry is built once per facemask style and
+  // shared by the whole pool.
+  //
+  // Unit space: +Y up, +Z out through the face. The shell is a surface of revolution
+  // with a profile in two parts — a dome from the crown (s=0) down to its widest ring
+  // (s=1), then a skirt that hangs nearly straight down over the ears and jaw (s>1).
+  // A sphere alone reads as an egg: it narrows below the equator, where a helmet's
+  // earflaps hang straight. How far down the profile the shell reaches depends on the
+  // direction φ it faces (helmRim): just past the widest ring at the brow, all the way
+  // down at the earflaps, a little shorter at the nape.
+  //
+  // Where the face sits was MEASURED off the source asset, not guessed: eyes y≈1.16
+  // (its visor), chin ≈1.09 (its chin cup), shell 1.107–1.281. After helmetFit maps
+  // the unit shell onto that box, s≈1.22 is the brow, 1.42 the eyes, 1.75 the nose and
+  // 2.1 the chin — below the shell, which is why the lower facemask bars hang past it.
+  const HELM={
+    dome:0.9, drop:1.0, taper:0.10,   // dome height, skirt length per unit s, earflap tuck
+    wide:0.92,                        // side-to-side squash
+    brow:1.22, flap:2.0, nape:1.85,   // how far down the profile the shell reaches
+    eye:47,                           // half-width of the face opening at the brow, degrees
+    wall:0.07,                        // shell thickness, so the face opening has an edge
+    az:32, po:14,                     // shell grid
+    bar:0.034,                        // facemask tube radius
+  };
+  // Across-bars [s at the centre, s where it meets the earflap, standoff at the centre].
+  // Each dips at the chin and rises to anchor on the earflap, and stands furthest off
+  // the face in the middle. Down-bars at φ°, spanning the top bar to the bottom one.
+  const HELM_MASKS={
+    two:   { h:[[1.66,1.62,1.13],[2.10,1.94,1.16]],                                   v:[0] },
+    three: { h:[[1.62,1.60,1.12],[1.86,1.80,1.14],[2.12,1.95,1.16]],                  v:[0] },
+    cage:  { h:[[1.60,1.58,1.12],[1.80,1.76,1.13],[1.98,1.90,1.15],[2.14,1.96,1.16]], v:[0,-24,24] },
+  };
+  const HELM_STYLES=['three','three','cage','two'];
+  const _HD=Math.PI/180;
+  function helmRim(ph){
+    let a=Math.abs(ph)%(2*Math.PI); if(a>Math.PI) a=2*Math.PI-a; a/=_HD;   // |φ| in degrees
+    const ss=(e0,e1,x)=>{ const t=Math.min(1,Math.max(0,(x-e0)/(e1-e0))); return t*t*(3-2*t); };
+    const k1=ss(HELM.eye,HELM.eye+26,a), k2=ss(100,170,a);
+    return HELM.brow+(HELM.flap-HELM.brow)*k1+(HELM.nape-HELM.flap)*k2;
+  }
+  // r scales the horizontal radius (and the dome), so r<1 is the inside of the wall and
+  // r>1 stands off the surface; the skirt keeps its height so the rim stays level
+  function helmPt(s,ph,r,out){
+    let rho, y;
+    if(s<=1){ const a=s*Math.PI/2; rho=Math.sin(a)*r; y=Math.cos(a)*r*HELM.dome; }
+    else { const t=s-1; rho=(1-HELM.taper*t*t)*r; y=-t*HELM.drop; }
+    return out.set(Math.sin(ph)*rho*HELM.wide, y, Math.cos(ph)*rho);
+  }
+  function helmGeom(pos,idx){
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setIndex(idx);
+    g.computeVertexNormals(); return g;
+  }
+  function helmShell(){
+    const NA=HELM.az, NP=HELM.po, pos=[], idx=[], v=new THREE.Vector3();
+    const surf=r=>{ const base=pos.length/3;
+      for(let i=0;i<=NP;i++) for(let j=0;j<NA;j++){ const ph=j/NA*2*Math.PI;
+        helmPt(helmRim(ph)*i/NP,ph,r,v); pos.push(v.x,v.y,v.z); }
+      return base; };
+    const o=surf(1), n=surf(1-HELM.wall);
+    for(let i=0;i<NP;i++) for(let j=0;j<NA;j++){
+      const a=i*NA+j, b=i*NA+(j+1)%NA, c=a+NA, d=b+NA;
+      idx.push(o+a,o+c,o+b, o+b,o+c,o+d);         // outer surface, facing out
+      idx.push(n+a,n+b,n+c, n+b,n+d,n+c); }       // inner surface, facing in
+    // the rim gets its own vertices: shared with either surface, its normals would bend
+    // that surface's shading into a band along the edge
+    const rb=pos.length/3;
+    for(let j=0;j<NA;j++){ const ph=j/NA*2*Math.PI, sr=helmRim(ph);
+      helmPt(sr,ph,1,v); pos.push(v.x,v.y,v.z); helmPt(sr,ph,1-HELM.wall,v); pos.push(v.x,v.y,v.z); }
+    for(let j=0;j<NA;j++){ const A=rb+j*2, B=rb+((j+1)%NA)*2; idx.push(A,A+1,B, B,A+1,B+1); }
+    const g=helmGeom(pos,idx), nr=g.attributes.normal;
+    for(let j=0;j<NA;j++){ nr.setXYZ(o+j,0,1,0); nr.setXYZ(n+j,0,-1,0); }   // the crown is NA coincident vertices
+    return g;
+  }
+  function helmVisor(){                            // over the eyes, tucked under the brow inside the wall
+    const NA=10, NP=5, pos=[], idx=[], v=new THREE.Vector3();
+    const p0=-(HELM.eye+4)*_HD, p1=-p0, s0=HELM.brow-0.05, s1=HELM.brow+0.34;
+    for(let i=0;i<=NP;i++) for(let j=0;j<=NA;j++){
+      helmPt(s0+(s1-s0)*i/NP, p0+(p1-p0)*j/NA, 1-HELM.wall*0.5, v); pos.push(v.x,v.y,v.z); }
+    for(let i=0;i<NP;i++) for(let j=0;j<NA;j++){ const a=i*(NA+1)+j, c=a+NA+1; idx.push(a,c,a+1, a+1,c,c+1); }
+    return helmGeom(pos,idx);
+  }
+  function helmStripe(){                           // brow to nape over the crown, team accent
+    const N=40, hw=0.075, pos=[], idx=[], v=new THREE.Vector3();
+    for(let i=0;i<=N;i++){ const u=i/N, back=u>0.5;
+      helmPt(back?helmRim(Math.PI)*(2*u-1):helmRim(0)*(1-2*u), back?Math.PI:0, 1.012, v);
+      pos.push(v.x-hw,v.y,v.z, v.x+hw,v.y,v.z); }
+    for(let i=0;i<N;i++){ const L=i*2; idx.push(L,L+1,L+2, L+1,L+3,L+2); }
+    return helmGeom(pos,idx);
+  }
+  function helmMask(style){
+    const M=HELM_MASKS[style], parts=[], R=HELM.bar, v=new THREE.Vector3();
+    // each across-bar as a function of φ: dips to sc at the centre, meets the shell at se
+    const bar=(h,ph,span)=>{ const [sc,se,rc]=h, w=Math.cos(Math.min(1,Math.abs(ph)/span)*Math.PI/2);
+      return helmPt(se+(sc-se)*w, ph, 1.02+(rc-1.02)*w, new THREE.Vector3()); };
+    const spans=M.h.map(h=>{ let a=HELM.eye; while(a<110 && helmRim(a*_HD)<h[1]+0.04) a++; return (a+4)*_HD; });
+    M.h.forEach((h,k)=>{ const pts=[], sp=spans[k];
+      for(let j=0;j<=16;j++) pts.push(bar(h,-sp+2*sp*j/16,sp));
+      parts.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),20,R,6,false)); });
+    const top=M.h[0], bot=M.h[M.h.length-1], spT=spans[0], spB=spans[spans.length-1];
+    for(const phd of M.v){ const ph=phd*_HD, a=bar(top,ph,spT), b=bar(bot,ph,spB), pts=[];
+      for(let i=0;i<=6;i++) pts.push(new THREE.Vector3().lerpVectors(a,b,i/6));
+      parts.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),8,R*0.9,6,false)); }
+    // one geometry, one draw call
+    let vc=0, ic=0; for(const g of parts){ vc+=g.attributes.position.count; ic+=g.index.count; }
+    const pos=new Float32Array(vc*3), nrm=new Float32Array(vc*3), idx=new Uint16Array(ic);
+    let vo=0, io=0;
+    for(const g of parts){ pos.set(g.attributes.position.array,vo*3); nrm.set(g.attributes.normal.array,vo*3);
+      const gi=g.index.array; for(let k=0;k<gi.length;k++) idx[io+k]=gi[k]+vo;
+      vo+=g.attributes.position.count; io+=gi.length; g.dispose(); }
+    const out=new THREE.BufferGeometry();
+    out.setAttribute('position',new THREE.BufferAttribute(pos,3)); out.setAttribute('normal',new THREE.BufferAttribute(nrm,3));
+    out.setIndex(new THREE.BufferAttribute(idx,1)); return out;
+  }
+  const _helmGeo={};
+  function helmetGeo(style){
+    if(!_helmGeo.shell){ _helmGeo.shell=helmShell(); _helmGeo.visor=helmVisor(); _helmGeo.stripe=helmStripe(); }
+    if(!_helmGeo[style]) _helmGeo[style]=helmMask(style);
+    return {shell:_helmGeo.shell, visor:_helmGeo.visor, stripe:_helmGeo.stripe, mask:_helmGeo[style]};
+  }
+  // Scale and offset that put the unit shell exactly where the source model's shell
+  // was, measured off its own meshes (model space) so a replacement model fits itself.
+  // Only the shell ('Mat.3'): the cage and hardware stick out below and in front, and
+  // fitting to those would stretch the shell down over the jaw.
+  let _helmFit=null;
+  function helmetFit(root){
+    root.updateMatrixWorld(true);
+    const inv=new THREE.Matrix4().copy(root.matrixWorld).invert(), m=new THREE.Matrix4(), v=new THREE.Vector3();
+    const box=new THREE.Box3(), all=new THREE.Box3();
+    const NMAX={Int8Array:127,Uint8Array:255,Int16Array:32767,Uint16Array:65535};
+    root.traverse(o=>{ if(!o.isMesh || o.isSkinnedMesh || !o.geometry) return;
+      // Every vertex, not the bounding box's corners: this helmet's node chain is rotated,
+      // and a transformed box came out 1.6x too big and off-centre — so was the helmet.
+      // Positions are KHR_mesh_quantization int16s, and r128's getX does not denormalize.
+      const a=o.geometry.attributes.position, k=a.normalized?1/(NMAX[a.array.constructor.name]||1):1;
+      m.multiplyMatrices(inv,o.matrixWorld);
+      const shell=!!(o.material && o.material.name==='Mat.3');
+      for(let i=0;i<a.count;i++){ v.set(a.getX(i)*k,a.getY(i)*k,a.getZ(i)*k).applyMatrix4(m);
+        all.expandByPoint(v); if(shell) box.expandByPoint(v); } });
+    if(box.isEmpty()) box.copy(all);
+    if(box.isEmpty()) return null;
+    const sh=helmetGeo(HELM_STYLES[0]).shell; if(!sh.boundingBox) sh.computeBoundingBox();
+    const us=sh.boundingBox, size=box.getSize(new THREE.Vector3()), usz=us.getSize(new THREE.Vector3());
+    const scale=new THREE.Vector3(size.x/usz.x, size.y/usz.y, size.z/usz.z);
+    const pos=box.getCenter(new THREE.Vector3()).sub(us.getCenter(new THREE.Vector3()).multiply(scale));
+    return {scale,pos};
+  }
+  // Built with the source asset's material NAMES on purpose: the material pass in
+  // makePlayer routes by name into the team-tint lists and applies the tuned finish
+  // (Mat.3 shell, default cage, Plastic_Matte accent), and the kit pass does the
+  // per-player visor off frosted_glass. One place for those numbers, not two.
+  let _helmMats=null;
+  function helmetMaterials(){
+    if(!_helmMats) _helmMats={
+      shell: new THREE.MeshStandardMaterial({name:'Mat.3',color:0xe8ecf4}),
+      mask:  new THREE.MeshStandardMaterial({name:'default',color:0x10131a}),
+      stripe:new THREE.MeshStandardMaterial({name:'Plastic_Matte',color:0xf0b429}),
+      visor: new THREE.MeshStandardMaterial({name:'frosted_glass',color:0x090a0e,transparent:true,opacity:0.88}),
+    };
+    return _helmMats;
+  }
+  function swapHelmet(model){
+    const head=findBone(model,'Head');
+    if(!_helmFit || !head) return;
+    const drop=[]; model.traverse(o=>{ if(o.isMesh && !o.isSkinnedMesh) drop.push(o); });
+    for(const o of drop) o.parent.remove(o);
+    const G=helmetGeo(HELM_STYLES[(Math.random()*HELM_STYLES.length)|0]), M=helmetMaterials();
+    const hg=new THREE.Group(); hg.name='helmet';
+    for(const k of ['shell','mask','stripe','visor']){
+      const me=new THREE.Mesh(G[k],M[k]); me.castShadow=(k!=='visor'); me.frustumCulled=false; hg.add(me); }
+    hg.scale.copy(_helmFit.scale); hg.position.copy(_helmFit.pos);
+    model.add(hg); model.updateMatrixWorld(true); head.attach(hg);   // attach keeps the fitted pose
+  }
   function makePlayer(){
     const grp=new THREE.Group();
     const model=THREE.SkeletonUtils.clone(playerProto.scene);
@@ -2178,6 +2358,7 @@
       const ms=Array.isArray(o.material)?o.material:[o.material];
       for(const m of ms){ if(m&&m.isMeshStandardMaterial){ m.envMapIntensity=1.25; } }   // catch the stadium reflections
     } });
+    swapHelmet(model);    // before the material pass below, which tints and finishes it
     grp.add(model);
     const B={};
     ['Hips','Spine2','Spine','Head','LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot','LeftArm','LeftForeArm','RightArm','RightForeArm'].forEach(k=>{
@@ -2209,6 +2390,9 @@
     //   Default socks  | sepatu_key.obj cleats | Mat.2_2mat belt | Plastic_Matte collar
     //   material / Mat.8_1 / Mat.2 / default  helmet hardware | frosted_glass visor
     //   Fabric-Linen / Fabric-Silk  undersleeves
+    // The source helmet is gone by this point (swapHelmet). The procedural one carries
+    // the Mat.3 / default / Plastic_Matte / frosted_glass names so it lands in the
+    // branches below — shell, cage, accent stripe, visor — and gets their finish.
     let jerseyMat=null; const helmetMats=[], skinMats=[], trimMats=[], maskMats=[], sockMats=[];
     model.traverse(o=>{ if(o.isMesh && o.material){ const nm=o.material.name||'';
       if(nm==='shirt_0'){ o.material=o.material.clone(); jerseyMat=o.material; jerseyMat.map=desatMap(jerseyMat.map, 0.05); }
@@ -2425,7 +2609,8 @@
   }
   // ---- distance LOD ------------------------------------------------------------
   // assets/player-lod.bin carries two reduced copies of every primitive in the player
-  // model (built by tools/build-lod.cjs: 150k triangles -> 46k -> 14k). Entries are
+  // model's body (built by tools/build-lod.cjs: 78k triangles -> 24k -> 7.6k; the
+  // helmet is procedural and already cheap, see swapHelmet). Entries are
   // keyed by material name plus vertex and index count, which is unique across all 21
   // primitives, so the match survives any renaming the model pipeline does. If the
   // file is missing the game just runs at full detail.
@@ -2459,6 +2644,7 @@
     const lodReady = (typeof fetch==='function') ? loadLOD() : Promise.resolve();
     lodReady.then(()=>new THREE.GLTFLoader().load('assets/fbplayer_opt.glb', (gltf)=>{
       playerProto=gltf;
+      _helmFit=helmetFit(playerProto.scene);
       const aniso=upgradeTextures(playerProto.scene);
       if(window.__gbDebug) console.log('texture anisotropy:',aniso);
       for(let i=0;i<24;i++) pPool.push(makePlayer());
@@ -2660,7 +2846,7 @@
         const onScreen=_frustum.intersectsSphere(_psph);
         g.visible = onScreen || dxc<qd.shadowDist;      // off-camera casters still need to draw into the shadow map
         const far = dxc>qd.poseDist || !onScreen;
-        // Geometry LOD. The source mesh is 150k triangles; a player thirty yards out is
+        // Geometry LOD. The body mesh is 78k triangles; a player thirty yards out is
         // sixty pixels tall and gets a copy at 30% or 10% of that (tools/build-lod.cjs).
         // Swapping geometry rather than whole models keeps the node count, the draw
         // calls and the skeleton binding exactly as they were.

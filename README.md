@@ -45,10 +45,13 @@ play state.
 
 ## Rebuild the level-of-detail meshes
 
-Twenty-two players are on the field at once, so the source mesh's 150k triangles
-turn into ~3.4M triangles a frame. `assets/player-lod.bin` holds two reduced
-copies of every primitive (30% and 9% of the source), which the game swaps in by
-distance. Regenerate it whenever the player model changes:
+Twenty-two players are on the field at once, so every triangle in the player
+mesh is paid for twenty-two times. `assets/player-lod.bin` holds two reduced
+copies of every skinned primitive (30% and 10% of the source), which the game
+swaps in by distance. The helmet isn't in it: the source model's helmet (72k
+triangles, and not attached to the head) is replaced at load by a procedural one
+of ~3k — see `swapHelmet` in `index.html`. Regenerate the file whenever the
+player model changes:
 
 ```bash
 npm run build:lod
