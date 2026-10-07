@@ -60,6 +60,9 @@ p, li, dd { text-wrap: pretty; }
 
 .wrap { width: min(100% - 2 * var(--gutter), var(--wrap)); margin-inline: auto; }
 
+/* single-column grids may never grow past the screen because of one long string */
+.hero-grid, .pledge, .sec-head, .services, .beyond, .contact-grid, .foot { grid-template-columns: minmax(0, 1fr); }
+
 .skip {
   position: absolute; left: 1rem; top: -4rem; z-index: 100;
   background: var(--ink); color: var(--paper);
@@ -294,6 +297,25 @@ h3 {
   border-top: 3px double var(--rule-strong);
   font-size: 0.9375rem;
   color: var(--ink);
+}
+
+/* scope statement under the cards: same label-left, text-right pattern as the section heads */
+.beyond {
+  display: grid; gap: 0.9rem;
+  margin-top: clamp(3rem, 6vw, 5rem);
+  padding-top: clamp(1.5rem, 3vw, 2.25rem);
+  border-top: 1px solid var(--rule);
+}
+.beyond-text {
+  font: 400 clamp(1.3rem, 1.1rem + 0.95vw, 1.75rem)/1.4 var(--serif);
+  letter-spacing: -0.006em;
+  color: var(--ink);
+  max-width: 44rem;
+}
+@media (min-width: 56rem) {
+  .beyond { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 2rem; align-items: baseline; }
+  .beyond .label { grid-column: 1 / span 3; }
+  .beyond-text { grid-column: 4 / span 8; }
 }
 
 .dash { margin-top: 1.2rem; display: grid; gap: 0.55rem; }
