@@ -14,20 +14,17 @@ demo/month-end-check.html  a working sample page (invented data)
 Every path in the page is relative, so the folder works at the root of a domain
 or inside a sub-folder.
 
-## Before it goes live
+## Contact details
 
-**Phone number.** `[PHONE]` is a placeholder. It appears in six places in
-`index.html`: the visible button text and the call and text links, in the top
-section and again in the bottom one. This swaps all of them at once. Use your
-real number in place of the example (links first, then the visible text):
+**Phone:** (732) 655-8671. It appears in the top and bottom sections of
+`index.html`, twice each time: as visible text, written `(732)&nbsp;655-8671`,
+and in the call and text links, written `+17326558671`. To change it, replace
+both forms, then check with `grep -n 655-8671 index.html`.
 
-```bash
-cd simple-systems
-sed -i 's#tel:\[PHONE\]#tel:+17325550100#g; s#sms:\[PHONE\]#sms:+17325550100#g; s#\[PHONE\]#(732) 555-0100#g' index.html
-grep -c 'PHONE' index.html   # prints 0 when nothing is left
-```
+**Email:** `yitz@simplesystemsnj.com`.
 
-**Email.** `yitz@simplesystemsnj.com` is already in place.
+The page wording matches the classified ad: the headline is "Your team's time
+is worth more than busywork."
 
 ## Notes
 
