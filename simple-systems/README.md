@@ -8,6 +8,7 @@ whole folder on any static host.
 index.html          the page
 assets/site.css     all the styling
 assets/favicon.svg  browser-tab icon
+demo/month-end-check.html  a working sample page (invented data)
 ```
 
 Every path in the page is relative, so the folder works at the root of a domain
@@ -41,3 +42,4 @@ grep -c 'PHONE' index.html   # prints 0 when nothing is left
   preview image. If you want one, add an `og:image` tag pointing at a 1200x630
   image on your domain.
 - Deliberately left out: forms, popups, newsletter signups, analytics, cookies.
+- **The sample page** (`demo/month-end-check.html`) is self-contained and uses only invented data: a made-up therapy agency's month-end check. It is marked `noindex`. If you don't want it, delete the file and the "See a working sample" line in the "You use it" card.

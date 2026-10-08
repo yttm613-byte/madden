@@ -267,6 +267,9 @@ h3 {
 }
 .nw { white-space: nowrap; }
 .card .note { font-size: 0.9375rem; color: var(--slate-soft); margin-top: 0.6rem; }
+.card .sample-link { margin-top: 1.3rem; }
+.card .sample-link a { color: var(--teal); text-underline-offset: 0.2em; }
+.card .sample-link a:hover { text-decoration-thickness: 2px; }
 
 /* a worked example inside a card: same paper-and-teal-rule treatment as .rule-eg */
 .sample {

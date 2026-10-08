@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Month-end check (sample) | Simple Systems</title>
+<meta name="description" content="A sample of the kind of tool Simple Systems builds: a month-end check for a therapy agency, using invented data.">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#f5f0e6">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<style>
+  /* Sample page styles. Colors and fonts come from ../assets/site.css.
+     The one extra color is a status red, always shown with an icon and a word. */
+  :root { --flag: #9a3b2e; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .back { display: inline-block; margin-bottom: 0.9rem; font-size: 0.9375rem; color: var(--slate-soft); text-underline-offset: 0.25em; padding: 0.5rem 0; }
+  .back:hover { color: var(--ink); }
+
+  .d-hero { padding: clamp(2rem, 5vw, 4rem) 0 clamp(1.5rem, 3vw, 2.5rem); }
+  .d-hero .kicker { margin-bottom: 1.25rem; }
+  .d-hero h1 { font-size: clamp(2.4rem, 1.1rem + 5.2vw, 4.75rem); line-height: 1; }
+  .d-lede { margin-top: 1.4rem; max-width: 38rem; font: 400 clamp(1.2rem, 1.05rem + 0.7vw, 1.5rem)/1.4 var(--serif); color: var(--ink); }
+  .d-asof { margin-top: 1rem; font-size: 0.9375rem; color: var(--slate-soft); }
+
+  /* headline figures: sans, proportional digits */
+  .d-sum {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
+    gap: 1.5rem 2rem;
+    padding-block: 1.6rem 2.2rem;
+    border-top: 1px solid var(--rule);
+  }
+  .fig { font: 600 clamp(2rem, 1.4rem + 2.4vw, 3.1rem)/1.05 var(--sans); letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: proportional-nums; }
+  .fig.flagged { color: var(--flag); }
+  .cap { margin-top: 0.4rem; font-size: 0.9375rem; color: var(--slate-soft); max-width: 17rem; }
+
+  .d-sec { padding-block: clamp(2.5rem, 6vw, 4.5rem); border-top: 1px solid var(--rule); }
+  .d-sec .sec-head { margin-bottom: clamp(1.5rem, 3vw, 2.25rem); }
+  .d-sec .sec-head h2 { font-size: clamp(1.75rem, 1.15rem + 2.3vw, 2.9rem); max-width: 24ch; }
+  .d-sec h3 { font-size: 1.35rem; margin: clamp(2rem, 4vw, 3rem) 0 0.9rem; }
+  .d-note { font-size: 0.9375rem; color: var(--slate-soft); max-width: 40rem; margin-bottom: 1.1rem; }
+
+  .scroll { overflow-x: auto; }
+  .scroll:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .d-table { width: 100%; min-width: 31rem; border-collapse: collapse; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+  .d-table th {
+    font: 600 0.6875rem/1.3 var(--sans); letter-spacing: 0.13em; text-transform: uppercase;
+    color: var(--slate-soft); text-align: left; padding: 0.6rem 0.75rem 0.6rem 0;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  .d-table td { padding: 0.8rem 0.75rem 0.8rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .d-table .n { text-align: right; }
+  .d-table th.n { padding-right: 0; }
+  .d-table td.n { padding-right: 0; padding-left: 0.75rem; }
+  .d-table tfoot td { border-bottom: 0; border-top: 3px double var(--rule-strong); font-weight: 600; color: var(--ink); }
+  .d-table .who { font-weight: 600; color: var(--ink); }
+  .d-table .sh { padding-left: 1.75rem; }
+  .d-table td.sh { padding-right: 1rem; }
+  .d-table .chip { margin-right: 0.6rem; }
+  .sub { display: block; margin-top: 0.15rem; font-size: 0.8125rem; font-weight: 400; color: var(--slate-soft); }
+  .neg { color: var(--flag); font-weight: 600; }
+
+  /* meters: a thin track, the fill in the one data color, rounded at the data end */
+  .track { display: block; position: relative; height: 6px; background: var(--rule); border-radius: 3px; margin-top: 0.45rem; }
+  .track > .fill { display: block; height: 100%; background: var(--teal); border-radius: 3px; }
+  .track.low > .fill { background: var(--flag); }
+  .track.lg { height: 10px; border-radius: 5px; margin-top: 0.7rem; }
+  .track.lg > .fill { border-radius: 5px; }
+  .track > .tick { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); border-radius: 1px; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap;
+    font: 600 0.75rem/1.2 var(--sans); letter-spacing: 0.04em;
+    padding: 0.2rem 0.55rem 0.2rem 0.4rem; border: 1px solid var(--flag); border-radius: 3px; color: var(--flag); background: var(--white);
+  }
+  .chip::before { content: "!"; display: inline-grid; place-items: center; width: 1.05em; height: 1.05em; border-radius: 50%; background: var(--flag); color: #fff; font-size: 0.75em; font-weight: 700; }
+  .chip.ok { border-color: var(--rule-strong); color: var(--slate-soft); }
+  .chip.ok::before { content: "\2713"; background: var(--teal); }
+
+  .mob { display: none; }
+  @media (max-width: 36rem) {
+    .d-table { min-width: 0; }
+    .d-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .d-table tbody tr, .d-table tfoot tr {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1rem;
+      padding: 1rem 0; border-bottom: 1px solid var(--rule);
+    }
+    .d-table tfoot tr { border-bottom: 0; border-top: 3px double var(--rule-strong); }
+    .d-table td, .d-table td.n, .d-table td.sh, .d-table tfoot td {
+      display: block; padding: 0; border: 0; text-align: left; min-width: 0;
+    }
+    .d-table td[data-label]::before {
+      content: attr(data-label); display: block; margin-bottom: 0.15rem;
+      font: 600 0.6875rem/1.3 var(--sans); letter-spacing: 0.13em; text-transform: uppercase; color: var(--slate-soft);
+    }
+    .d-table td:first-child { grid-column: 1 / -1; }
+    .d-table td .track { max-width: 100%; }
+    /* hours table: name and gap share the top line, the bar gets its own line, then paid and billed */
+    #hoursTable tbody td:nth-child(1) { grid-column: 1; grid-row: 1; }
+    #hoursTable tbody td:nth-child(5) { grid-column: 1 / -1; grid-row: 1; text-align: right; white-space: nowrap; }
+    #hoursTable tbody td:nth-child(1) { z-index: 1; }
+    #hoursTable tbody td:nth-child(4) { grid-column: 1 / -1; grid-row: 2; }
+    #hoursTable tbody td:nth-child(2) { grid-column: 1; grid-row: 3; }
+    #hoursTable tbody td:nth-child(3) { grid-column: 2; grid-row: 3; }
+    #hoursTable .share { min-width: 0; grid-template-columns: 3rem minmax(0, 1fr); }
+    .mob { display: inline; }
+  }
+  .chase { display: grid; gap: 0; border-top: 1px solid var(--rule-strong); }
+  .chase li { display: grid; grid-template-columns: 11.5rem minmax(0, 1fr) auto; gap: 0.25rem 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--rule); align-items: baseline; font-size: 0.9375rem; }
+  .chase .id { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .chase .amt { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .chase .why { color: var(--slate); }
+  .chase .plan { color: var(--slate-soft); }
+  @media (max-width: 34rem) { .chase li { grid-template-columns: 1fr auto; } .chase .why { grid-column: 1 / -1; } }
+
+  .control { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.7rem; margin-bottom: 1rem; font-size: 1rem; color: var(--ink); }
+  .control input {
+    font: inherit; font-variant-numeric: tabular-nums; width: 4.5rem; padding: 0.5rem 0.6rem;
+    border: 1px solid var(--rule-strong); border-radius: 3px; background: var(--white); color: var(--ink);
+  }
+  .live { font-size: 1rem; color: var(--ink); margin-bottom: 1.1rem; max-width: 40rem; }
+  .share { display: grid; grid-template-columns: 3.2rem minmax(5rem, 1fr); gap: 0.75rem; align-items: center; min-width: 11rem; }
+  .share .track { margin-top: 0; }
+
+  .auth { display: grid; border-top: 1px solid var(--rule-strong); }
+  .auth li { padding: 1.1rem 0 1.25rem; border-bottom: 1px solid var(--rule); }
+  .auth-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem 1rem; }
+  .auth .who { font: 400 1.25rem/1.2 var(--serif); color: var(--ink); }
+  .auth-meta { margin-top: 0.8rem; font-size: 0.9375rem; color: var(--slate); max-width: 44rem; }
+  .auth-meta strong { color: var(--ink); }
+
+  .d-end { padding-block: clamp(3rem, 7vw, 5.5rem); border-top: 1px solid var(--rule); }
+  .d-end h2 { font-size: clamp(1.9rem, 1.2rem + 2.6vw, 3.2rem); max-width: 20ch; }
+  .d-end p { margin-top: 1.1rem; max-width: 38rem; }
+  .d-end .btn { margin-top: 1.5rem; }
+  .d-end .fine { font-size: 0.9375rem; color: var(--slate-soft); margin-top: 1.5rem; }
+
+  .d-foot { background: var(--night); color: rgba(245, 240, 230, 0.78); padding: 1.75rem 0; font-size: 0.9375rem; }
+  .d-foot a { color: inherit; text-underline-offset: 0.25em; }
+  .d-foot a:hover { color: #fff; }
+</style>
+</head>
+
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap bar">
+    <a class="brand" href="../index.html" aria-label="Simple Systems, main page">Simple Systems</a>
+    <nav class="nav" aria-label="Sample sections">
+      <a href="#paid">Billed and paid</a>
+      <a href="#hours">Hours</a>
+      <a href="#auth">Authorizations</a>
+    </nav>
+    <a class="btn btn-primary btn-sm" href="../index.html#contact">Talk to me</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="wrap d-hero" aria-labelledby="top-title">
+    <a class="back" href="../index.html">&larr; Back to Simple Systems</a>
+    <p class="kicker"><span>Sample <span aria-hidden="true">&middot;</span> invented agency <span aria-hidden="true">&middot;</span> invented numbers</span></p>
+    <h1 id="top-title">The month-end check</h1>
+    <p class="d-lede">The page an agency owner opens on the first of the month. Every figure here is made up. A real one is built from the exports your own software already produces, so nobody retypes anything.</p>
+    <p class="d-asof">Sample agency, sample month. Figures as of Oct 15.</p>
+  </section>
+
+  <noscript><div class="wrap"><p class="d-note">This sample needs JavaScript to draw its tables.</p></div></noscript>
+
+  <section class="wrap d-sum" aria-label="Summary" id="summary"></section>
+
+  <section class="wrap d-sec" id="paid" aria-labelledby="paid-title">
+    <div class="sec-head">
+      <p class="label"><span class="num">01</span>Billed and paid</p>
+      <h2 id="paid-title">What was billed, and what actually came in.</h2>
+    </div>
+    <div class="scroll" tabindex="0" role="region" aria-label="Billed, paid, denied and waiting, by plan">
+      <table class="d-table" id="paidTable"></table>
+    </div>
+    <h3>Chase these first</h3>
+    <p class="d-note">The six biggest items that were denied or are still waiting, largest first.</p>
+    <ol class="chase" id="chaseList"></ol>
+  </section>
+
+  <section class="wrap d-sec" id="hours" aria-labelledby="hours-title">
+    <div class="sec-head">
+      <p class="label"><span class="num">02</span>Hours</p>
+      <h2 id="hours-title">Hours paid against hours billed.</h2>
+    </div>
+    <div class="control">
+      <label for="thresh">Flag anyone billed under</label>
+      <input id="thresh" type="number" min="50" max="100" step="1" value="80" inputmode="numeric">
+      <span>% of the hours they were paid</span>
+    </div>
+    <p class="live" id="hoursLive" aria-live="polite"></p>
+    <p class="d-note">Some of the gap is normal: travel, training, cancelled sessions. The point is to see who, and ask why. Dollar figures use a sample pay rate of $22 an hour.</p>
+    <div class="scroll" tabindex="0" role="region" aria-label="Hours paid and billed, by therapist">
+      <table class="d-table" id="hoursTable"></table>
+    </div>
+  </section>
+
+  <section class="wrap d-sec" id="auth" aria-labelledby="auth-title">
+    <div class="sec-head">
+      <p class="label"><span class="num">03</span>Authorizations</p>
+      <h2 id="auth-title">Who runs out early, and who has units left over.</h2>
+    </div>
+    <p class="d-note">Units are 15 minutes. The bar shows units used. The dark tick shows where usage would be if it were spread evenly across the authorization. Dates are fixed to Oct 15 so the sample stays put.</p>
+    <ul class="auth" id="authList"></ul>
+  </section>
+
+  <section class="wrap d-end" aria-labelledby="end-title">
+    <h2 id="end-title">Want one of these for your business?</h2>
+    <p>This one is for a therapy agency, but the idea works anywhere. Take the exports you already have and put the answers on one page. A real version is built on your own data. Where client health information is involved, privacy agreements and proper security come first.</p>
+    <a class="btn btn-primary btn-lg" href="../index.html#contact">Talk to me</a>
+    <p class="fine">Everything on this page is invented. No real clients, therapists, insurers or claims appear here.</p>
+  </section>
+
+</main>
+
+<footer class="d-foot">
+  <div class="wrap"><a href="../index.html">Simple Systems</a> &middot; Lakewood, New Jersey</div>
+</footer>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var usd = function (n) { return '$' + Math.round(n).toLocaleString('en-US'); };
+  var int = function (n) { return Math.round(n).toLocaleString('en-US'); };
+  var DAY = 86400000;
+  var utc = function (s) { var p = s.split('-'); return Date.UTC(+p[0], +p[1] - 1, +p[2]); };
+  var shortDate = function (t) { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }); };
+  var ASOF = utc('2026-10-15');
+  var RATE = 22;
+
+  /* ---- invented data ---- */
+  var PLANS = [
+    { name: 'Plan A', billed: 48200, paid: 39650, denied: 3100, oldest: 41 },
+    { name: 'Plan B', billed: 31900, paid: 21300, denied: 1850, oldest: 63 },
+    { name: 'Plan C', billed: 22400, paid: 20950, denied: 650, oldest: 18 }
+  ];
+  var CHASE = [
+    { id: 'C-20388', plan: 'Plan B', amount: 2240, why: 'Waiting 63 days, no response' },
+    { id: 'C-20402', plan: 'Plan B', amount: 1980, why: 'Waiting 47 days' },
+    { id: 'C-20415', plan: 'Plan A', amount: 1860, why: 'Denied: authorization had expired' },
+    { id: 'C-20431', plan: 'Plan A', amount: 1620, why: 'Waiting 41 days' },
+    { id: 'C-20377', plan: 'Plan B', amount: 1150, why: 'Denied: missing modifier' },
+    { id: 'C-20440', plan: 'Plan C', amount: 650, why: 'Denied: documentation did not support the service' }
+  ];
+  var STAFF = [
+    { name: 'RBT 1', paid: 142, billed: 131 }, { name: 'RBT 2', paid: 156, billed: 138 },
+    { name: 'RBT 3', paid: 120, billed: 97 },  { name: 'RBT 4', paid: 164, billed: 118 },
+    { name: 'RBT 5', paid: 98, billed: 90 },   { name: 'RBT 6', paid: 150, billed: 109 },
+    { name: 'RBT 7', paid: 133, billed: 121 }, { name: 'RBT 8', paid: 110, billed: 74 }
+  ];
+  var AUTHS = [
+    { client: 'Client 101', units: 2080, start: '2026-07-01', end: '2026-12-31', used: 1190 },
+    { client: 'Client 102', units: 1560, start: '2026-08-01', end: '2027-01-31', used: 1020 },
+    { client: 'Client 103', units: 2400, start: '2026-06-15', end: '2026-11-05', used: 1260 },
+    { client: 'Client 104', units: 1040, start: '2026-09-01', end: '2027-02-28', used: 330 },
+    { client: 'Client 105', units: 1820, start: '2026-05-01', end: '2026-10-31', used: 1640 },
+    { client: 'Client 106', units: 3120, start: '2026-07-15', end: '2027-01-14', used: 1600 },
+    { client: 'Client 107', units: 1300, start: '2026-09-15', end: '2027-03-14', used: 150 },
+    { client: 'Client 108', units: 2000, start: '2026-07-01', end: '2026-12-31', used: 1150 }
+  ];
+
+  /* ---- authorizations: pace, run-out date, flag ---- */
+  AUTHS.forEach(function (a) {
+    var s = utc(a.start), e = utc(a.end);
+    a.total = (e - s) / DAY;
+    a.elapsed = Math.max(1, (ASOF - s) / DAY);
+    a.rate = a.used / a.elapsed;
+    a.runOut = s + (a.units / a.rate) * DAY;
+    a.daysEarly = Math.round((e - a.runOut) / DAY);
+    a.unusedPct = (a.units - a.used) / a.units;
+    a.daysLeft = Math.round((e - ASOF) / DAY);
+    a.evenPct = Math.min(100, a.elapsed / a.total * 100);
+    a.usedPct = a.used / a.units * 100;
+    if (a.daysEarly > 7) a.state = 'early';
+    else if (a.daysLeft <= 30 && a.unusedPct >= 0.25) a.state = 'unused';
+    else a.state = 'ok';
+  });
+  var needAction = AUTHS.filter(function (a) { return a.state !== 'ok'; });
+
+  /* ---- 01 billed and paid ---- */
+  var T = { billed: 0, paid: 0, denied: 0, waiting: 0 };
+  PLANS.forEach(function (p) {
+    p.waiting = p.billed - p.paid - p.denied;
+    p.paidPct = p.paid / p.billed * 100;
+    T.billed += p.billed; T.paid += p.paid; T.denied += p.denied; T.waiting += p.waiting;
+  });
+  var rows = PLANS.map(function (p) {
+    return '<tr><td><span class="who">' + p.name + '</span></td>' +
+      '<td class="n" data-label="Billed">' + usd(p.billed) + '</td>' +
+      '<td class="n" data-label="Paid">' + usd(p.paid) + '<span class="sub">' + Math.round(p.paidPct) + '% of billed</span>' +
+        '<span class="track" title="' + p.name + ': ' + Math.round(p.paidPct) + '% of billed has been paid"><i class="fill" style="width:' + p.paidPct.toFixed(1) + '%"></i></span></td>' +
+      '<td class="n" data-label="Denied">' + (p.denied ? '<span class="neg">' + usd(p.denied) + '</span>' : usd(0)) + '</td>' +
+      '<td class="n" data-label="Waiting">' + usd(p.waiting) + '</td>' +
+      '<td class="n" data-label="Oldest">' + (p.oldest > 45 ? '<span class="neg">' + p.oldest + ' days</span>' : p.oldest + ' days') + '</td></tr>';
+  }).join('');
+  $('paidTable').innerHTML =
+    '<caption class="sr">Billed, paid, denied and waiting, by plan</caption>' +
+    '<thead><tr><th scope="col">Plan</th><th scope="col" class="n">Billed</th><th scope="col" class="n">Paid</th><th scope="col" class="n">Denied</th><th scope="col" class="n">Waiting</th><th scope="col" class="n">Oldest</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+    '<tfoot><tr><td>Total</td><td class="n" data-label="Billed">' + usd(T.billed) + '</td><td class="n" data-label="Paid">' + usd(T.paid) + '</td><td class="n" data-label="Denied">' + usd(T.denied) + '</td><td class="n" data-label="Waiting">' + usd(T.waiting) + '</td></tr></tfoot>';
+
+  $('chaseList').innerHTML = CHASE.slice().sort(function (a, b) { return b.amount - a.amount; }).map(function (c) {
+    return '<li><span class="id">' + c.id + ' <span class="plan">&middot; ' + c.plan + '</span></span>' +
+      '<span class="why">' + c.why + '</span><span class="amt">' + usd(c.amount) + '</span></li>';
+  }).join('');
+
+  /* ---- 02 hours ---- */
+  var paidHrs = 0;
+  STAFF.forEach(function (s) { s.gap = s.paid - s.billed; s.pct = s.billed / s.paid * 100; paidHrs += s.gap; });
+  function drawHours() {
+    var th = Math.min(100, Math.max(50, parseFloat($('thresh').value) || 80));
+    var low = STAFF.filter(function (s) { return s.pct < th; });
+    var lowHrs = low.reduce(function (n, s) { return n + s.gap; }, 0);
+    $('hoursLive').innerHTML = low.length
+      ? '<strong>' + low.length + ' of ' + STAFF.length + '</strong> are billed under ' + th + '% of their paid hours. That is <strong>' + int(lowHrs) + ' hours</strong>, about <strong>' + usd(lowHrs * RATE) + '</strong>, paid without a matching bill.'
+      : 'Nobody is billed under ' + th + '% of their paid hours.';
+    var body = STAFF.map(function (s) {
+      var isLow = s.pct < th;
+      return '<tr><td><span class="who">' + s.name + '</span></td>' +
+        '<td class="n" data-label="Paid">' + int(s.paid) + ' h</td><td class="n" data-label="Billed">' + int(s.billed) + ' h</td>' +
+        '<td class="sh"><div class="share"><span>' + Math.round(s.pct) + '%</span><span class="track' + (isLow ? ' low' : '') + '" title="' + s.name + ': ' + int(s.billed) + ' of ' + int(s.paid) + ' paid hours billed (' + Math.round(s.pct) + '%)"><i class="fill" style="width:' + s.pct.toFixed(1) + '%"></i></span></div></td>' +
+        '<td class="n">' + (isLow ? '<span class="chip">Low</span> ' : '') + int(s.gap) + ' h<span class="mob"> not billed</span></td></tr>';
+    }).join('');
+    $('hoursTable').innerHTML =
+      '<caption class="sr">Hours paid and hours billed, by therapist</caption>' +
+      '<thead><tr><th scope="col">Therapist</th><th scope="col" class="n">Paid</th><th scope="col" class="n">Billed</th><th scope="col" class="sh">Billed share</th><th scope="col" class="n">Not billed</th></tr></thead>' +
+      '<tbody>' + body + '</tbody>';
+  }
+  $('thresh').addEventListener('input', drawHours);
+  drawHours();
+
+  /* ---- 03 authorizations ---- */
+  var order = { early: 0, unused: 1, ok: 2 };
+  $('authList').innerHTML = AUTHS.slice().sort(function (a, b) {
+    return order[a.state] - order[b.state] || (b.daysEarly - a.daysEarly);
+  }).map(function (a) {
+    var chip, line;
+    if (a.state === 'early') {
+      chip = '<span class="chip">Runs out early</span>';
+      line = 'At this pace the units run out about <strong>' + shortDate(a.runOut) + '</strong>, roughly <strong>' + Math.round(a.daysEarly / 7) + ' weeks</strong> before the authorization ends on ' + shortDate(utc(a.end)) + '. A renewal request should go in now.';
+    } else if (a.state === 'unused') {
+      chip = '<span class="chip">Ends soon, units left</span>';
+      line = 'The authorization ends ' + shortDate(utc(a.end)) + ', in <strong>' + a.daysLeft + ' days</strong>, with <strong>' + int(a.units - a.used) + ' units</strong> (' + Math.round(a.unusedPct * 100) + '%) still unused.';
+    } else {
+      chip = '<span class="chip ok">On track</span>';
+      line = 'Pace fits the authorization, which ends ' + shortDate(utc(a.end)) + '.';
+    }
+    return '<li><div class="auth-top"><span class="who">' + a.client + '</span>' + chip + '</div>' +
+      '<div class="track lg' + (a.state === 'early' ? ' low' : '') + '" role="img" aria-label="' + int(a.used) + ' of ' + int(a.units) + ' units used. An even pace would be ' + Math.round(a.evenPct) + '%." title="' + int(a.used) + ' of ' + int(a.units) + ' units used">' +
+        '<i class="fill" style="width:' + a.usedPct.toFixed(1) + '%"></i><b class="tick" style="left:' + a.evenPct.toFixed(1) + '%"></b></div>' +
+      '<p class="auth-meta"><strong>' + int(a.used) + '</strong> of ' + int(a.units) + ' units used. ' + line + '</p></li>';
+  }).join('');
+
+  /* ---- headline figures ---- */
+  $('summary').innerHTML =
+    '<div><p class="fig">' + usd(T.paid) + '</p><p class="cap">collected, out of ' + usd(T.billed) + ' billed (' + Math.round(T.paid / T.billed * 100) + '%)</p></div>' +
+    '<div><p class="fig">' + usd(T.denied + T.waiting) + '</p><p class="cap">denied or still waiting, to chase</p></div>' +
+    '<div><p class="fig">' + int(paidHrs) + ' h</p><p class="cap">paid but not billed, about ' + usd(paidHrs * RATE) + '</p></div>' +
+    '<div><p class="fig flagged">' + needAction.length + ' of ' + AUTHS.length + '</p><p class="cap">authorizations needing action</p></div>';
+})();
+</script>
+</body>
+</html>
