@@ -81,6 +81,9 @@ question with a short answer.
   template. Buttons (round five, split vote): electric cyan with dark text.
   Gradient buttons read as "crypto launch" or "app store ad" to two readers;
   electric blue read as a stock corporate button.
+- In-office option (round eight, three of four picked the Why-us row): the owner
+  will sit in a client's office for a few days after it goes live. Site says the
+  days are written into the flat quote; don't call them free unless he says so.
 - After the job: the owner is always available if something breaks and stands
   behind his work. Site wording: "We stand behind our work. If something stops
   working after the job is done, call us." Don't promise a time limit or that

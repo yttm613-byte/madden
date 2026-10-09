@@ -223,6 +223,8 @@ h3 {
 .hero .mail { color: #7dd3fc; }
 .hero .aside { color: #b6c2da; }
 .hero .kicker { color: var(--deep-soft); }
+.hero .local { margin-top: 0.35rem; color: #b6c2da; }
+.hero .local::before { content: ""; display: inline-block; width: 0.5rem; height: 0.5rem; margin-right: 0.55rem; border-radius: 50%; background: var(--electric); box-shadow: 0 0 10px rgba(34, 211, 238, 0.8); vertical-align: 0.05em; }
 .hero .aside a { color: #a5f3fc; }
 .hero + .section { border-top: 0; }
 .kicker {
