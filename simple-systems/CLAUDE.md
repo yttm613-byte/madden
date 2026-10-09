@@ -1,7 +1,7 @@
 # Simple Systems: working notes for Claude
 
-Yitzchok's business: automation, custom systems and analytics for local
-businesses, Lakewood, NJ. Phone (732) 655-8671, email yitz@simplesystemsnj.com.
+The owner's business: simple, phone-first tools for local businesses (estimates
+and invoices, forms, reminders, business numbers), Lakewood, NJ. Phone (732) 655-8671, email yitz@simplesystemsnj.com.
 
 ## Default: when the best choice isn't clear, ask the reader panel
 
@@ -33,20 +33,25 @@ question with a short answer.
 
 ## House rules
 
-- Company voice: "we", "us", "our". Yitzchok changed this from "I" on purpose.
-  Don't use "I" or "me" in site copy; his name appears only as the signature.
-  No one-person or one-man framing.
-- Don't present Yitzchok as a bookkeeper. QuickBooks cleanup is one service
+- Company voice: "we", "us", "our". The owner changed this from "I" on purpose.
+  Don't use "I" or "me" in site copy. No one-person or one-man framing.
+- The owner's name appears nowhere on the site (the signature reads "Simple
+  Systems"). Don't add it back unless he supplies it himself.
+- Plain, low-tech framing: everyday results on the phone (an estimate that
+  turns into an invoice, a form that sorts itself, a reminder that sends
+  itself). Avoid tech words in headings and cards: CRM, workflow, dashboard,
+  integration, analytics, system as a product name.
+- Don't present the owner as a bookkeeper. QuickBooks cleanup is one service
   among several; the business is automation for any repetitive work.
 - No invented testimonials, client logos, counts, results or prices. Sample
   data is always labeled as made-up.
 - Banned words: unlock, supercharge, elevate, cutting-edge, game-changer,
   seamless, leverage, "in today's fast-paced world". No em dashes in site copy.
 - No stock photos, popups, newsletter forms, analytics or tracking.
-- Never use anything from Yitzchok's employer: files, clients, accounts, tools.
+- Never use anything from the owner's employer: files, clients, accounts, tools.
 - The site headline matches the classified ad: "Your team's time is worth more
   than busywork."
-- Yitzchok's wording for the offer: "Call for a free consultation" (not "the
+- The owner's wording for the offer: "Call for a free consultation" (not "the
   first call is free"). Keep it to about three mentions on the page: hero,
   How it works, terms box.
 - His background goes in as experience, not a job title: "We come from
@@ -69,9 +74,9 @@ question with a short answer.
   template. Buttons (round five, split vote): electric cyan with dark text.
   Gradient buttons read as "crypto launch" or "app store ad" to two readers;
   electric blue read as a stock corporate button.
-- After the job: Yitzchok is always available if something breaks and stands
+- After the job: the owner is always available if something breaks and stands
   behind his work. Site wording: "We stand behind our work. If something stops
   working after the job is done, call us." Don't promise a time limit or that
   fixes are free unless he says so.
-- Still open, waiting on Yitzchok: his last name and how many years of
-  experience. Don't fill these in without him.
+- Still open, waiting on the owner: how many years of experience. Don't fill
+  it in without him.

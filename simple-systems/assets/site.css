@@ -299,6 +299,31 @@ h3 {
 .card .sample-link a { color: var(--teal); text-underline-offset: 0.2em; }
 .card .sample-link a:hover { text-decoration-thickness: 2px; }
 
+/* a sample estimate drawn like a phone screen */
+.mock {
+  margin: 1.4rem 0 0; max-width: 22rem;
+  padding: 0.95rem 1.05rem 1.1rem;
+  background: #f1f5fd;
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+}
+.mock-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.65rem; }
+.mock-title { font: 600 1.0625rem/1.2 var(--sans); color: var(--ink); }
+.mock-chip { font: 600 0.75rem/1 var(--sans); color: #065f46; background: #d1fae5; padding: 0.32rem 0.6rem; border-radius: 999px; }
+.mock-sub { margin-top: 0.2rem; font-size: 0.8125rem; color: var(--slate-soft); }
+.mock-lines { margin-top: 0.6rem; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.mock-lines > div { display: flex; justify-content: space-between; gap: 1rem; padding: 0.4rem 0; border-bottom: 1px solid var(--rule); }
+.mock-lines dd { font-weight: 600; color: var(--ink); }
+.mock-lines .mock-total { border-bottom: 0; font-weight: 600; color: var(--ink); }
+.mock-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.85rem; }
+.mock-btn {
+  flex: 1 1 auto; text-align: center; white-space: nowrap;
+  font: 600 0.875rem/1 var(--sans);
+  padding: 0.75rem 0.8rem; border-radius: 10px;
+  background: #fff; color: var(--ink); border: 1px solid var(--rule-strong);
+}
+.mock-btn-go { background: var(--electric); color: var(--deep); border-color: transparent; }
+
 /* a worked example inside a card: same paper-and-teal-rule treatment as .rule-eg */
 .sample {
   margin: 1.4rem 0 0;
