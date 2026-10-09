@@ -44,6 +44,8 @@ question with a short answer.
 - Never use anything from Yitzchok's employer: files, clients, accounts, tools.
 - The site headline matches the classified ad: "Your team's time is worth more
   than busywork."
+- Yitzchok's wording for the offer: "Call for a free consultation" (not "the
+  first call is free").
 
 ## What the panel has said so far
 
