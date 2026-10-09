@@ -45,7 +45,10 @@ question with a short answer.
 - The site headline matches the classified ad: "Your team's time is worth more
   than busywork."
 - Yitzchok's wording for the offer: "Call for a free consultation" (not "the
-  first call is free").
+  first call is free"). Keep it to about three mentions on the page: hero,
+  How it works, terms box.
+- His background goes in as experience, not a job title: "I come from
+  bookkeeping and office work, so I've done this busywork myself."
 
 ## What the panel has said so far
 
@@ -59,6 +62,9 @@ question with a short answer.
   in the hero, How it works and the terms); code-style examples read as
   programmer talk; "Not a guru" made readers think "guru"; "probably" was the
   hedge they remembered; "a short handoff" sounded like disappearing.
-- Still open, waiting on Yitzchok: a last name and one true line of background
-  (the skeptical owner's top ask), and what happens when something breaks after
-  the job (support terms). Don't fill these in without him.
+- After the job: Yitzchok is always available if something breaks and stands
+  behind his work. Site wording: "I stand behind my work. If something stops
+  working after the job is done, call me." Don't promise a time limit or that
+  fixes are free unless he says so.
+- Still open, waiting on Yitzchok: his last name and how many years of
+  experience. Don't fill these in without him.
