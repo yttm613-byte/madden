@@ -35,9 +35,14 @@ question with a short answer.
 
 - Company voice: "we", "us", "our". The owner changed this from "I" on purpose.
   Don't use "I" or "me" in site copy. No one-person or one-man framing.
-- The owner's name appears nowhere on the site (the signature reads "Simple
-  Systems"). Don't add it back unless he supplies it himself.
-- Plain, low-tech framing: everyday results on the phone (an estimate that
+- The owner doesn't mind his name being known; he just isn't publicizing it.
+  Leave it off the site (the signature reads "Simple Systems") unless he adds
+  it himself. The yitz@ email address is fine.
+- Two tiers: simple phone tools first (section 01), then "Bigger builds"
+  (section 02, dark band) for the fancy work: AI assistant, paperwork that
+  enters itself, connected orders, custom portals, ask-your-data, cash
+  forecast. Describe what each does; never promise results or accuracy.
+- Plain, low-tech framing in section 01: everyday results on the phone (an estimate that
   turns into an invoice, a form that sorts itself, a reminder that sends
   itself). Avoid tech words in headings and cards: CRM, workflow, dashboard,
   integration, analytics, system as a product name.
