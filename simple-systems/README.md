@@ -36,7 +36,8 @@ is worth more than busywork."
   depends on the font choice.
 - **Colors** are the first block in `site.css`. The header and top section are dark navy
   (`--deep`) with a cyan-to-violet glow (`--glow`); the rest of the page is light
-  (`--paper`) with solid teal buttons (`--teal`) and gradient accents (`--grad`).
+  (`--paper`) with gradient accents (`--grad`). Buttons are electric cyan
+  (`--electric`) with dark text.
 - **Link preview.** The page has a title and description for link previews but no
   preview image. If you want one, add an `og:image` tag pointing at a 1200x630
   image on your domain.

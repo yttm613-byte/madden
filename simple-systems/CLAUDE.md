@@ -65,8 +65,10 @@ question with a short answer.
   programmer talk; "Not a guru" made readers think "guru"; "probably" was the
   hedge they remembered; "a short handoff" sounded like disappearing.
 - Colors (round four, all four picked it): dark glowing top section and header,
-  light body for reading, solid teal buttons (a gradient button read as "app
-  store ad"). A dark page top to bottom read as crypto or a SaaS template.
+  light body for reading. A dark page top to bottom read as crypto or a SaaS
+  template. Buttons (round five, split vote): electric cyan with dark text.
+  Gradient buttons read as "crypto launch" or "app store ad" to two readers;
+  electric blue read as a stock corporate button.
 - After the job: Yitzchok is always available if something breaks and stands
   behind his work. Site wording: "We stand behind our work. If something stops
   working after the job is done, call us." Don't promise a time limit or that

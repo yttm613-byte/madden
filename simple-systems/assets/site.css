@@ -18,6 +18,7 @@
   --teal-dark: #115e59;
   --teal-pale: #a5d8ff;
   --blue: #1d4ed8;
+  --electric: #22d3ee;
   --deep: #0a0f1e;
   --deep-text: #c5cde0;
   --deep-soft: #93a0bd;
@@ -176,10 +177,12 @@ h3 {
 .btn:active { transform: translateY(1px); }
 .btn-sm { min-height: 2.75rem; padding: 0.45rem 1.05rem; font-size: 0.9375rem; }
 .btn-lg { min-height: 3.6rem; padding: 0.8rem 1.9rem; font-size: 1.0625rem; }
-.btn-primary { background: var(--teal); color: #fff; box-shadow: 0 10px 28px -12px rgba(45, 212, 191, 0.65); }
-.btn-primary:hover { background: var(--teal-dark); }
-.btn-light { background: #fff; color: var(--deep); }
-.btn-light:hover { background: #e0ecff; }
+/* electric cyan with dark text: the brightest thing on the page, on dark or light */
+.btn-primary {
+  background: var(--electric); color: var(--deep);
+  box-shadow: 0 0 0 1px rgba(165, 243, 252, 0.5), 0 10px 32px -8px rgba(34, 211, 238, 0.8);
+}
+.btn-primary:hover { background: #67e8f9; }
 
 .actions {
   display: flex; flex-wrap: wrap; align-items: center;
