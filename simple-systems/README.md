@@ -34,7 +34,9 @@ is worth more than busywork."
   elsewhere. To use a specific web font later, self-host the files in `assets/`
   and change `--serif` and `--sans` at the top of `site.css`. Nothing else
   depends on the font choice.
-- **Colors** are the first block in `site.css` (`--teal`, `--slate`, `--paper`).
+- **Colors** are the first block in `site.css`. The header and top section are dark navy
+  (`--deep`) with a cyan-to-violet glow (`--glow`); the rest of the page is light
+  (`--paper`) with solid teal buttons (`--teal`) and gradient accents (`--grad`).
 - **Link preview.** The page has a title and description for link previews but no
   preview image. If you want one, add an `og:image` tag pointing at a 1200x630
   image on your domain.
