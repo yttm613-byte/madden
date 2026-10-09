@@ -374,9 +374,6 @@ h3 {
   .beyond-text { grid-column: 4 / span 8; }
 }
 
-.dash { margin-top: 1.2rem; display: grid; gap: 0.55rem; }
-.dash li { position: relative; padding-left: 1.4rem; }
-.dash li::before { content: "\2013"; position: absolute; left: 0; color: var(--teal); }
 
 @media (min-width: 56rem) {
   .services {
@@ -384,8 +381,11 @@ h3 {
     gap: 1.5rem;
     align-items: start;
   }
-  .card-a, .card-c { grid-column: 1 / span 5; }
-  .card-b, .card-d { grid-column: 6 / span 7; margin-top: 3.5rem; }
+  /* interlocking: the tall cards span two rows, so neither column leaves a gap */
+  .card-a { grid-column: 1 / span 5; grid-row: 1 / span 2; }
+  .card-b { grid-column: 6 / span 7; grid-row: 1; margin-top: 3.5rem; }
+  .card-c { grid-column: 6 / span 7; grid-row: 2 / span 2; }
+  .card-d { grid-column: 1 / span 5; grid-row: 3; }
 }
 
 /* ---------- steps ---------- */
