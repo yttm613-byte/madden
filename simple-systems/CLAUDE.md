@@ -39,9 +39,11 @@ question with a short answer.
   Leave it off the site (the signature reads "Simple Systems") unless he adds
   it himself. The yitz@ email address is fine.
 - Two tiers: simple phone tools first (section 01), then "Bigger builds"
-  (section 02, dark band) for the fancy work: AI assistant, paperwork that
-  enters itself, connected orders, custom portals, ask-your-data, cash
-  forecast. Describe what each does; never promise results or accuracy.
+  (section 02, dark band) for the fancy work: AI assistant, replies drafted
+  for approval, paperwork that enters itself, connected orders, ask-your-data,
+  90-day cash forecast, portals, inbox sorting. Describe what each does; never
+  promise results or accuracy ("a forecast you can trust" read as hype). The AI
+  assistant line promises the owner approves what it may say: build it that way.
 - Plain, low-tech framing in section 01: everyday results on the phone (an estimate that
   turns into an invoice, a form that sorts itself, a reminder that sends
   itself). Avoid tech words in headings and cards: CRM, workflow, dashboard,
