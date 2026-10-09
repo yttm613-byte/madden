@@ -33,7 +33,9 @@ question with a short answer.
 
 ## House rules
 
-- First person "I", never "we". No one-person or one-man framing.
+- Company voice: "we", "us", "our". Yitzchok changed this from "I" on purpose.
+  Don't use "I" or "me" in site copy; his name appears only as the signature.
+  No one-person or one-man framing.
 - Don't present Yitzchok as a bookkeeper. QuickBooks cleanup is one service
   among several; the business is automation for any repetitive work.
 - No invented testimonials, client logos, counts, results or prices. Sample
@@ -47,8 +49,8 @@ question with a short answer.
 - Yitzchok's wording for the offer: "Call for a free consultation" (not "the
   first call is free"). Keep it to about three mentions on the page: hero,
   How it works, terms box.
-- His background goes in as experience, not a job title: "I come from
-  bookkeeping and office work, so I've done this busywork myself."
+- His background goes in as experience, not a job title: "We come from
+  bookkeeping and office work, so we've done this busywork ourselves."
 
 ## What the panel has said so far
 
@@ -63,8 +65,8 @@ question with a short answer.
   programmer talk; "Not a guru" made readers think "guru"; "probably" was the
   hedge they remembered; "a short handoff" sounded like disappearing.
 - After the job: Yitzchok is always available if something breaks and stands
-  behind his work. Site wording: "I stand behind my work. If something stops
-  working after the job is done, call me." Don't promise a time limit or that
+  behind his work. Site wording: "We stand behind our work. If something stops
+  working after the job is done, call us." Don't promise a time limit or that
   fixes are free unless he says so.
 - Still open, waiting on Yitzchok: his last name and how many years of
   experience. Don't fill these in without him.
