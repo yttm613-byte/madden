@@ -254,7 +254,7 @@ export function buildBody(rig) {
     (x, y, z) => sleeveR(x, y, z) - 0.150, (x, y, z) => -sleeveLat(x, y, z) - 0.035];
   const inSleeveStripe = (x, y, z) => { const t = sleeveT(x, y, z); return t > ST0 && t < ST1 && sleeveR(x, y, z) < 0.150 && sleeveLat(x, y, z) > -0.035; };
   const TRIM_D = (x, y, z) => {
-    const collarD = COLLAR(x, y, z) - 0.016;                             // < 0 within 1.6cm of the opening
+    const collarD = COLLAR(x, y, z) - 0.022;                             // < 0 within 1.6cm of the opening
     const q = x >= 0 ? [x, y, z] : [-x, y, z]; const t = dot(sub(q, sleeveEnd), aU);
     // One-sided: negative past the plane 1.5cm from the hem. A max() of the two slab
     // faces put its kink inside the band, and linear interpolation across a decimated

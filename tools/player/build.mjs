@@ -223,14 +223,15 @@ if (!only || only.has('decals')) {
   const J = body.jersey;
   const S = body.S, aU = body.aU, latU = body.latU;
   const DEF = [
-    ['Numbers', { center: [0, 1.345, 0.12], normal: [0, 0, 1], up: [0, 1, 0], width: 0.19, height: 0.16 }],
-    ['Numbers', { center: [0, 1.300, -0.13], normal: [0, 0, -1], up: [0, 1, 0], width: 0.25, height: 0.23 }],
+    // real numbers are big: chest to belly on the front, most of the back
+    ['Numbers', { center: [0, 1.318, 0.12], normal: [0, 0, 1], up: [0, 1, 0], width: 0.285, height: 0.240, nu: 26, nv: 22 }],
+    ['Numbers', { center: [0, 1.285, -0.13], normal: [0, 0, -1], up: [0, 1, 0], width: 0.320, height: 0.290, nu: 28, nv: 24 }],
     ['NameBar', { center: [0, 1.462, -0.14], normal: [0, -0.18, -1], up: [0, 1, -0.18], width: 0.24, height: 0.045, nu: 20, nv: 4 }],
   ];
   for (const s of [1, -1]) {
     const c = [ (S[0] + latU[0]*0.07 + aU[0]*0.02)*s, S[1] + latU[1]*0.07 + aU[1]*0.02, S[2] + latU[2]*0.07 + aU[2]*0.02 ];
     const nrm = [latU[0]*s, latU[1]+0.35, latU[2]];
-    DEF.push(['Numbers', { center: c, normal: nrm, up: [aU[0]*-s*0 + 0, 1, 0], width: 0.080, height: 0.068, nu: 10, nv: 8 }]);
+    DEF.push(['Numbers', { center: c, normal: nrm, up: [aU[0]*-s*0 + 0, 1, 0], width: 0.104, height: 0.088, nu: 12, nv: 10 }]);
   }
   for (const [mat, D] of DEF) {
     const d = decal(J, D);
