@@ -489,3 +489,10 @@ photographed skin is stored as a per-vertex DETAIL colour that the game multipli
 skin tone, so the game needed no change and no texture. The light model keeps the sculpted
 head. The helmet is a superellipsoid across and round front to back, with an eye-level
 cut-back, forward jaw flaps, an arched lower rim, bumpers, and a cage well out in front.
+
+## Working rule (from the owner)
+
+Always look for and use what is freely available before sculpting by hand: reference
+photographs (several, not one) and CC0 models or data. Do it unprompted. The head came
+from MakeHuman this way; the body under the uniform is next (legs ~5% short, torso long,
+upper arm ~13% long against the same real human).
