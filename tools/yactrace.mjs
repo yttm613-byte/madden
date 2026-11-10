@@ -3,7 +3,8 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const b=await chromium.launch({headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist','--enable-unsafe-swiftshader','--no-sandbox']});
 const p=await b.newPage({viewport:{width:900,height:700}});
 const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('http://localhost:8106/index.sim.html',{waitUntil:'load'});
+await p.route(u=>u.hostname!=='localhost',r=>r.abort());
+await p.goto('http://localhost:'+(process.env.PORT||8106)+'/index.sim.html',{waitUntil:'load'});
 await p.waitForFunction(()=>{try{return window.__sim&&window.__sim.ready;}catch(e){return false;}},null,{timeout:40000});
 await p.click('#d-pro'); await sleep(800);
 

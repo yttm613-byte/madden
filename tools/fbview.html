@@ -10,7 +10,7 @@ scene.add(new THREE.AmbientLight(0xffffff,0.9)); const d=new THREE.DirectionalLi
 scene.add(new THREE.GridHelper(400,20,0x556,0x445));
 let mixer,clips,model;
 window.__ready=false;
-new THREE.GLTFLoader().load('../assets/fbplayer2.glb',(g)=>{
+new THREE.GLTFLoader().load('../assets/gridiron_player.glb',(g)=>{
   model=g.scene; scene.add(model); clips=g.animations; window.__clips=clips.map(c=>({name:c.name,dur:+c.duration.toFixed(2)}));
   model.traverse(o=>{ if(o.isMesh) o.frustumCulled=false; });
   const box=new THREE.Box3().setFromObject(model); const sz=new THREE.Vector3(),ctr=new THREE.Vector3(); box.getSize(sz); box.getCenter(ctr);
