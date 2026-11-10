@@ -206,6 +206,14 @@ safeties). Deep catch odds fall 0.042 a yard past 18 (floor 0.24), in both
 **Before the snap, switch cycles the defense** (`switchDef`, `DEF_ORDER`: linebackers,
 line, safeties, corners); live, it takes the man nearest the ball.
 
+**A pick must go through `pickRec`.** While `G.selLock` is 0 the drop update re-picks
+the most open receiver every frame. The lock used to be 1.4s, so a receiver you chose
+early in the drop was quietly swapped for the "most open" one before you threw. Every
+pick now lasts the play: keys 1-5 pick that receiver and throw (tap = touch, hold =
+bullet), a tap or click on his number bubble or on the man throws to him, Space still
+throws to the gold one. Setting `G.sel` directly from a new control works for a frame
+and then is lost.
+
 **The HDR environment is daylight.** `assets/env.hdr` lights the players' helmets nicely
 and ruins everything else: on dark concrete its 4% specular read as a periwinkle glow on
 every wall, on the turf it greyed the grass, and on cloth and skin it filled every shadow
