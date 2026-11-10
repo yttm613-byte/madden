@@ -158,8 +158,8 @@ export function buildBody(rig) {
       const H = B('LeftUpLeg'), K = K_L;
       const h = [H[0]*s, H[1], H[2]], k = [K[0]*s, K[1], K[2]];
       const a = norm(sub(k, h)), ant = norm(sub(FWD, mul(a, dot(FWD, a)))), lat = norm(cross(a, ant));
-      pads.push([roundBox(add(add(h, mul(a, 0.20)), mul(ant, 0.074)), [0.054, 0.090, 0.011], 0.010, [lat, a, ant]), 0.03]);   // thigh pad
-      pads.push([roundBox(add(add(k, mul(ant, 0.057)), mul(a, -0.010)), [0.047, 0.048, 0.010], 0.009, [lat, a, ant]), 0.025]); // knee pad
+      pads.push([roundBox(add(add(h, mul(a, 0.20)), mul(ant, 0.082)), [0.056, 0.092, 0.014], 0.012, [lat, a, ant]), 0.022]);   // thigh pad
+      pads.push([roundBox(add(add(k, mul(ant, 0.062)), mul(a, -0.010)), [0.048, 0.050, 0.013], 0.011, [lat, a, ant]), 0.020]); // knee pad
       pads.push([ellipsoid([0.156*s, 0.994, 0.004], [0.020, 0.056, 0.066]), 0.04]);   // hip pad
     }
     const bodyShape = sunionK([[pelvis, 0], [legs, 0.06], ...pads, [ellipsoid([0, 0.99, -0.118], [0.058, 0.048, 0.02]), 0.04], [WAIST, 0.05]]);
@@ -228,10 +228,10 @@ export function buildBody(rig) {
     // the shoulder, and a rounded cap sits over the deltoid. The first pads here were a
     // flat shelf with a slab epaulet on top of it; lit from above they read as a pillow,
     // and with the arm down the slab's corner stood up like a wing.
-    const arch = roundBox([0.146, 1.548, -0.016], [0.148, 0.036, 0.158], 0.036, frameEuler(0, 0, -0.21));
+    const arch = roundBox([0.148, 1.556, -0.016], [0.150, 0.036, 0.158], 0.036, frameEuler(0, 0, -0.13));
     const archIn = roundBox([0.094, 1.570, -0.020], [0.060, 0.028, 0.140], 0.028, frameEuler(0, 0, -0.34));
     const capC = add(add(S, mul(latU, 0.060)), mul(aU, 0.012));
-    const cap = ellipsoid(capC, [0.058, 0.100, 0.122], [latU, aU, antU]);
+    const cap = roundBox(add(capC, mul(latU, 0.004)), [0.046, 0.084, 0.112], 0.044, [latU, aU, antU]);
     return sunionK([[arch, 0], [archIn, 0.04], [cap, 0.06]]);
   })();
   const pads = sunionK([
@@ -259,7 +259,7 @@ export function buildBody(rig) {
     // One-sided: negative past the plane 1.5cm from the hem. A max() of the two slab
     // faces put its kink inside the band, and linear interpolation across a decimated
     // triangle skipped right over it — that was the sawtooth hem.
-    const sleeveD = Math.max(-(t + 0.015), axisD(q) - 0.088);
+    const sleeveD = Math.max(-(t + 0.015), axisD(q) - 0.108, -dot(sub(q, S), latU) - 0.035);
     return Math.min(collarD, sleeveD);
   };
   const TRIM_MASK = (x, y, z) => smoothstep(0.0008, -0.0008, TRIM_D(x, y, z));
@@ -282,10 +282,12 @@ export function buildBody(rig) {
     // wrinkles where the jersey tucks in, and a little drag under the pads
     j = displace(j, (x, y, z) => {
       const tuck = smoothstep(1.16, 1.10, y)*smoothstep(1.075, 1.10, y);
-      const w = tuck*0.0020*Math.sin(y*120 + 1.6*noise3(x*7, y*2, z*7) + Math.abs(x)*14);
+      const w = tuck*0.0034*Math.sin(y*105 + 1.9*noise3(x*7, y*2, z*7) + Math.abs(x)*14);
       const side = smoothstep(0.12, 0.18, Math.abs(x));
-      const drape = side*smoothstep(1.34, 1.27, y)*smoothstep(1.14, 1.22, y)*0.0014*Math.sin((y + 0.55*Math.abs(z))*120 + 2*noise3(x*12, 0, z*12));
-      return w + drape;
+      const drape = side*smoothstep(1.34, 1.27, y)*smoothstep(1.14, 1.22, y)*0.0026*Math.sin((y + 0.55*Math.abs(z))*105 + 2*noise3(x*12, 0, z*12));
+      // the cloth hangs off the chest plate and pulls across the belly
+      const belly = smoothstep(1.36, 1.30, y)*smoothstep(1.12, 1.20, y)*(1-side)*0.0022*Math.sin(x*52 + 3.0*noise3(x*5, y*9, z*5) + y*26);
+      return w + drape + belly;
     });
     // neck opening with a shallow V in front
     j = cut(j, COLLAR, 0.012);

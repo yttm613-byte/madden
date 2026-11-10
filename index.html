@@ -30,6 +30,8 @@
   #stage:focus,#stage:focus-visible{outline:none;}
   canvas{display:block; width:100%; height:100%;}
   #gl{position:absolute; inset:0;} #gl canvas{display:block; width:100%; height:100%;}
+  /* a lens vignette over the picture: the corners fall away, the eye stays on the play */
+  #gl::after{content:''; position:absolute; inset:0; pointer-events:none; background:radial-gradient(ellipse at 50% 52%, rgba(0,0,0,0) 58%, rgba(2,6,14,0.34) 100%);}
   /* Was clamp(22px,6vw,52px) at top:26% — the banner spanned the full width and sat
      right over the play. Now that the camera frames the action tightly instead of
      showing 44 yards of empty grass, that covered the thing you are looking at.
@@ -633,7 +635,8 @@
     // three words or more: their initials (Harbor City Sharks, HCS); otherwise the city's first three (Brooklyn Thunder, BRO)
     return (w.length>=3 ? w.map(x=>x[0]).join('').slice(0,3) : (w[0]||'YOU').slice(0,3)) || 'YOU'; }
   function applyMyKit(){ const T=MYTEAM||myTeam(); Object.assign(TEAM_KIT.user, (COLORWAYS[T.kit]||COLORWAYS.royal).kit);
-    for(const g of (typeof pPool!=='undefined'?pPool:[])) if(g && g.userData) g.userData.team=null; }
+    for(const g of (typeof pPool!=='undefined'?pPool:[])) if(g && g.userData) g.userData.team=null;
+    try{ if(wxField) repaintText(); }catch(e){} }     // (before init3D the field is not declared yet: a let, so even typeof throws)
   function kitClash(a,b){ const d=k=>((a>>k)&255)-((b>>k)&255); return Math.hypot(d(16),d(8),d(0)) < 110; }
   const _oppRosters={};
   function oppRoster(o){ const sn=(MYTEAM&&MYTEAM.seasonNo)||1, key=o.abbr+':'+sn;
@@ -3555,7 +3558,11 @@
       g.translate(cxp,cyp); g.fillStyle='rgba(240,246,255,0.85)'; g.beginPath();
       for(let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, rr=(i%2?R*0.4:R*0.82); const px=Math.cos(a)*rr, py=Math.sin(a)*rr; i?g.lineTo(px,py):g.moveTo(px,py); }
       g.closePath(); g.fill(); g.restore(); })();
-    g.fillStyle='#16486a'; g.fillRect(0,0,10*sx,h); g.fillStyle='#5a1d24'; g.fillRect(110*sx,0,10*sx,h);
+    // both end zones are the home team's: its jersey colour, its name across them
+    const ez=hexCss(TEAM_KIT.user.jersey), ezTrim=hexCss(kitClash(TEAM_KIT.user.trim,TEAM_KIT.user.jersey)?0xf2f3f5:TEAM_KIT.user.trim);
+    g.fillStyle=ez; g.fillRect(0,0,10*sx,h); g.fillRect(110*sx,0,10*sx,h);
+    g.fillStyle='rgba(0,0,0,0.16)'; g.fillRect(0,0,10*sx,h); g.fillRect(110*sx,0,10*sx,h);
+    for(let i=0;i<1400;i++){ g.fillStyle='rgba(0,0,0,'+(0.03+Math.random()*0.05).toFixed(2)+')'; const w=2+Math.random()*5, e=Math.random()<0.5; g.fillRect((e?0:110*sx)+Math.random()*10*sx,Math.random()*h,w,w); }
     g.strokeStyle='rgba(255,255,255,.92)';
     for(let l=10;l<=110;l+=5){ g.lineWidth=(l%10===0)?5:2.5; g.beginPath(); g.moveTo(l*sx,0); g.lineTo(l*sx,h); g.stroke(); }
     // hash marks + sideline ticks every yard
@@ -3568,9 +3575,11 @@
     g.lineWidth=6; g.strokeStyle='rgba(255,255,255,.92)'; g.strokeRect(0,0,c.width,h);
     g.fillStyle='rgba(255,255,255,.95)'; g.font='bold 62px Oswald, Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
     for(let l=20;l<=100;l+=10){ const num=50-Math.abs(60-l); g.save(); g.translate(l*sx,h*0.2); g.fillText(''+num,0,0); g.restore(); g.save(); g.translate(l*sx,h*0.8); g.rotate(Math.PI); g.fillText(''+num,0,0); g.restore(); }
-    g.fillStyle='rgba(255,255,255,.92)'; g.font='bold 116px Anton, Arial, sans-serif';
-    g.save(); g.translate(5*sx,h/2); g.rotate(-Math.PI/2); g.fillText('GRIDIRON',0,0); g.restore();
-    g.save(); g.translate(115*sx,h/2); g.rotate(Math.PI/2); g.fillText('BLITZ',0,0); g.restore();
+    { const nm=(teamName()||'').toUpperCase().replace(/[^A-Z0-9 &'.-]/g,'').trim(), w=nm.split(/\s+/).filter(Boolean);
+      const a=w.length>1 ? w.slice(0,Math.ceil(w.length/2)).join(' ') : (w[0]||'GRIDIRON'), b=w.length>1 ? w.slice(Math.ceil(w.length/2)).join(' ') : (w[0]||'BLITZ');
+      g.font='bold 116px Anton, Arial, sans-serif'; g.lineJoin='round';
+      const word=(t,x,rot)=>{ g.save(); g.translate(x,h/2); g.rotate(rot); g.lineWidth=10; g.strokeStyle='rgba(0,0,0,0.35)'; g.strokeText(t,0,0,h*0.86); g.fillStyle=ezTrim; g.fillText(t,0,0,h*0.86); g.restore(); };
+      word(a,5*sx,-Math.PI/2); word(b,115*sx,Math.PI/2); }
     const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; if(THREE.sRGBEncoding) tex.encoding=THREE.sRGBEncoding; return tex;
   }
   function skyTexture(){
@@ -3594,7 +3603,7 @@
     // goes on are raked, so from the field the rows read as rows.
     const W=2048,H=512; const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
     g.fillStyle='#10141c'; g.fillRect(0,0,W,H);
-    const neutral=['#cdd6e4','#d9a05b','#6e8cc0','#7bbf8a','#b9b0c8','#e0c66a','#8893a6','#e8e8ec','#9a4a8a','#4aa080','#c9a24b','#5b6f8c','#2c3340','#3b2f2a'];
+    const neutral=['#aab3c2','#b9854a','#4f6a9c','#5e9a6c','#8d85a0','#c2a84f','#6c7688','#d8d8dc','#7a3a6e','#3a7f66','#a8853a','#44566f','#2c3340','#3b2f2a','#20242c','#51413a','#7d2f2f'];
     const home=['#2f6bd6','#3a86ff','#1f4f9e','#dfe6f2','#9fb8e8','#ffffff','#2f6bd6','#2f6bd6'];
     const away=['#d23b34','#ff5340','#a3322c','#f0c0b8','#e88a7a','#ffffff','#d23b34'];
     const skin=['#e8b890','#c89060','#a06840','#7a4a28','#f0c8a0','#d2a070','#5c3a22'];
@@ -3744,12 +3753,14 @@
   // How each part of the kit takes the light: roughness, metalness, environment intensity.
   // The shell is glossy, but at envMapIntensity 1.9 + metalness 0.5 it mirrored the bright
   // stadium and a BLACK helmet rendered silver. The team colour has to win.
-  const PART_RME={ Skin:[0.56,0,0.42], Eyes:[0.14,0,1.0], Jersey:[0.80,0,0.55], JerseyTrim:[0.72,0,0.55], Pants:[0.60,0,0.60],
-    Belt:[0.55,0,0.5], Socks:[0.90,0,0.45], Gloves:[0.55,0,0.6], Cleats:[0.42,0,0.8], ChinStrap:[0.45,0,0.6],
+  // (cloth and skin take little of the HDR sky: it is daylight from every side, and at the
+  // old strengths it filled every shadow until a man had no form, only a colour)
+  const PART_RME={ Skin:[0.56,0,0.26], Eyes:[0.14,0,1.0], Jersey:[0.80,0,0.28], JerseyTrim:[0.72,0,0.28], Pants:[0.60,0,0.32],
+    Belt:[0.55,0,0.4], Socks:[0.90,0,0.28], Gloves:[0.55,0,0.6], Cleats:[0.42,0,0.8], ChinStrap:[0.45,0,0.6],
     Helmet:[0.24,0.22,0.85], HelmetStripe:[0.26,0.22,0.85], Facemask:[0.50,0.15,0.40],
     // kit detail the model is cut into: the stripe down the pants, the white lower sock,
     // and a compression sleeve and wristband that are the man's own skin tone unless he wears them
-    PantsStripe:[0.62,0,0.6], SocksLow:[0.90,0,0.45], ArmSleeve:[0.46,0,0.5], Wristband:[0.88,0,0.4] };
+    PantsStripe:[0.62,0,0.32], SocksLow:[0.90,0,0.28], ArmSleeve:[0.56,0,0.26], Wristband:[0.56,0,0.26] };   // as skin: bare, they must not show
   // The light model draws every solid part of the kit as ONE mesh. Sixteen meshes a man
   // were sixteen draw calls, and the light model is what most of the 22 men on screen
   // wear: 450 draw calls a frame, which is what a phone chokes on, not the triangles.
@@ -4312,6 +4323,76 @@
     if(P.lookT) headLook(u, P.lookT, P.lookW==null?1:P.lookW);
   }
   /*POSE-LIB-END*/
+  // Dress a man in a team's colours. Colours are sRGB hex (see setSRGB).
+  function kitPlayer(u, team){
+    u.team=team;
+    const C = TEAM_KIT[team];
+    const M=u.mats, tint=(n,h)=>{ for(const m of (M[n]||[])) setSRGB(m,h); };
+    tint('Jersey',C.jersey); tint('JerseyTrim',C.trim); tint('Helmet',C.helmet); tint('HelmetStripe',C.stripe);
+    tint('Facemask',C.mask); tint('Socks',C.sock); tint('Pants',C.pants); tint('Belt',C.belt);
+    // the pants stripe is the jersey colour, or the trim where that would vanish into the pants
+    tint('PantsStripe', kitClash(C.jersey,C.pants) ? C.trim : C.jersey);
+    tint('SocksLow', kitClash(C.sock,0xf2f3f5) ? C.trim : 0xf2f3f5);
+    if(u.sleeveHex===-1) tint('ArmSleeve',C.jersey);
+    if(u.bandHex===-1) tint('Wristband',C.trim);
+    { const lt=helmetLogoTex(team); for(const m of (M['HelmetLogo']||[])){ m.map=lt; m.needsUpdate=true; } }
+    if(u.gloveHex<0) tint('Gloves',C.jersey);
+    if(u.cleatHex<0) tint('Cleats',C.jersey);
+    u.numKey=null;
+  }
+  // ---- the sideline squads ---------------------------------------------------------------
+  // Each team's bench is ~20 men standing in its box. They are photographs: one spare
+  // player (never on the field) is dressed in each kit, shot from two angles into a small
+  // atlas, and drawn as cards that turn to the camera — one draw call for both benches.
+  // Retaken whenever either kit changes.
+  let _sq=null;
+  function buildSquads(){
+    const N=22, CW=160, CH=288, rt=new THREE.WebGLRenderTarget(CW*4, CH, {format:THREE.RGBAFormat});
+    const ctr=[], off=[], uv=[], idx=[];
+    let seed=7; const rnd=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
+    for(let t=0;t<2;t++) for(let i=0;i<N;i++){
+      const front=i<5;                                              // a few stand up at the coaches' line
+      const x=36.5+rnd()*47, z=t===0 ? (front? -3.3-rnd()*0.5 : -4.2-rnd()*2.6) : (front? 56.6+rnd()*0.5 : 57.5+rnd()*2.6);
+      const cell=t*2+((rnd()*2)|0), flip=rnd()<0.5, h=2.0*(0.95+rnd()*0.1), w=h*CW/CH, u0=cell/4, u1=(cell+1)/4, k=ctr.length/3;
+      for(const [ox,oy,uu,vv] of [[-w/2,0,flip?u1:u0,0],[w/2,0,flip?u0:u1,0],[w/2,h,flip?u0:u1,1],[-w/2,h,flip?u1:u0,1]]){ ctr.push(x,0,z); off.push(ox,oy); uv.push(uu,vv); }
+      idx.push(k,k+1,k+2, k,k+2,k+3); }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(ctr,3)); geo.setAttribute('off',new THREE.Float32BufferAttribute(off,2));
+    geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); geo.setIndex(idx);
+    const mat=new THREE.ShaderMaterial({ fog:true, uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{map:{value:null}}]),
+      vertexShader:'attribute vec2 off;\nvarying vec2 vUv;\n#include <fog_pars_vertex>\nvoid main(){ vUv=uv; vec3 tc=cameraPosition-position; vec3 rt=normalize(vec3(tc.z,0.0,-tc.x));\n vec3 p=position+rt*off.x+vec3(0.0,off.y,0.0); vec4 mvPosition=viewMatrix*vec4(p,1.0); gl_Position=projectionMatrix*mvPosition;\n #include <fog_vertex>\n}',
+      fragmentShader:'uniform sampler2D map;\nvarying vec2 vUv;\n#include <fog_pars_fragment>\nvoid main(){ vec4 c=texture2D(map,vUv); if(c.a<0.5) discard; gl_FragColor=vec4(c.rgb,1.0);\n #include <encodings_fragment>\n #include <fog_fragment>\n}' });
+    mat.uniforms.map.value=rt.texture;
+    const mesh=new THREE.Mesh(geo,mat); mesh.frustumCulled=false; mesh.visible=false; scene.add(mesh);
+    const man=makePlayer(); man.visible=false;
+    const sc=new THREE.Scene(); sc.add(new THREE.AmbientLight(0x6f7f9c,0.75));
+    const key=new THREE.DirectionalLight(0xfff4dc,1.25); key.position.set(2,6,5); sc.add(key);
+    const rim=new THREE.DirectionalLight(0x9ab8ff,0.5); rim.position.set(-4,3,-4); sc.add(rim);
+    const cam=new THREE.OrthographicCamera(-0.64,0.64,2.2,-0.1,0.1,30); cam.position.set(0,0,8); cam.lookAt(0,0,0);
+    _sq={mesh, rt, man, sc, cam, key:'', CW, CH};
+  }
+  function shootSquads(){
+    if(!_sq || !renderer) return;
+    const K=TEAM_KIT, key=[K.user.jersey,K.user.pants,K.user.helmet,K.user.trim,K.cpu.jersey,K.cpu.pants,K.cpu.helmet,K.cpu.trim,teamAbbr(),cpuLabel()].join('|');
+    if(key===_sq.key) return; _sq.key=key;
+    const S=_sq, g=S.man, u=g.userData, old={rt:renderer.getRenderTarget(), ca:renderer.getClearAlpha(), sh:renderer.shadowMap.autoUpdate}, cc=new THREE.Color(); renderer.getClearColor(cc);
+    try{
+      S.sc.environment=scene.environment; S.sc.add(g); g.visible=true; g.position.set(0,0,0);
+      u.lodOn=false; u.detailOn=true; u.shadowOn=false; playerVis(u);
+      renderer.shadowMap.autoUpdate=false; renderer.setRenderTarget(S.rt); renderer.setClearColor(0x000000,0); renderer.clear();
+      let cell=0;
+      for(const team of ['user','cpu']) for(const ry of [0.45,-2.55]){
+        kitPlayer(u, team);
+        const tex=jerseyNumberTex(10+((cell*37+11)%80), TEAM_KIT[team].trim); for(const m of (u.mats['Numbers']||[])){ m.map=tex; m.needsUpdate=true; }
+        g.rotation.y=ry; g.updateMatrixWorld(true);
+        S.rt.viewport.set(cell*S.CW,0,S.CW,S.CH); S.rt.scissor.set(cell*S.CW,0,S.CW,S.CH); S.rt.scissorTest=true;
+        renderer.setRenderTarget(S.rt); renderer.render(S.sc,S.cam); cell++; }
+      S.mesh.visible=true;
+    }catch(e){ console.warn('sideline squads', e); S.mesh.visible=false; }
+    S.rt.scissorTest=false; S.rt.viewport.set(0,0,S.CW*4,S.CH);
+    renderer.setRenderTarget(old.rt); renderer.setClearColor(cc,old.ca); renderer.shadowMap.autoUpdate=old.sh;
+    g.visible=false; scene.add(g);
+  }
   function loadPlayers(){
     const note=document.getElementById('loadnote');
     new THREE.GLTFLoader().load('assets/gridiron_player.glb', (gltf)=>{
@@ -4319,6 +4400,7 @@
       const aniso=upgradeTextures(playerProto.scene);
       if(window.__gbDebug) console.log('texture anisotropy:',aniso);
       for(let i=0;i<24;i++) pPool.push(makePlayer());
+      try{ buildSquads(); }catch(e){ console.warn('sideline squads', e); }
       if(!(typeof window!=='undefined' && window.__gbNoLod))
         new THREE.GLTFLoader().load('assets/gridiron_player_lod.glb', lo=>{ try{ for(const g of pPool) attachLod(g, lo); }catch(e){ console.warn('lod model', e); } }, undefined, ()=>{});
       for(let i=0;i<6;i++){ const r=new THREE.Mesh(new THREE.RingGeometry(0.95,1.3,28),
@@ -4499,7 +4581,7 @@
     const mesh=(m,mat)=>{ const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(m.pos,3));
       g.setAttribute('uv',new THREE.Float32BufferAttribute(m.uv,2)); g.setIndex(m.idx); g.computeVertexNormals(); const o=new THREE.Mesh(g,mat); scene.add(o); return o; };
     const seats=bag(), conc=bag(), wall=bag(), rib=bag(), lamps=bag();
-    const d=B.lowD, T=60;                                              // T: yards of seats per texture tile
+    const d=B.lowD, T=46;                                              // T: yards of seats per texture tile
     // ---- lower bowl: four mitred decks, the wall under them, a back wall behind them ----
     const ring=(o,y)=>[V(B.x0-o,y,B.z0-o), V(B.x1+o,y,B.z0-o), V(B.x1+o,y,B.z1+o), V(B.x0-o,y,B.z1+o)];
     const r0=ring(0,B.wallH), r1=ring(d,B.lowTop), g0=ring(0,0), o1=ring(d,0);
@@ -4527,7 +4609,7 @@
       quad(conc, V(xa-2,ry+0.5,rz1), V(xb+2,ry+0.5,rz1), V(xb+2,ry+1.6,rz1), V(xa-2,ry+1.6,rz1), 0,1,0,1);
       quad(lamps, V(xa,ry+0.1,zf(B.upIn+5.2)), V(xb,ry+0.1,zf(B.upIn+5.2)), V(xb,ry+0.42,zf(B.upIn+7.4)), V(xa,ry+0.42,zf(B.upIn+7.4)), 0,1,0,1, V(60,-50,26.65)); }
     const dull={roughness:1, metalness:0, envMapIntensity:0.04};        // the HDR sky is daylight: on dark concrete it reads as a blue glow
-    mesh(seats, new THREE.MeshStandardMaterial(Object.assign({map:crowdTexture(), color:0xb9bcc4},dull)));
+    mesh(seats, new THREE.MeshStandardMaterial(Object.assign({map:crowdTexture(), color:0x9fa3ad},dull)));
     mesh(conc,  new THREE.MeshStandardMaterial(Object.assign({color:0x141a26},dull)));
     _textMats.wall=mesh(wall,  new THREE.MeshStandardMaterial(Object.assign({map:wallTexture()},dull,{roughness:0.8}))).material;
     _textMats.rib=mesh(rib,   new THREE.MeshBasicMaterial({map:ribbonTexture(), toneMapped:false})).material;
@@ -4578,7 +4660,7 @@
     }catch(e){}
     document.getElementById('gl').appendChild(cv);
     const sky=new THREE.Mesh(new THREE.SphereGeometry(340,24,16), new THREE.MeshBasicMaterial({map:skyTexture(),side:THREE.BackSide,fog:false})); scene.add(sky); wxSky=sky;
-    scene.add(new THREE.AmbientLight(0x4a5a78,0.5));    // soft cool fill
+    scene.add(new THREE.AmbientLight(0x4a5a78,0.42));    // soft cool fill
     const sun=new THREE.DirectionalLight(0xfff4dc,1.45); sun.position.set(70,95,18); sun.castShadow=true;   // brighter key light
     sun.target.position.set(60,0,26.65); scene.add(sun.target);
     sun.shadow.mapSize.set(Q().shadow||1024,Q().shadow||1024); sun.castShadow=Q().shadow>0; sun.shadow.bias=-0.00018; sun.shadow.normalBias=0.012; sun.shadow.radius=1.4;
@@ -4586,7 +4668,7 @@
     // the whole 140yd field, which is a big jump in shadow detail on the players.
     const sc=sun.shadow.camera; sc.left=-26; sc.right=26; sc.top=20; sc.bottom=-20; sc.near=1; sc.far=200; scene.add(sun);
     sunLight=sun;
-    const rim=new THREE.DirectionalLight(0x9ab8ff,0.5); rim.position.set(40,38,-46); scene.add(rim);          // cool back rim for separation
+    const rim=new THREE.DirectionalLight(0x9ab8ff,0.8); rim.position.set(40,38,-46); scene.add(rim);          // cool back rim for separation
     const warm=new THREE.DirectionalLight(0xffd2a0,0.32); warm.position.set(90,30,70); scene.add(warm);       // warm cross-fill
     // FIELD_K: under four lights and a filmic curve the painted greens came out mint, so the
     // turf's albedo is pulled down; and the daylight HDR is kept off it (it greyed the grass)
@@ -5012,23 +5094,7 @@
         // desaturated at load, so these tints land as the actual team colours.
         const team = o.def ? other(off) : off;
         u.ring.visible=true; u.ring.material.color.setHex(team==='user'?0x3a86ff:0xff5340);
-        if(u.team!==team){ u.team=team;
-          // Two colourways that stay apart at broadcast distance: home royal and gold on a
-          // silver lid, away deep red on black. Colours are sRGB hex (see setSRGB).
-          const C = TEAM_KIT[team];
-          const M=u.mats, tint=(n,h)=>{ for(const m of (M[n]||[])) setSRGB(m,h); };
-          tint('Jersey',C.jersey); tint('JerseyTrim',C.trim); tint('Helmet',C.helmet); tint('HelmetStripe',C.stripe);
-          tint('Facemask',C.mask); tint('Socks',C.sock); tint('Pants',C.pants); tint('Belt',C.belt);
-          // the pants stripe is the jersey colour, or the trim where that would vanish into the pants
-          tint('PantsStripe', kitClash(C.jersey,C.pants) ? C.trim : C.jersey);
-          tint('SocksLow', kitClash(C.sock,0xf2f3f5) ? C.trim : 0xf2f3f5);
-          if(u.sleeveHex===-1) tint('ArmSleeve',C.jersey);
-          if(u.bandHex===-1) tint('Wristband',C.trim);
-          { const lt=helmetLogoTex(team); for(const m of (M['HelmetLogo']||[])){ m.map=lt; m.needsUpdate=true; } }
-          if(u.gloveHex<0) tint('Gloves',C.jersey);
-          if(u.cleatHex<0) tint('Cleats',C.jersey);
-          u.numKey=null;
-        }
+        if(u.team!==team) kitPlayer(u, team);
         // his own number and name, from the roster — the same man all game
         { const nn=(e.n|0)||0, key=team+':'+nn;
           if(u.numKey!==key && u.mats){ u.numKey=key;
@@ -5218,12 +5284,12 @@
     if(nearPosts) nearPosts.visible = camera.position.x > 4;   // never shoot the play through the near uprights
     updateWeather(lastDt||0.016);
     // (a flash at zero opacity is still a draw call: 44 of them, a quarter lit at a time)
-    for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; } else if(Math.random()<0.025){ f.material.opacity=0.95; f.lookAt(camera.position); } f.visible=f.material.opacity>0.02; }
+    for(const f of flashes){ if(f.material.opacity>0.02){ f.material.opacity-=0.07; } else if(Math.random()<((G._td&&G.phase==='dead')?0.16:0.025)){ f.material.opacity=0.95; f.lookAt(camera.position); }   /* the whole bowl lights up for a touchdown */ f.visible=f.material.opacity>0.02; }
     // slide the tight shadow frustum onto the action, keeping the light direction fixed
     if(sunLight){ const fx=camLook.x, fz=camLook.z;
       sunLight.target.position.set(fx,0,fz); sunLight.target.updateMatrixWorld();
       sunLight.position.set(fx+10,95,fz-8.65); }
-    overlays3D(repFrame); drawVideoBoard();
+    overlays3D(repFrame); drawVideoBoard(); shootSquads();
     if(_ribbonTex) _ribbonTex.offset.x=(performance.now()*0.000012)%1;
     if(window.__gbNoDraw) return;          // test harnesses run the pose logic without drawing
     renderer.render(scene,camera);

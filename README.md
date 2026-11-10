@@ -12,8 +12,15 @@ This is the "real project" evolution of the original single-file
   sculpted, meshed, rigged and textured by `tools/player/build.mjs` — no external
   asset, no licence to credit. One model is cloned per entity with per-team colours,
   the player's real roster number and surname painted onto the jersey, and
-  per-player variation (skin tone, build, visor, gloves, cleats). The skeleton uses
-  Mixamo bone names and bone frames, so the game's procedural poses drive it.
+  per-player variation (skin tone, build, visor, gloves, cleats, arm sleeves and
+  wristbands). The kit is cut into materials along exact fields — sleeve stripe,
+  pants stripe, two-tone socks, a helmet logo patch — so each takes a team colour.
+  The skeleton uses Mixamo bone names and bone frames, so the game's procedural
+  poses drive it.
+- **A stadium built from code.** A bowl of raked decks with a seated crowd, upper
+  decks and a lit roof over the sidelines, a padded wall with sponsor boards, a
+  scrolling LED ribbon, video boards, benches, and each team's squad standing on
+  its sideline (photographs of the real player model, retaken when a kit changes).
 
 ## Run it
 
@@ -45,12 +52,14 @@ How it is made, one file per stage in `tools/player/`:
   shipped with the arms down (`rest`).
 - `body.mjs` — every part (head, arms, gloves, jersey over shoulder pads, pants,
   socks, cleats, helmet, facemask, visor, chin strap) as a signed distance field
-  laid out on the joints.
+  laid out on the joints, plus the fields the kit detail is cut along (sleeve and
+  pants stripes, the sock split, the arm sleeve and wristband).
 - `mesher.mjs` / `qem.mjs` — surface nets with a narrow-band evaluator, manifold
   repair, and quadric-error decimation to a per-part triangle budget; exact cuts
   along material boundaries (collar and sleeve trim, belt, pants).
 - `weights.mjs` — skin weights from the skeleton; the shoulder pads stay rigid.
-- `decals.mjs` — number and nameplate patches projected onto the jersey.
+- `decals.mjs` — number and nameplate patches projected onto the jersey, and a
+  logo patch onto each side of the helmet.
 - `textures.mjs` — tiling knit/twill/rib/grip normal maps; `anim.mjs` — idle clip.
 - `glb.mjs` / `png.mjs` — the file writers.
 
