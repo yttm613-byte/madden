@@ -4311,8 +4311,33 @@
       LEG('L',0.02,0.06,0.14,0.2,0); LEG('R',0.02,0.06,0.14,0.2,0); SPINE(0.12+b,0,0); HEAD(0.10+b,0,0);
       ARM('L',-0.35,0.62,-0.6,1.75); ARM('R',-0.35,0.62,-0.6,1.75);
       break; }
-    default: {                // idle without a clip: breathe
-      u.phase += 0.025*(u.gait||1); J('Spine2', 0.02*Math.sin(u.phase),0,0);
+    default: {
+      // Standing is not the modelling pose. A man at rest stands with his feet apart and
+      // his knees soft, shifts his weight, breathes, looks about, and lets his arms hang
+      // bent; and when he drifts a step or two he walks. The bare bind pose here was a
+      // row of mannequins that slid when they moved.
+      if(u.idleV==null){ u.idleV=Math.random(); u.idleT=Math.random()*40; }
+      const v=u.idleV;
+      if(spy>0.45){                                                   // walk / easy jog
+        const A=cycle(spy,0.85)*0.9, ph=u.phase, sn=Math.sin(ph), sn2=Math.sin(ph+Math.PI), cs=Math.cos(ph);
+        HIPS(0.04, -cs*0.10*A, sn*0.02);
+        LEG('L', 0.03+sn *A, 0.12+Math.max(0,-sn )*A*0.95, 0.04, 0.06, 0.04+sn *0.12);
+        LEG('R', 0.03+sn2*A, 0.12+Math.max(0,-sn2)*A*0.95, 0.04, 0.06, 0.04+sn2*0.12);
+        SPINE(0.07, cs*0.14*A, 0); HEAD(-0.05, -cs*0.06*A, 0);
+        ARM('L', -sn*A*0.75, 0.10, 0, 0.42+Math.max(0, sn)*0.25); ARM('R', sn*A*0.75, 0.10, 0, 0.42+Math.max(0,-sn)*0.25);
+      } else {
+        u.idleT += lastDt; const t=u.idleT;
+        const sway=Math.sin(t*(0.45+v*0.25)), br=Math.sin(t*(1.5+v*0.4)), look=Math.sin(t*0.21+v*17)*Math.sin(t*0.13+v*5);
+        const wide=0.13+v*0.08, sdn=v<0.5?1:-1;                        // each man has his own width and favoured leg
+        HIPS(0.02, sdn*0.05, sway*0.035);
+        LEG('L', 0.07-sway*0.03+(sdn>0?0.05:0), 0.16+sway*0.05+(sdn>0?0.07:0), wide+sway*0.02, 0.16, 0);
+        LEG('R', 0.07+sway*0.03+(sdn<0?0.05:0), 0.16-sway*0.05+(sdn<0?0.07:0), wide-sway*0.02, 0.16, 0);
+        SPINE(0.07+br*0.012, sdn*-0.05+sway*0.04, -sway*0.05);
+        HEAD(-0.03-br*0.01, look*0.38, sway*0.03);
+        J('LeftShoulder', 0,0, br*0.012); J('RightShoulder', 0,0, -br*0.012);
+        if(v>0.72){ ARM('L',-0.30,0.58,-0.6,1.70); ARM('R',-0.30,0.58,-0.6,1.70); }          // hands on hips
+        else { ARM('L', 0.10+sway*0.04, 0.13+v*0.08, 0.15, 0.38+v*0.30+br*0.02); ARM('R', 0.10-sway*0.04, 0.13+v*0.08, 0.15, 0.38+(1-v)*0.25-br*0.02); }
+      }
     }}
     // planted feet lie flat before the body is grounded on them
     const fl=P.flatFeet!=null?P.flatFeet:u.flat;
