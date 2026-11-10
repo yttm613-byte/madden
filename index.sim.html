@@ -2032,7 +2032,7 @@
   // (samantha/zira/jenny), which is not the broadcast sound we want. Voices differ per
   // device, so score them by name instead of assuming any one exists.
   const MALE_NAMES=['david','mark','guy','christopher','eric','brandon','roger','steffan','alex',
-                    'daniel','fred','tom','arthur','oliver','ryan','george','james','aaron','reed','rishi'];
+                    'daniel','tom','arthur','oliver','ryan','george','james','aaron','rishi'];
   const FEMALE_NAMES=['zira','jenny','samantha','aria','michelle','ana','hazel','susan','linda',
                       'heera','catherine','karen','moira','tessa','victoria','fiona','female','nicky','sonia','libby','clara'];
   function voiceScore(v){
@@ -2043,7 +2043,10 @@
     if(/\bmale\b/.test(n)) sc+=40;
     if(lang.startsWith('en-us')) sc+=12; else if(lang.startsWith('en')) sc+=6;
     if(n.includes('google')) sc+=8;              // generally the most natural sounding
-    if(n.includes('natural')||n.includes('neural')) sc+=15;
+    if(/natural|neural|premium|enhanced|siri/.test(n)) sc+=45;   // the human-sounding tier
+    // robotic / novelty / low-bitrate engines: these are what make the booth sound synthetic
+    if(/compact|espeak|\bfred\b|albert|zarvox|trinoids|whisper|bahh|bells|boing|bubbles|cellos|jester|organ|wobble|junior|ralph|kathy|superstar|bad news|good news|eloquence|grandpa|grandma|rocko|shelley|sandy|flo|eddy|reed/.test(n)) sc-=80;
+    if(v.localService===false) sc+=10;            // network voices are the higher-quality ones
     return sc;
   }
   function pickVoices(){ try{ const vs=window.speechSynthesis.getVoices()||[]; if(!vs.length) return;
@@ -2074,24 +2077,18 @@
       const say1=(txt,pitch,rate,vol)=>{ if(!txt) return;
         const u=new SpeechSynthesisUtterance(txt); if(v) u.voice=v;
         // hard male ceiling — above ~1.35 these voices turn squeaky/female-sounding
-        u.pitch=Math.max(0.55,Math.min(1.34,pitch)); u.rate=Math.max(0.6,Math.min(1.95,rate));
+        u.pitch=Math.max(0.8,Math.min(1.22,pitch)); u.rate=Math.max(0.85,Math.min(1.4,rate));
         u.volume=Math.max(0,Math.min(1,vol)); window.speechSynthesis.speak(u); };
       segs.forEach((seg,i)=>{
         const j=Math.random()-0.5, last=(i===segs.length-1);
         const basePitch=o.pitch + (o.rampPitch||0)*i + j*0.10 + (last&&bang?0.10:0);
         const baseRate =o.rate  + (o.rampRate ||0)*i + j*0.07;
         const vol=o.vol||1;
-        // find a word worth hitting inside this clause
-        const words=seg.split(/\s+/);
-        let hit=-1;
-        for(let w=0;w<words.length;w++){ const raw=words[w];
-          if(HIT_WORDS.test(raw) || (raw.length>3 && raw===raw.toUpperCase() && /[A-Z]/.test(raw))) hit=w; }
-        if(hit<0 || words.length<2){ say1(seg, basePitch, baseRate, vol); return; }
-        const pre=words.slice(0,hit).join(' '), key=words[hit], post=words.slice(hit+1).join(' ');
-        say1(pre,  basePitch,      baseRate*1.06, vol*0.94);          // run up to it
-        if(pre) say1(',', basePitch, 0.7, 0);                          // a beat of silence
-        say1(key,  basePitch+0.16, baseRate*0.84, 1);                   // land on the word: lower+louder+slower
-        say1(post, basePitch+0.10, baseRate,      vol);                // ride it out
+        // One utterance per clause. Chopping a clause into single-word utterances
+        // (to "hit" a word) put an engine start-up gap around every word, which is what
+        // made the booth sound stuttery and synthetic. Emphasis now rides the clause.
+        const hot=HIT_WORDS.test(seg.split(/\s+/).pop()||'') || (last&&bang);
+        say1(seg, basePitch+(hot?0.06:0), baseRate*(hot?0.96:1), vol);
       });
     }catch(e){}
   }
