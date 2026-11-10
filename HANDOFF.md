@@ -480,3 +480,12 @@ compile never raises a page error and will silently render nothing.
 > Constraints: everything stays in the one file, no build step, no runtime
 > dependency on any external host. Re-measure anything in the baselines table
 > that your change could plausibly affect, and say what you measured.
+
+## Real head and helmet shape
+
+The full model's head and neck are a real human head (MakeHuman, CC0), not the sculpt:
+`tools/player/human/head.json`, built by `human/prep.py` (see `human/README.md`). Its
+photographed skin is stored as a per-vertex DETAIL colour that the game multiplies by the
+skin tone, so the game needed no change and no texture. The light model keeps the sculpted
+head. The helmet is a superellipsoid across and round front to back, with an eye-level
+cut-back, forward jaw flaps, an arched lower rim, bumpers, and a cage well out in front.

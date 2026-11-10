@@ -34,7 +34,7 @@ const anyOf = (...fs) => (x, y, z) => fs.some(f => f(x, y, z));
 // mirror: mesh the left side only, then reflect it for the right.
 // albedo: base brightness baked into the vertex colour (the game tints on top of it).
 const PARTS = [
-  { name: 'Skin', key: 'headneck', f: body.skinFull, lo: [-0.14, 1.40, -0.16], hi: [0.14, 1.905, 0.15], h: 0.0016, target: 7200, w: 'noLegs', albedo: 1.0,
+  { name: 'Skin', key: 'headneck', f: body.skinFull, lo: [-0.14, 1.40, -0.16], hi: [0.14, 1.905, 0.15], h: 0.0016, target: 7200, w: 'noLegs', albedo: 1.0, mesh: 'human/head.json',
     hide: anyOf(inside(body.jersey, 0.003), underHelmet) },
   // weighted like the jersey: under the sleeve the arm follows the sleeve, so it never pokes through
   { name: 'Skin', key: 'arm', f: body.armL, lo: [0.09, 0.88, -0.13], hi: [0.58, 1.57, 0.11], h: 0.0024, target: 2600, mirror: true, w: 'jersey', albedo: 1.0,
@@ -68,7 +68,7 @@ const PARTS = [
   { name: 'Cleats', key: 'cleat', f: body.cleatL, lo: [0.0, -0.02, -0.14], hi: [0.22, 0.15, 0.25], h: 0.0016, target: 2400, mirror: true, w: 'noArms', albedo: 1.0 },
   { name: 'Helmet', key: 'helmet', f: body.helmet, lo: [-0.16, 1.58, -0.21], hi: [0.16, 1.95, 0.18], h: 0.0020, target: 6000, w: 'head', albedo: 0.94 },
   { name: 'HelmetStripe', key: 'stripe', f: body.stripe, lo: [-0.035, 1.62, -0.20], hi: [0.035, 1.94, 0.17], h: 0.0009, target: 1400, w: 'head', albedo: 0.94 },
-  { name: 'Facemask', key: 'mask', f: body.facemask, lo: [-0.13, 1.62, 0.07], hi: [0.13, 1.82, 0.20], h: 0.0012, target: 3200, w: 'head' },
+  { name: 'Facemask', key: 'mask', f: body.facemask, lo: [-0.13, 1.61, 0.06], hi: [0.13, 1.82, 0.225], h: 0.0010, target: 5200, w: 'head' },
   { name: 'Visor', key: 'visor', f: body.visor, lo: [-0.10, 1.72, 0.08], hi: [0.10, 1.80, 0.18], h: 0.0007, target: 500, w: 'head' },
   { name: 'ChinStrap', key: 'chin', f: body.chinstrap, lo: [-0.12, 1.60, -0.01], hi: [0.12, 1.73, 0.12], h: 0.0012, target: 900, w: 'head' },
 ];
@@ -117,19 +117,36 @@ function albedo(part, x, y, z, n) {
   return [1, 1, 1];
 }
 
+function loadReal(file) {
+  const d = JSON.parse(fs.readFileSync(new URL(file, import.meta.url)));
+  const pos = Float64Array.from(d.pos), tris = Int32Array.from(d.tris), nv = pos.length/3, nrm = new Float64Array(nv*3);
+  for (let i = 0; i < tris.length; i += 3) {
+    const a = tris[i]*3, b = tris[i+1]*3, c = tris[i+2]*3;
+    const ux = pos[b]-pos[a], uy = pos[b+1]-pos[a+1], uz = pos[b+2]-pos[a+2], vx = pos[c]-pos[a], vy = pos[c+1]-pos[a+1], vz = pos[c+2]-pos[a+2];
+    const n = [uy*vz-uz*vy, uz*vx-ux*vz, ux*vy-uy*vx];
+    for (const v of [a, b, c]) { nrm[v] += n[0]; nrm[v+1] += n[1]; nrm[v+2] += n[2]; }
+  }
+  const at = new Map();
+  for (let v = 0; v < nv; v++) { const l = Math.hypot(nrm[3*v], nrm[3*v+1], nrm[3*v+2]) || 1;
+    at.set(pos[3*v]+','+pos[3*v+1]+','+pos[3*v+2], { n: [nrm[3*v]/l, nrm[3*v+1]/l, nrm[3*v+2]/l], c: [d.col[3*v], d.col[3*v+1], d.col[3*v+2]] }); }
+  return { m: { pos, tris }, at };
+}
 const meshes = {};   // material -> [{pos, nrm, col, jo, we, tris}]
 for (const P of PARTS) {
   if (only && !only.has(P.key)) continue;
   log(`${P.name}/${P.key}`);
-  let m = surfaceNets(P.f, P.lo, P.hi, P.h, { log: s => log(s) });
-  m = makeManifold(m); if (m.splits) log(`  manifold splits: ${m.splits}`);
-  project(P.f, m, P.h);
+  // A real head (MakeHuman, CC0; see human/README.md) replaces the sculpted one on the full
+  // model: its own shape, its own normals, and a photographed skin detail colour per vertex.
+  const real = P.mesh && !process.env.LOD && !process.env.SCULPT_HEAD ? loadReal(P.mesh) : null;
+  let m = real ? real.m : surfaceNets(P.f, P.lo, P.hi, P.h, { log: s => log(s) });
+  if (!real) { m = makeManifold(m); if (m.splits) log(`  manifold splits: ${m.splits}`);
+    project(P.f, m, P.h); }
   if (P.hide) { const before = m.tris.length/3; m = cull(m, P.hide); log(`  culled ${before - m.tris.length/3} hidden tris`); }
-  m = largestComponents(m, 64, 40);
+  if (!real) m = largestComponents(m, 64, 40);
   // LOD=0.3 builds a lighter model for far players: every part decimated to that share
   // of its triangle target (same skeleton, weights and parts, so it poses identically)
-  m = decimate(m, Math.max(60, Math.round(P.target * (+process.env.LOD || 1))), { log: s => log(s), protect: P.protect || null });
-  project(P.f, m, P.h, 2);
+  if (!real) { m = decimate(m, Math.max(60, Math.round(P.target * (+process.env.LOD || 1))), { log: s => log(s), protect: P.protect || null });
+    project(P.f, m, P.h, 2); }
   // Cut exactly along every material boundary, then give each triangle the first
   // material whose test its centroid passes (the cuts make that test exact).
   if (P.cuts) for (const f of P.cuts) { const r = splitByField(m, f); m = { pos: r.pos, tris: r.tris }; }
@@ -153,11 +170,12 @@ for (const P of PARTS) {
     const jo = new Uint8Array(nv*4), we = new Float32Array(nv*4);
     for (let v = 0; v < nv; v++) {
       const x0 = m.pos[3*v], y = m.pos[3*v+1], z = m.pos[3*v+2];
-      const g = gradient(P.f, x0, y, z);
+      const rv = real ? real.at.get(x0+','+y+','+z) : null;
+      const g = rv ? rv.n : gradient(P.f, x0, y, z);
       const x = x0*s, n = [g[0]*s, g[1], g[2]];
       pos.set([x, y, z], 3*v); nrm.set(n, 3*v);
       const ao = ambientOcclusion(x, y, z, n);
-      const al = albedo(P.name, x, y, z, n);
+      const al = rv ? rv.c : albedo(P.name, x, y, z, n);
       const shade = (0.30 + 0.70*ao)*(P.albedo || 1);
       col.set([al[0]*shade, al[1]*shade, al[2]*shade], 3*v);
       const wt = W.weigh(x, y, z, typeof P.w === 'function' ? P.w(x, y, z) : (P.w || 'auto'));

@@ -309,43 +309,60 @@ export function buildBody(rig) {
   // on underneath: it sagged into a pear at the back, its rim hung to the middle of the
   // neck, and the stripe — laid on the dome alone — dived under the lobe and stopped
   // halfway down with a ragged end.
-  const dome = ellipsoid(HC, [0.128, 0.140, 0.158]);
-  const skirt = smax2(intersect((x, y, z) => (Math.hypot(x/0.121, (z-HC[2])/0.151) - 1)*0.121, (x, y, z) => y - HC[1]),
+  // A real shell is not an ellipsoid: the crown is flatter and the sides and back fuller,
+  // seen from the front. An ellipsoid tall enough to clear the head came to a point on
+  // top and read as an egg. So: squared off across (exponent 2.4) but round front to
+  // back, which keeps the classic round side profile.
+  const SQ = 2.4, sq = v => Math.pow(Math.abs(v), SQ);
+  const dome = (x, y, z) => { const a = Math.pow(sq(x/0.134) + sq((y-HC[1])/0.137), 1/SQ), b = (z-HC[2])/0.160; return (Math.hypot(a, b) - 1)*0.134; };
+  const skirt = smax2(intersect((x, y, z) => (Math.hypot(x/0.128, (z-HC[2])/0.154) - 1)*0.128, (x, y, z) => y - HC[1]),
     (x, y, z) => z - HC[2] - 0.02, 0.05);
   const shellOuter = sunionK([[dome, 0], [skirt, 0.03]]);
   const helmetFill = sunionK([
     [shellOuter, 0],
-    [mirrorX(ellipsoid([0.099, 1.684, 0.036], [0.031, 0.078, 0.074])), 0.05],   // jaw flaps
+    [mirrorX(ellipsoid([0.098, 1.690, 0.044], [0.031, 0.080, 0.082])), 0.05],   // jaw flaps, swept forward to the chin
   ]);
-  const faceHole = ellipsoid([0, 1.702, 0.160], [0.079, 0.089, 0.180]);
-  const RIM = plane([0, 1.652, 0], [0, -1, 0.2]);        // base of the skull behind, over the jaw at the sides
+  // the face opening: square-shouldered, a level brow line and upright jaw flaps, not an oval
+  const faceHole = roundBox([0, 1.711, 0.170], [0.081, 0.086, 0.168], 0.034);
+  // bumpers: the raised pads at the brow and at the base of the skull
+  const bumpers = union(
+    intersect(offset(shellOuter, 0.0045), roundBox([0, 1.8215, 0.13], [0.043, 0.0135, 0.08], 0.008)),
+    intersect(offset(shellOuter, 0.0045), roundBox([0, 1.683, -0.15], [0.050, 0.0135, 0.07], 0.008)));
+  // the lower edge arches up over the ear and comes down at the nape and at the jaw flap
+  const rimAt = z => 1.668 - 1.2*(z+0.03)*(z+0.03);
+  const RIM = (x, y, z) => rimAt(z) - y;
+  // the shell cuts back at eye level between the brow and the jaw flap
+  const eyeNotch = mirrorX(ellipsoid([0.135, 1.766, 0.128], [0.085, 0.031, 0.082]));
   STRIPE_BED = intersect((x, y, z) => Math.abs(x) - STRIPE_W, offset(shellOuter, 0.004),
-    (x, y, z) => -shellOuter(x, y, z) - 0.0025, plane([0, 1.657, 0], [0, -1, 0.2]), (x, y, z) => -faceHole(x, y, z) + 0.012);
+    (x, y, z) => -shellOuter(x, y, z) - 0.0025, (x, y, z) => rimAt(z) + 0.005 - y, (x, y, z) => -faceHole(x, y, z) + 0.012);
   const helmet = (() => {
     const inner = sunionK([[ellipsoid(HC, [0.108, 0.120, 0.138]), 0], [mirrorX(ellipsoid([0.082, 1.684, 0.036], [0.022, 0.072, 0.064])), 0.05]]);
     let h = cut(helmetFill, inner, 0.004);
     h = cut(h, faceHole, 0.01);
+    h = cut(h, eyeNotch, 0.008);
     h = smax2(h, RIM, 0.008);
-    h = cut(h, mirrorX((x, y, z) => Math.hypot(y-1.734, z+0.008) - 0.011 + 0*x), 0.003);     // ear holes
-    h = cut(h, STRIPE_BED, 0.0015);                                                       // bed for the stripe
+    h = cut(h, mirrorX((x, y, z) => Math.hypot(y-1.734, z+0.008) - 0.0125 + 0*x), 0.0018);     // ear holes
+    h = cut(h, STRIPE_BED, 0.0015);
+    h = sunion(0.0025, h, bumpers);                                                       // bed for the stripe
     return h;   // no crown vents: at game distance they read as holes punched in the shell
   })();
   // the stripe runs from above the face opening, over the crown, down to the rim
   const stripe = intersect(offset(shellOuter, 0.0012), (x, y, z) => Math.abs(x) - (STRIPE_W - 0.0004), (x, y, z) => -shellOuter(x, y, z) - 0.0032,
-    (x, y, z) => -faceHole(x, y, z) + 0.0124, plane([0, 1.6573, 0], [0, -1, 0.2]));
+    (x, y, z) => -faceHole(x, y, z) + 0.0124, (x, y, z) => rimAt(z) + 0.0053 - y);
   const facemask = (() => {
-    const r = 0.0056;
+    const r = 0.0047;
     const arc = pts => sunion(0.002, ...pts.slice(0, -1).map((p, i) => capsule(p, pts[i+1], r)));
-    const bar = (y, zc, xs, zs, yEnds) => { const pts = []; const n = 10;
-      for (let i = -n; i <= n; i++) { const t = i/n; pts.push([t*xs, y + (yEnds-y)*t*t, zc - zs*t*t]); } return arc(pts); };
-    const dy = -0.006;
-    const upper = bar(1.732+dy, 0.178, 0.106, 0.098, 1.746+dy);
-    const lower = bar(1.676+dy, 0.162, 0.094, 0.085, 1.688+dy);
-    const top = bar(1.792+dy, 0.152, 0.080, 0.058, 1.784+dy);
-    const centre = capsule([0, 1.732+dy, 0.178], [0, 1.676+dy, 0.162], r);
-    const sides = mirrorX(union(capsule([0.070, 1.741+dy, 0.139], [0.064, 1.684+dy, 0.130], r), capsule([0.080, 1.784+dy, 0.114], [0.093, 1.742+dy, 0.100], r)));
-    const chin = bar(1.648+dy, 0.128, 0.070, 0.050, 1.662+dy);
-    const chinLinks = mirrorX(capsule([0.062, 1.682+dy, 0.133], [0.056, 1.650+dy, 0.114], r));
+    // each bar is a parabola in plan: out in front at the middle, swept back to the shell
+    const curve = (y, zc, xs, zs, yEnds) => t => [t*xs, y + (yEnds-y)*t*t, zc - zs*t*t];
+    const bar = c => { const pts = []; const n = 10; for (let i = -n; i <= n; i++) pts.push(c(i/n)); return arc(pts); };
+    const link = (a, ta, b2, tb) => mirrorX(capsule(a(ta), b2(tb), r));
+    // the cage stands well out in front of the face, as on a real helmet
+    const cU = curve(1.726, 0.208, 0.106, 0.128, 1.722), cL = curve(1.670, 0.194, 0.096, 0.117, 1.680);
+    const cT = curve(1.786, 0.158, 0.080, 0.064, 1.778), cC = curve(1.640, 0.152, 0.072, 0.074, 1.656);
+    const upper = bar(cU), lower = bar(cL), top = bar(cT), chin = bar(cC);
+    const centre = capsule(cU(0), cL(0), r);
+    const sides = union(link(cU, 0.66, cL, 0.68), link(cT, 1, cU, 0.88));
+    const chinLinks = link(cL, 0.65, cC, 0.78);
     return sunion(0.004, upper, lower, top, centre, sides, chin, chinLinks);
   })();
   const visor = intersect(shell(ellipsoid([0, 1.756, 0.010], [0.112, 0.112, 0.150]), 0.0022),
