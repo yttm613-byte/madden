@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>GRIDIRON BLITZ</title>
+<!-- Anton + Oswald from the repo first: behind a content filter the Google stylesheet never
+     arrives and every heading falls back to Arial. Google stays as the second source. -->
+<link href="vendor/fonts.css" rel="stylesheet">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -3544,7 +3547,7 @@
   function fieldTexture(){
     const c=document.createElement('canvas'); c.width=2048; c.height=Math.round(2048*53.3/120); const g=c.getContext('2d');
     const sx=c.width/120, h=c.height;
-    for(let l=0;l<120;l+=5){ g.fillStyle=((l/5)%2===0)?'#2f8040':'#2a763a'; g.fillRect(l*sx,0,5*sx,h); }
+    for(let l=0;l<120;l+=5){ g.fillStyle=((l/5)%2===0)?'#338c42':'#27713a'; g.fillRect(l*sx,0,5*sx,h); }
     for(let i=0;i<4200;i++){ const a=(0.03+Math.random()*0.06).toFixed(2); g.fillStyle='rgba('+(20+(Math.random()*28|0))+',105,'+(48+(Math.random()*30|0))+','+a+')'; const w=2+Math.random()*5; g.fillRect(Math.random()*c.width,Math.random()*h,w,w); }
     // midfield logo (circle + star), lines overlay it
     (function(){ const cxp=60*sx, cyp=h/2, R=h*0.21; g.save(); g.globalAlpha=0.85;
@@ -3586,25 +3589,73 @@
     const t=new THREE.CanvasTexture(c); if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
   }
   function crowdTexture(){
+    // One tile is a block of seats 60 yards wide and 24 rows deep: people as a torso and a
+    // head, stairs every 28 seats, a cross-aisle halfway up, a few empty seats. The decks it
+    // goes on are raked, so from the field the rows read as rows.
     const W=2048,H=512; const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
-    g.fillStyle='#0b1018'; g.fillRect(0,0,W,H);
-    const neutral=['#cdd6e4','#d9a05b','#6e8cc0','#7bbf8a','#b9b0c8','#e0c66a','#8893a6','#e8e8ec','#9a4a8a','#4aa080','#c9a24b','#5b6f8c'];
-    const home=['#2f6bd6','#3a86ff','#1f4f9e','#dfe6f2','#9fb8e8','#ffffff','#2f6bd6'];
+    g.fillStyle='#10141c'; g.fillRect(0,0,W,H);
+    const neutral=['#cdd6e4','#d9a05b','#6e8cc0','#7bbf8a','#b9b0c8','#e0c66a','#8893a6','#e8e8ec','#9a4a8a','#4aa080','#c9a24b','#5b6f8c','#2c3340','#3b2f2a'];
+    const home=['#2f6bd6','#3a86ff','#1f4f9e','#dfe6f2','#9fb8e8','#ffffff','#2f6bd6','#2f6bd6'];
     const away=['#d23b34','#ff5340','#a3322c','#f0c0b8','#e88a7a','#ffffff','#d23b34'];
-    const skin=['#e8b890','#c89060','#a06840','#7a4a28','#f0c8a0','#d2a070'];
-    const palAt=(x)=>{ const seg=(x/W*8)|0; if(seg%4===1) return home; if(seg%4===3) return away; return Math.random()<0.45?(Math.random()<0.5?home:away):neutral; };
-    const rows=24, rh=H/rows;
-    for(let r=0;r<rows;r++){ const y=H-(r+0.5)*rh, perRow=170, jit=rh*0.3;
-      g.fillStyle='rgba(0,0,0,0.12)'; g.fillRect(0, y+rh*0.34, W, rh*0.16);          // seat-row shadow
-      for(let i=0;i<perRow;i++){ const x=((i+(r%2?0.5:0))/perRow)*W+(Math.random()-0.5)*5, yy=y+(Math.random()-0.5)*jit;
+    const skin=['#e8b890','#c89060','#a06840','#7a4a28','#f0c8a0','#d2a070','#5c3a22'];
+    const palAt=(x)=>{ const seg=(x/W*8)|0; if(seg%4===1) return home; if(seg%4===3) return Math.random()<0.6?away:neutral; return Math.random()<0.5?home:neutral; };
+    const rows=24, rh=H/rows, perRow=168, sw=W/perRow;
+    for(let r=0;r<rows;r++){ const y=H-(r+0.5)*rh;
+      g.fillStyle='#1b212c'; g.fillRect(0, y-rh*0.5, W, rh);                                 // the tread
+      g.fillStyle='rgba(0,0,0,0.42)'; g.fillRect(0, y+rh*0.22, W, rh*0.28);                  // shadow of the row in front
+      if(r===12){ g.fillStyle='#39414f'; g.fillRect(0,y-rh*0.5,W,rh); continue; }            // cross-aisle
+      for(let i=0;i<perRow;i++){ if(i%28===0 || i%28===27) continue;                         // stairs
+        const x=(i+0.5)*sw+(Math.random()-0.5)*2.2, yy=y+(Math.random()-0.5)*rh*0.12;
+        if(Math.random()<0.045){ g.fillStyle='#232b3a'; g.fillRect(x-sw*0.36,yy-rh*0.2,sw*0.72,rh*0.5); continue; }   // empty seat
         const pal=palAt(x);
-        g.fillStyle=pal[(Math.random()*pal.length)|0]; g.beginPath(); g.ellipse(x,yy+0.6,4.6,3.4,0,0,7); g.fill();   // rounded torso (seated)
-        g.fillStyle=skin[(Math.random()*skin.length)|0]; g.beginPath(); g.arc(x,yy-2.4,2.9,0,7); g.fill();           // head
+        g.fillStyle=pal[(Math.random()*pal.length)|0]; g.beginPath(); g.ellipse(x,yy+rh*0.12,sw*0.42,rh*0.30,0,0,7); g.fill();   // shoulders
+        g.fillStyle=skin[(Math.random()*skin.length)|0]; g.beginPath(); g.arc(x,yy-rh*0.20,sw*0.25,0,7); g.fill();             // head
+        if(Math.random()<0.3){ g.fillStyle=pal[(Math.random()*pal.length)|0]; g.fillRect(x-sw*0.25,yy-rh*0.36,sw*0.5,rh*0.13); }  // a cap
       }
     }
-    const sh=g.createLinearGradient(0,0,0,H); sh.addColorStop(0,'rgba(0,0,0,0.5)'); sh.addColorStop(0.45,'rgba(0,0,0,0.08)'); sh.addColorStop(1,'rgba(0,0,0,0.34)');
-    g.fillStyle=sh; g.fillRect(0,0,W,H);
+    for(let i=0;i<perRow;i+=28){ g.fillStyle='#4a5261'; g.fillRect((i-1)*sw+sw, 0, sw*2-2, H);          // the stairs themselves
+      g.fillStyle='rgba(0,0,0,0.25)'; for(let r=0;r<rows;r++) g.fillRect((i-1)*sw+sw, H-(r+1)*rh, sw*2-2, 2); }
     const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=8; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
+  }
+  // The padded wall round the field: panels with a seam between them, a rail on top, and
+  // boards for sponsors that do not exist.
+  function wallTexture(){
+    const W=2048,H=128, c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
+    g.fillStyle='#0f1c33'; g.fillRect(0,0,W,H);
+    for(let x=0;x<W;x+=128){ g.fillStyle='rgba(255,255,255,0.05)'; g.fillRect(x+3,12,122,H-18); g.fillStyle='rgba(0,0,0,0.5)'; g.fillRect(x,0,3,H); }
+    g.fillStyle='#c9ced8'; g.fillRect(0,0,W,9); g.fillStyle='rgba(0,0,0,0.45)'; g.fillRect(0,9,W,3);
+    const ads=[['GRIDIRON BLITZ','#f2c230','#10131a'],['KICKOFF COLA','#c8102e','#ffffff'],['IRONSIDE TRUCKS','#e9ebef','#14254a'],['NORTHFIELD BANK','#1d5c34','#ffffff'],
+               ['PRO GRIP','#15171d','#f2c230'],['REDZONE GRILL','#e86a1c','#10131a'],['GAMEDAY RADIO','#4b2585','#ffffff'],['FIRST & TEN TIRES','#0f7f86','#ffffff']];
+    g.textAlign='center'; g.textBaseline='middle'; g.font='700 46px Oswald, "Arial Narrow", Arial, sans-serif';
+    ads.forEach((a,i)=>{ const x=i*256+14; g.fillStyle=a[1]; g.fillRect(x,22,228,92); g.fillStyle=a[2]; g.fillText(a[0], x+114, 70, 208); });
+    const t=new THREE.CanvasTexture(c); t.wrapS=THREE.RepeatWrapping; t.anisotropy=8; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
+  }
+  // The LED ribbon along the front of the upper deck. It scrolls (render3D moves its offset).
+  let _ribbonTex=null;
+  function ribbonTexture(){
+    const W=2048,H=64, c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
+    g.fillStyle='#03060b'; g.fillRect(0,0,W,H);
+    g.textBaseline='middle'; g.textAlign='center'; g.font='700 44px Oswald, "Arial Narrow", Arial, sans-serif';
+    const words=[['GRIDIRON BLITZ','#ffd24a'],['★','#ffffff'],['MAKE SOME NOISE','#5fb0ff'],['★','#ffffff'],['DEFENSE','#ff6a55'],['★','#ffffff'],['TOUCHDOWN','#ffd24a'],['★','#ffffff']];
+    words.forEach((w,i)=>{ g.fillStyle=w[1]; g.fillText(w[0], (i+0.5)*W/words.length, H/2+2, W/words.length-16); });
+    g.fillStyle='rgba(0,0,0,0.28)'; for(let y=0;y<H;y+=4) g.fillRect(0,y,W,1);            // the LED rows
+    const t=new THREE.CanvasTexture(c); t.wrapS=THREE.RepeatWrapping; t.anisotropy=4; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return (_ribbonTex=t);
+  }
+  // The ground round the field, wall to wall: turf a shade darker than the field, the
+  // white border, the bench areas and the coaches' line.
+  function apronTexture(){
+    const W=2048, H=Math.round(2048*70.4/138), c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
+    const sx=W/138, X=x=>(x+9)*sx, Z=z=>(z+8.55)*sx;                    // world yards -> pixels (x -9..129, z -8.55..61.85)
+    g.fillStyle='#1d5a2b'; g.fillRect(0,0,W,H);
+    for(let i=0;i<9000;i++){ g.fillStyle='rgba('+(14+(Math.random()*26|0))+','+(70+(Math.random()*40|0))+','+(30+(Math.random()*24|0))+',0.10)'; const w=2+Math.random()*5; g.fillRect(Math.random()*W,Math.random()*H,w,w); }
+    g.fillStyle='#eef2f6'; g.fillRect(X(-2),Z(-2),sx*124,sx*57.3);       // the white border, two yards wide
+    g.fillStyle='#1d5a2b'; g.fillRect(X(0),Z(0),sx*120,sx*53.3);         // (the field itself lies on top)
+    for(const z0 of [-7.6,56.0]){                                        // bench areas between the 25s
+      g.fillStyle='rgba(238,242,246,0.92)'; g.fillRect(X(35),Z(z0),sx*50,sx*4.9);
+      g.fillStyle='#16324f'; g.fillRect(X(35.4),Z(z0+0.4),sx*49.2,sx*4.1); }
+    g.setLineDash([sx*1.2,sx*1.2]); g.strokeStyle='rgba(255,224,74,0.9)'; g.lineWidth=sx*0.3;   // the coaches' line
+    for(const z0 of [-2.9,56.2]){ g.beginPath(); g.moveTo(X(35),Z(z0)); g.lineTo(X(85),Z(z0)); g.stroke(); }
+    const t=new THREE.CanvasTexture(c); t.anisotropy=8; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding; return t;
   }
 
   // Clone one instance of the rigged GLB player, with its own materials, build
@@ -3657,6 +3708,21 @@
     g.fillStyle='#ffffff'; g.fillText(txt,0,0); g.restore();
     const t=decalTex(c); _numCache.set(key,t); return t;
   }
+  // The emblem on the side of the helmet: the team's initial, heavy and slanted, in the
+  // helmet's stripe colour with a dark or light keyline so it reads on any shell.
+  const _logoCache=new Map();
+  function helmetLogoTex(team){
+    const C=TEAM_KIT[team], letter=((team==='user'?teamAbbr():cpuLabel())||'G').trim().charAt(0)||'G';
+    const fill=kitClash(C.stripe,C.helmet) ? C.trim : C.stripe, key=letter+'|'+fill+'|'+C.helmet;
+    if(_logoCache.has(key)) return _logoCache.get(key);
+    const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d');
+    const lum=h=>0.299*((h>>16)&255)+0.587*((h>>8)&255)+0.114*(h&255), hex=h=>'#'+h.toString(16).padStart(6,'0');
+    g.translate(64,70); g.transform(1,0,-0.22,1,0,0);
+    g.font='900 104px Anton, Oswald, "Arial Black", Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.lineJoin='round'; g.lineWidth=13; g.strokeStyle=lum(fill)>120?'#10131a':'#f2f3f5'; g.strokeText(letter,0,0);
+    g.fillStyle=hex(fill); g.fillText(letter,0,0);
+    const t=decalTex(c); _logoCache.set(key,t); return t;
+  }
   function nameplateTex(name){
     if(_nameCache.has(name)) return _nameCache.get(name);
     const c=document.createElement('canvas'); c.width=256; c.height=64; const g=c.getContext('2d');
@@ -3674,13 +3740,16 @@
   // is Mixamo-named with Mixamo bone frames, so applyPose below drives it unchanged.
   const SKIN_HEX=[0x3b2219,0x4d2c1c,0x5f3824,0x74462c,0x8c5a3a,0xa86f4c,0xc38c66,0xdcaa86,0xeec4a2];
   const SKIN_W  =[0.10,  0.13,  0.14,  0.14,  0.12,  0.10,  0.09,  0.10,  0.08];
-  const SHADOW_PARTS={Jersey:1,Pants:1,Skin:1,Helmet:1,Socks:1,Cleats:1,Gloves:1,LODBody:1,'Hi:Skin':1,'Hi:Belt':1}, DETAIL_PARTS={Eyes:1,ChinStrap:1,NameBar:1,Visor:1};
+  const SHADOW_PARTS={Jersey:1,Pants:1,Skin:1,Helmet:1,Socks:1,Cleats:1,Gloves:1,LODBody:1,'Hi:Skin':1,'Hi:Belt':1}, DETAIL_PARTS={Eyes:1,ChinStrap:1,NameBar:1,Visor:1,HelmetLogo:1};
   // How each part of the kit takes the light: roughness, metalness, environment intensity.
   // The shell is glossy, but at envMapIntensity 1.9 + metalness 0.5 it mirrored the bright
   // stadium and a BLACK helmet rendered silver. The team colour has to win.
   const PART_RME={ Skin:[0.56,0,0.42], Eyes:[0.14,0,1.0], Jersey:[0.80,0,0.55], JerseyTrim:[0.72,0,0.55], Pants:[0.60,0,0.60],
     Belt:[0.55,0,0.5], Socks:[0.90,0,0.45], Gloves:[0.55,0,0.6], Cleats:[0.42,0,0.8], ChinStrap:[0.45,0,0.6],
-    Helmet:[0.24,0.22,0.85], HelmetStripe:[0.26,0.22,0.85], Facemask:[0.50,0.15,0.40] };
+    Helmet:[0.24,0.22,0.85], HelmetStripe:[0.26,0.22,0.85], Facemask:[0.50,0.15,0.40],
+    // kit detail the model is cut into: the stripe down the pants, the white lower sock,
+    // and a compression sleeve and wristband that are the man's own skin tone unless he wears them
+    PantsStripe:[0.62,0,0.6], SocksLow:[0.90,0,0.45], ArmSleeve:[0.46,0,0.5], Wristband:[0.88,0,0.4] };
   // The light model draws every solid part of the kit as ONE mesh. Sixteen meshes a man
   // were sixteen draw calls, and the light model is what most of the 22 men on screen
   // wear: 450 draw calls a frame, which is what a phone chokes on, not the triangles.
@@ -3700,7 +3769,7 @@
   }
   // The full model's parts that can share a draw: the untextured ones, and the three that
   // share the sock weave's normal map. (Jersey, pants and gloves keep their own maps.)
-  const HI_GROUPS=[['Skin','Eyes','Cleats','Helmet','HelmetStripe','Facemask','ChinStrap'], ['Belt','JerseyTrim','Socks']];
+  const HI_GROUPS=[['Skin','Eyes','Cleats','Helmet','HelmetStripe','Facemask','ChinStrap','ArmSleeve','Wristband'], ['Belt','JerseyTrim','Socks','SocksLow','PantsStripe']];
   const _hiGeo=new Map();
   // One skinned geometry from several parts on the same skin: each vertex carries its part
   // (partId, an index into LOD_BODY_PARTS) and that part's surface (partRME).
@@ -3808,10 +3877,12 @@
     // number patches sit a millimetre off the jersey; polygon offset keeps them clean at range
     for(const n of ['Numbers','NameBar']) each(n,m=>{ m.roughness=0.7; m.metalness=0; m.envMapIntensity=0.5;
       m.polygonOffset=true; m.polygonOffsetFactor=-2; m.polygonOffsetUnits=-2; m.alphaTest=0.5; m.transparent=false; });
+    each('HelmetLogo',m=>{ m.roughness=0.3; m.metalness=0.1; m.envMapIntensity=0.8;
+      m.polygonOffset=true; m.polygonOffsetFactor=-2; m.polygonOffsetUnits=-2; m.alphaTest=0.5; m.transparent=false; });
     // skin tone, weighted toward the deeper end to match who actually plays this sport
     { let r=Math.random(), i=0; while(i<SKIN_W.length-1 && (r-=SKIN_W[i])>0) i++;
       const tone=new THREE.Color(SKIN_HEX[i]).convertSRGBToLinear().multiplyScalar(0.94+Math.random()*0.12);
-      each('Skin',m=>m.color.copy(tone)); }
+      each('Skin',m=>m.color.copy(tone)); each('ArmSleeve',m=>m.color.copy(tone)); each('Wristband',m=>m.color.copy(tone)); }
     // ---- per-player kit: what really varies inside an NFL locker room ----
     // Helmet shell, facemask and uniform stay team-uniform; randomising those is what
     // made an earlier build look like a pickup game. Visor, gloves and cleats vary.
@@ -3823,6 +3894,11 @@
     const gloveHex=pickOf([0x121317,0x121317,0xf0f1f4,-1]);      // -1: team colour, set with the kit
     const cleatHex=pickOf([0x111216,0x111216,0xf2f2f4,-1]);
     const chinHex=pickOf([0x15171d,0x15171d,0x15171d,0xf0f1f4]);   // mostly dark: a white cup reads as bared teeth at a distance
+    // on his arms: nothing, wristbands, or full sleeves (-1: team colour, -2: bare skin)
+    const armKit=pickOf([[-2,-2],[-2,-2],[-2,0xf0f1f4],[-2,-1],[0x121317,-2],[0x121317,0xf0f1f4],[0xf0f1f4,-2],[-1,-2]]);
+    const sleeveHex=armKit[0], bandHex=armKit[1];
+    if(sleeveHex>=0) each('ArmSleeve',m=>setSRGB(m,sleeveHex));
+    if(bandHex>=0) each('Wristband',m=>setSRGB(m,bandHex));
     if(gloveHex>=0) each('Gloves',m=>setSRGB(m,gloveHex));
     if(cleatHex>=0) each('Cleats',m=>setSRGB(m,cleatHex));
     each('ChinStrap',m=>setSRGB(m,chinHex));
@@ -3859,7 +3935,7 @@
     // the model carries a 'heavy' morph target (belly, neck, seat, thighs, arms): the
     // game dials it in per position so linemen are big men, not stretched receivers
     const morphs=[]; model.traverse(o=>{ if(o.isMesh && o.morphTargetInfluences && o.morphTargetInfluences.length) morphs.push(o); });
-    grp.userData={ring,mats,parts,hiMeshes,meshParent,lod:null,lodOn:false,wearsVisor,detailOn:true,gloveHex,cleatHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, morphs, heavy:-1};
+    grp.userData={ring,mats,parts,hiMeshes,meshParent,lod:null,lodOn:false,wearsVisor,detailOn:true,gloveHex,cleatHex,sleeveHex,bandHex,team:null,numKey:null,model,grp,mixer,idleAct,gripBones:[],baseS,buildVh,buildVg,baseY:model.position.y,heading:null,bank:0,phase:Math.random()*6.28, gait:0.85+Math.random()*0.3, morphs, heavy:-1};
     initRig(grp.userData, model);
     grp.visible=false; scene.add(grp); return grp;
   }
@@ -4252,7 +4328,8 @@
     }, (ev)=>{ if(note && ev && ev.total) note.textContent='LOADING PLAYERS… '+Math.min(99,Math.round(100*ev.loaded/ev.total))+'%'; },
     (e)=>{ console.error('player glb load failed', e); if(note) note.innerHTML='Could not load the players — <a href="" style="color:var(--gold)">reload</a> to try again'; });
   }
-  let wxRain=null, wxSnow=null, wxCover=null, wxField=null, wxSky=null, wxT=0, wxSnd=null;
+  let wxRain=null, wxSnow=null, wxCover=null, wxField=null, wxApron=null, wxSky=null, wxT=0, wxSnd=null;
+  const FIELD_K=0.62;
   function initWeather3D(){
     const NR=1800, rg=new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NR*6),3));
     wxRain=new THREE.LineSegments(rg, new THREE.LineBasicMaterial({color:0xaec0d8, transparent:true, opacity:0.4, depthWrite:false}));
@@ -4298,11 +4375,12 @@
     const lb=document.querySelector('#sb-clock .lbl'); if(lb) lb.textContent='Clock'+(WEATHER==='rain'?' · 🌧':WEATHER==='snow'?' · ❄':'');
     wxSound();
     if(!scene) return;
-    const f={clear:[0x12203a,75,250], rain:[0x1a222e,36,165], snow:[0x39424f,30,135]}[WEATHER];
+    const f={clear:[0x0d1626,120,360], rain:[0x1a222e,36,165], snow:[0x39424f,30,135]}[WEATHER];
     scene.fog.color.setHex(f[0]); scene.fog.near=f[1]; scene.fog.far=f[2];
     if(_vb && _vb.scr.fog!==(WEATHER!=='clear')){ _vb.scr.fog=WEATHER!=='clear'; _vb.scr.needsUpdate=true; }
     if(wxRain) wxRain.visible=WEATHER==='rain'; if(wxSnow) wxSnow.visible=WEATHER==='snow'; if(wxCover) wxCover.visible=WEATHER==='snow';
-    if(wxField){ wxField.material.roughness=WEATHER==='rain'?0.6:0.82; wxField.material.color.setScalar(WEATHER==='rain'?0.8:1); }
+    if(wxField){ wxField.material.roughness=WEATHER==='rain'?0.6:0.9; wxField.material.color.setScalar(FIELD_K*(WEATHER==='rain'?0.8:1)); }
+    if(wxApron) wxApron.material.color.setScalar(FIELD_K*(WEATHER==='rain'?0.8:1));
     if(wxSky) wxSky.material.color.setHex(WEATHER==='rain'?0x7d8594:WEATHER==='snow'?0xaab3c0:0xffffff);
     if(sunLight) sunLight.intensity=WEATHER==='clear'?1.45:WEATHER==='rain'?1.12:1.25;
     wxSeed(true);
@@ -4390,19 +4468,70 @@
     const fm=mergeMeshes(frame, m); fm.castShadow=true; g.add(fm);
     scene.add(g); return g;
   }
+  // The stadium is a bowl of raked decks, not boxes. Rings of rectangles round the field
+  // (front of the lower deck at the wall, its back row, then the upper deck over the two
+  // sidelines) are joined by sloping quads, mitred at the corners so the lower bowl is one
+  // surface. The ends stay one deck high: the video boards stand behind them. Five meshes
+  // in all — seats, concrete, the field wall, the LED ribbon and the roof lights.
+  // Textures with lettering are painted before the web fonts have arrived; once they have,
+  // paint them again (the field's numbers, the wall boards, the ribbon, the video boards).
+  const _textMats={};
+  function repaintText(){
+    try{ if(wxField){ const o=wxField.material.map; wxField.material.map=fieldTexture(); wxField.material.needsUpdate=true; if(o) o.dispose(); }
+      if(_textMats.wall){ const o=_textMats.wall.map; _textMats.wall.map=wallTexture(); _textMats.wall.needsUpdate=true; if(o) o.dispose(); }
+      if(_textMats.rib){ const o=_textMats.rib.map; _textMats.rib.map=ribbonTexture(); _textMats.rib.needsUpdate=true; if(o) o.dispose(); }
+      if(_vb) _vb.key=''; _numCache.clear(); _nameCache.clear(); _logoCache.clear();
+      for(const g of pPool) if(g && g.userData){ g.userData.team=null; g.userData.numKey=null; } }catch(e){}
+  }
+  const BOWL={ x0:-9, x1:129, z0:-8.55, z1:61.85, wallH:2.7, lowD:21.5, lowTop:15.2, upIn:18.4, upD:36.4, upY0:19.5, upY1:33.2, roofY:37.4 };
   function buildStands(){
-    const ct=crowdTexture(), crowd=[], roofs=[], skirts=[];
-    function stand(cx,cz,w,d,ox,oz){
-      const lower=new THREE.Mesh(new THREE.BoxGeometry(w,14,d)); lower.position.set(cx,7,cz); crowd.push([lower, Math.max(4,w/7), 3]);
-      const upper=new THREE.Mesh(new THREE.BoxGeometry(w*0.98,11,d*0.78)); upper.position.set(cx+ox*d*0.55,18.5,cz+oz*d*0.55); crowd.push([upper, Math.max(4,w/7), 2.4]);
-      const roof=new THREE.Mesh(new THREE.BoxGeometry(w+5,1.4,d*0.95)); roof.position.set(cx+ox*d*0.55,25,cz+oz*d*0.55); roofs.push([roof]);
-      const skirt=new THREE.Mesh(new THREE.BoxGeometry(w+2,4,d+2)); skirt.position.set(cx,2,cz); skirts.push([skirt]);
-    }
-    stand(60,-24,196,30, 0,-1); stand(60,77,196,30, 0,1);
-    stand(-26,26.65,30,164, -1,0); stand(144,26.65,30,164, 1,0);
-    scene.add(mergeMeshes(crowd, new THREE.MeshStandardMaterial({map:ct,roughness:1})));
-    scene.add(mergeMeshes(roofs, new THREE.MeshStandardMaterial({color:0x0f1521,roughness:0.9,metalness:0.25})));
-    scene.add(mergeMeshes(skirts, new THREE.MeshStandardMaterial({color:0x121826,roughness:1})));
+    const B=BOWL, V=(x,y,z)=>new THREE.Vector3(x,y,z), C=V(60,6,26.65);
+    const bag=()=>({pos:[],uv:[],idx:[]});
+    // a quad a-b-c-d (a,b the lower edge) wound to face the point `to`
+    const quad=(m,a,b,c,d,ua,ub,v0,v1,to)=>{ const n=new THREE.Vector3().subVectors(b,a).cross(new THREE.Vector3().subVectors(d,a));
+      const mid=new THREE.Vector3().add(a).add(b).add(c).add(d).multiplyScalar(0.25), flip=n.dot(new THREE.Vector3().subVectors(to||C,mid))<0;
+      // lettering has to read left to right from where it is looked at
+      const rt=new THREE.Vector3().subVectors(mid,to||C).cross(new THREE.Vector3(0,1,0));
+      if(new THREE.Vector3().subVectors(b,a).dot(rt)<0){ const t=ua; ua=ub; ub=t; }
+      const i=m.pos.length/3; for(const p of [a,b,c,d]) m.pos.push(p.x,p.y,p.z);
+      m.uv.push(ua,v0, ub,v0, ub,v1, ua,v1);
+      if(flip) m.idx.push(i,i+2,i+1, i,i+3,i+2); else m.idx.push(i,i+1,i+2, i,i+2,i+3); };
+    const mesh=(m,mat)=>{ const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(m.pos,3));
+      g.setAttribute('uv',new THREE.Float32BufferAttribute(m.uv,2)); g.setIndex(m.idx); g.computeVertexNormals(); const o=new THREE.Mesh(g,mat); scene.add(o); return o; };
+    const seats=bag(), conc=bag(), wall=bag(), rib=bag(), lamps=bag();
+    const d=B.lowD, T=60;                                              // T: yards of seats per texture tile
+    // ---- lower bowl: four mitred decks, the wall under them, a back wall behind them ----
+    const ring=(o,y)=>[V(B.x0-o,y,B.z0-o), V(B.x1+o,y,B.z0-o), V(B.x1+o,y,B.z1+o), V(B.x0-o,y,B.z1+o)];
+    const r0=ring(0,B.wallH), r1=ring(d,B.lowTop), g0=ring(0,0), o1=ring(d,0);
+    for(let k=0;k<4;k++){ const a=r0[k], b=r0[(k+1)%4], c=r1[(k+1)%4], e=r1[k], L=a.distanceTo(b), L2=e.distanceTo(c);
+      // the texture runs with the wall, so the mitre trims it instead of squeezing it
+      const u0=0, u1=L/T, ue0=-(L2-L)/2/T, ue1=u1+(L2-L)/2/T, i=seats.pos.length/3;
+      for(const p of [a,b,c,e]) seats.pos.push(p.x,p.y,p.z); seats.uv.push(u0,0, u1,0, ue1,1, ue0,1);
+      const n=new THREE.Vector3().subVectors(b,a).cross(new THREE.Vector3().subVectors(e,a)), mid=new THREE.Vector3().add(a).add(b).add(c).add(e).multiplyScalar(0.25);
+      if(n.dot(new THREE.Vector3(60,60,26.65).sub(mid))<0) seats.idx.push(i,i+2,i+1, i,i+3,i+2); else seats.idx.push(i,i+1,i+2, i,i+2,i+3);
+      quad(wall, g0[k], g0[(k+1)%4], b, a, 0, L/32, 0, 1);                                  // the padded wall, 32 yards a tile
+      quad(conc, o1[k], o1[(k+1)%4], c, e, 0,1,0,1, V(60+(mid.x-60)*3,6,26.65+(mid.z-26.65)*3)); }   // outside face
+    // ---- upper decks over the two sidelines, with their fascia, ends, backs and a roof ----
+    for(const sgn of [-1,1]){ const zf=z=>sgn<0 ? B.z0-z : B.z1+z, xa=B.x0-13, xb=B.x1+13;
+      const f0=V(xa,B.upY0,zf(B.upIn)), f1=V(xb,B.upY0,zf(B.upIn)), b1=V(xb,B.upY1,zf(B.upD)), b0=V(xa,B.upY1,zf(B.upD));
+      quad(seats, f0,f1,b1,b0, 0,(xb-xa)/T, 0,1, V(60,80,26.65));
+      const lip=B.upY0-3.3;                                                                   // fascia: the ribbon board hangs here
+      quad(conc, V(xa,lip,zf(B.upIn)), V(xb,lip,zf(B.upIn)), f1, f0, 0,1,0,1);
+      quad(rib, V(xa,lip+0.45,zf(B.upIn-0.06)), V(xb,lip+0.45,zf(B.upIn-0.06)), V(xb,B.upY0-0.4,zf(B.upIn-0.06)), V(xa,B.upY0-0.4,zf(B.upIn-0.06)), 0,(xb-xa)/52, 0,1);
+      quad(conc, V(xa,lip,zf(B.upIn)), V(xb,lip,zf(B.upIn)), V(xb,B.lowTop,zf(d)), V(xa,B.lowTop,zf(d)), 0,1,0,1, V(60,0,26.65));   // soffit over the back rows
+      for(const x of [xa,xb]) { quad(conc, V(x,B.lowTop,zf(B.upIn)), V(x,B.lowTop,zf(B.upD)), V(x,B.upY1,zf(B.upD)), V(x,B.upY0,zf(B.upIn)), 0,1,0,1, V(x<60?-200:320,20,26.65)); }
+      quad(conc, V(xa,0,zf(B.upD)), V(xb,0,zf(B.upD)), b1, b0, 0,1,0,1, V(60,10,sgn<0?-300:360));                                  // back of the stand
+      const ry=B.roofY, rz0=zf(B.upD+2.5), rz1=zf(B.upIn+5);                                  // the roof: a slab out over the upper rows
+      quad(conc, V(xa-2,ry,rz0), V(xb+2,ry,rz0), V(xb+2,ry+0.5,rz1), V(xa-2,ry+0.5,rz1), 0,1,0,1, V(60,-50,26.65));
+      quad(conc, V(xa-2,ry+1.1,rz0), V(xb+2,ry+1.1,rz0), V(xb+2,ry+1.6,rz1), V(xa-2,ry+1.6,rz1), 0,1,0,1, V(60,300,26.65));
+      quad(conc, V(xa-2,ry+0.5,rz1), V(xb+2,ry+0.5,rz1), V(xb+2,ry+1.6,rz1), V(xa-2,ry+1.6,rz1), 0,1,0,1);
+      quad(lamps, V(xa,ry+0.1,zf(B.upIn+5.2)), V(xb,ry+0.1,zf(B.upIn+5.2)), V(xb,ry+0.42,zf(B.upIn+7.4)), V(xa,ry+0.42,zf(B.upIn+7.4)), 0,1,0,1, V(60,-50,26.65)); }
+    const dull={roughness:1, metalness:0, envMapIntensity:0.04};        // the HDR sky is daylight: on dark concrete it reads as a blue glow
+    mesh(seats, new THREE.MeshStandardMaterial(Object.assign({map:crowdTexture(), color:0xb9bcc4},dull)));
+    mesh(conc,  new THREE.MeshStandardMaterial(Object.assign({color:0x141a26},dull)));
+    _textMats.wall=mesh(wall,  new THREE.MeshStandardMaterial(Object.assign({map:wallTexture()},dull,{roughness:0.8}))).material;
+    _textMats.rib=mesh(rib,   new THREE.MeshBasicMaterial({map:ribbonTexture(), toneMapped:false})).material;
+    mesh(lamps, new THREE.MeshBasicMaterial({color:0xfff6dc, toneMapped:false, fog:false}));
   }
   let _glowTex=null;
   function glowTex(){ if(_glowTex) return _glowTex; const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d');
@@ -4410,36 +4539,34 @@
     g.fillStyle=gr; g.fillRect(0,0,64,64); _glowTex=new THREE.CanvasTexture(c); return _glowTex; }
   const _towers={poles:[], banks:[]};
   function lightTower(x,z){
-    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,30,8)); pole.position.set(x,15,z); _towers.poles.push([pole]);
-    const bank=new THREE.Mesh(new THREE.BoxGeometry(9,4.5,1.2)); bank.position.set(x,30,z); bank.lookAt(60,0,26.65); _towers.banks.push([bank]);
+    const TH=44;
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.9,TH,8)); pole.position.set(x,TH/2,z); _towers.poles.push([pole]);
+    const bank=new THREE.Mesh(new THREE.BoxGeometry(12,6,1.2)); bank.position.set(x,TH,z); bank.lookAt(60,0,26.65); _towers.banks.push([bank]);
     const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(),color:0xfff4e0,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
-    glow.scale.set(16,9,1); glow.position.set(x,30,z); scene.add(glow);
-    const lp=new THREE.PointLight(0xfff4e0,0.6,300,1.5); lp.position.set(x,30,z); scene.add(lp);
+    glow.scale.set(30,17,1); glow.position.set(x,TH,z); scene.add(glow);
   }
-  // team benches + a row of standing sideline players to frame the field with life
+  // benches in each team's area (the painted box in apronTexture)
   function buildSidelines(){
-    // benches/tents only — no stick-figure sideline players (they clashed with the real models)
-    const benches=[], tents=[];
-    function sideline(z){
-      const bench=new THREE.Mesh(new THREE.BoxGeometry(34,0.8,2.4)); bench.position.set(60,0.5,z); benches.push([bench]);
-      const tent=new THREE.Mesh(new THREE.BoxGeometry(16,0.4,3.6)); tent.position.set(60,4.6,z); tents.push([tent]);
-    }
-    sideline(-3.0); sideline(56.3);
-    scene.add(mergeMeshes(benches, new THREE.MeshStandardMaterial({color:0x10151f,roughness:1})));
-    scene.add(mergeMeshes(tents, new THREE.MeshStandardMaterial({color:0x1a2230,roughness:1})));
+    const benches=[], tables=[];
+    for(const z of [-5.2,58.5]){
+      for(let i=0;i<4;i++){ const seat=new THREE.Mesh(new THREE.BoxGeometry(10.5,0.12,0.5)); seat.position.set(41.5+i*12.2,0.5,z); benches.push([seat]);
+        for(const dx of [-4.6,0,4.6]){ const leg=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.5,0.45)); leg.position.set(41.5+i*12.2+dx,0.25,z); benches.push([leg]); } }
+      for(const x of [37,84]){ const t=new THREE.Mesh(new THREE.BoxGeometry(2.2,1.0,1.0)); t.position.set(x,0.5,z+(z<0?0.4:-0.4)); tables.push([t]); } }   // drinks tables
+    scene.add(mergeMeshes(benches, new THREE.MeshStandardMaterial({color:0xb8bec8,roughness:0.5,metalness:0.6,envMapIntensity:0.15})));
+    scene.add(mergeMeshes(tables, new THREE.MeshStandardMaterial({color:0xe86a1c,roughness:0.8,envMapIntensity:0.05})));
   }
   function buildFlashes(){
-    const geo=new THREE.PlaneGeometry(0.7,0.7);
+    const geo=new THREE.PlaneGeometry(0.7,0.7), B=BOWL;
     for(let i=0;i<44;i++){ const mat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,fog:false});
-      const m=new THREE.Mesh(geo,mat); const side=(Math.random()*4)|0; let x,z;
-      if(side===0){ x=10+Math.random()*100; z=-12-Math.random()*16; }
-      else if(side===1){ x=10+Math.random()*100; z=66+Math.random()*16; }
-      else if(side===2){ x=-12-Math.random()*14; z=6+Math.random()*42; }
-      else { x=132+Math.random()*14; z=6+Math.random()*42; }
-      m.position.set(x,6+Math.random()*10,z); scene.add(m); flashes.push(m); }
+      const m=new THREE.Mesh(geo,mat); const side=(Math.random()*4)|0, t=Math.random(), o=t*B.lowD, y=B.wallH+t*(B.lowTop-B.wallH)+1.1; let x,z;
+      if(side===0){ x=B.x0+Math.random()*(B.x1-B.x0); z=B.z0-o; }
+      else if(side===1){ x=B.x0+Math.random()*(B.x1-B.x0); z=B.z1+o; }
+      else if(side===2){ x=B.x0-o; z=B.z0+Math.random()*(B.z1-B.z0); }
+      else { x=B.x1+o; z=B.z0+Math.random()*(B.z1-B.z0); }
+      m.position.set(x,y,z); m.visible=false; scene.add(m); flashes.push(m); }
   }
   function init3D(){
-    scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a1020); scene.fog=new THREE.Fog(0x12203a,75,250);
+    scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a1020); scene.fog=new THREE.Fog(0x0d1626,120,360);
     camera=new THREE.PerspectiveCamera(54,760/560,0.1,700);
     renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true}); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     if(THREE.sRGBEncoding) renderer.outputEncoding=THREE.sRGBEncoding;
@@ -4461,8 +4588,13 @@
     sunLight=sun;
     const rim=new THREE.DirectionalLight(0x9ab8ff,0.5); rim.position.set(40,38,-46); scene.add(rim);          // cool back rim for separation
     const warm=new THREE.DirectionalLight(0xffd2a0,0.32); warm.position.set(90,30,70); scene.add(warm);       // warm cross-fill
-    const field=new THREE.Mesh(new THREE.PlaneGeometry(120,53.3), new THREE.MeshStandardMaterial({map:fieldTexture(),roughness:0.82,metalness:0.0,envMapIntensity:0.35}));
+    // FIELD_K: under four lights and a filmic curve the painted greens came out mint, so the
+    // turf's albedo is pulled down; and the daylight HDR is kept off it (it greyed the grass)
+    const field=new THREE.Mesh(new THREE.PlaneGeometry(120,53.3), new THREE.MeshStandardMaterial({map:fieldTexture(),roughness:0.9,metalness:0.0,envMapIntensity:0.05}));
+    field.material.color.setScalar(FIELD_K);
     field.rotation.x=-Math.PI/2; field.position.set(60,0,26.65); field.receiveShadow=true; scene.add(field); wxField=field;
+    { const B=BOWL, ap=new THREE.Mesh(new THREE.PlaneGeometry(B.x1-B.x0,B.z1-B.z0), new THREE.MeshStandardMaterial({map:apronTexture(),roughness:0.95,envMapIntensity:0.04}));
+      ap.material.color.setScalar(FIELD_K); ap.rotation.x=-Math.PI/2; ap.position.set((B.x0+B.x1)/2,-0.02,(B.z0+B.z1)/2); ap.receiveShadow=true; scene.add(ap); wxApron=ap; }
     initWeather3D();
     // broadcast lines: blue line of scrimmage + yellow first-down line (positioned per play)
     function fieldLine(color){ const m=new THREE.Mesh(new THREE.PlaneGeometry(0.34,53.3), new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.8,depthWrite:false,fog:false}));
@@ -4483,11 +4615,11 @@
       const cap=new THREE.Mesh(new THREE.BoxGeometry(0.45,0.45,0.1), new THREE.MeshStandardMaterial({color:top,emissive:top,emissiveIntensity:0.35,roughness:0.6})); cap.position.y=2.5; grp2.add(cap);
       grp2.visible=false; scene.add(grp2); return grp2; }
     downPole=chainPole(0xff7a18); firstPole=chainPole(0xffe23a);
-    const ground=new THREE.Mesh(new THREE.PlaneGeometry(620,480), new THREE.MeshStandardMaterial({color:0x0b1018,roughness:1})); ground.rotation.x=-Math.PI/2; ground.position.set(60,-0.06,26.65); ground.receiveShadow=true; scene.add(ground);
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(620,480), new THREE.MeshStandardMaterial({color:0x0b1018,roughness:1,envMapIntensity:0.03})); ground.rotation.x=-Math.PI/2; ground.position.set(60,-0.06,26.65); scene.add(ground);
     buildStands();
     buildSidelines();
     buildFlashes();
-    lightTower(-30,-30); lightTower(150,-30); lightTower(-30,83); lightTower(150,83);
+    lightTower(-38,-38); lightTower(158,-38); lightTower(-38,91.3); lightTower(158,91.3);
     scene.add(mergeMeshes(_towers.poles, new THREE.MeshStandardMaterial({color:0x2a2f3a,roughness:0.8})));
     scene.add(mergeMeshes(_towers.banks, new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff2c0,emissiveIntensity:1.2})));
     nearPosts=goalpost3D(0.5); goalpost3D(119.5);
@@ -4513,6 +4645,7 @@
     loadPlayers();
     camPos=new THREE.Vector3(40,8.5,26.65); camLook=new THREE.Vector3(60,1,26.65);
     resize3D(); window.addEventListener('resize',resize3D); applyQuality();
+    try{ if(document.fonts && document.fonts.load) Promise.all([document.fonts.load('400 40px Anton'), document.fonts.load('700 40px Oswald')]).then(repaintText, ()=>{}); }catch(e){}
   }
   // 1 at the design aspect (760x560) or wider; above 1 when the view is narrower
   function narrowK(){ return Math.max(1, (760/560)/(camera.aspect||1.357)); }
@@ -4886,6 +5019,12 @@
           const M=u.mats, tint=(n,h)=>{ for(const m of (M[n]||[])) setSRGB(m,h); };
           tint('Jersey',C.jersey); tint('JerseyTrim',C.trim); tint('Helmet',C.helmet); tint('HelmetStripe',C.stripe);
           tint('Facemask',C.mask); tint('Socks',C.sock); tint('Pants',C.pants); tint('Belt',C.belt);
+          // the pants stripe is the jersey colour, or the trim where that would vanish into the pants
+          tint('PantsStripe', kitClash(C.jersey,C.pants) ? C.trim : C.jersey);
+          tint('SocksLow', kitClash(C.sock,0xf2f3f5) ? C.trim : 0xf2f3f5);
+          if(u.sleeveHex===-1) tint('ArmSleeve',C.jersey);
+          if(u.bandHex===-1) tint('Wristband',C.trim);
+          { const lt=helmetLogoTex(team); for(const m of (M['HelmetLogo']||[])){ m.map=lt; m.needsUpdate=true; } }
           if(u.gloveHex<0) tint('Gloves',C.jersey);
           if(u.cleatHex<0) tint('Cleats',C.jersey);
           u.numKey=null;
@@ -5085,6 +5224,7 @@
       sunLight.target.position.set(fx,0,fz); sunLight.target.updateMatrixWorld();
       sunLight.position.set(fx+10,95,fz-8.65); }
     overlays3D(repFrame); drawVideoBoard();
+    if(_ribbonTex) _ribbonTex.offset.x=(performance.now()*0.000012)%1;
     if(window.__gbNoDraw) return;          // test harnesses run the pose logic without drawing
     renderer.render(scene,camera);
   }

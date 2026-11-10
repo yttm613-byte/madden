@@ -38,7 +38,14 @@ const PARTS = [
     hide: anyOf(inside(body.jersey, 0.003), underHelmet) },
   // weighted like the jersey: under the sleeve the arm follows the sleeve, so it never pokes through
   { name: 'Skin', key: 'arm', f: body.armL, lo: [0.09, 0.88, -0.13], hi: [0.58, 1.57, 0.11], h: 0.0024, target: 2600, mirror: true, w: 'jersey', albedo: 1.0,
-    hide: anyOf(inside(body.jersey, 0.0025), inside(body.glovesL, 0.0012)) },
+    hide: anyOf(inside(body.jersey, 0.0025), inside(body.glovesL, 0.0012)),
+    // a compression sleeve and a wristband, as their own materials: the game colours them
+    // per player, or leaves them the man's own skin tone when he wears neither
+    cuts: [(x, y, z) => body.ARM.armT(x, y, z) - body.ARM.sleeveFrom, (x, y, z) => body.ARM.foreT(x, y, z) - body.ARM.band0, (x, y, z) => body.ARM.foreT(x, y, z) - body.ARM.band1],
+    splits: [
+      { name: 'Wristband', albedo: 1.0, when: (x, y, z) => { const t = body.ARM.foreT(x, y, z); return t > body.ARM.band0 && t < body.ARM.band1; } },
+      { name: 'ArmSleeve', albedo: 1.0, when: (x, y, z) => body.ARM.armT(x, y, z) > body.ARM.sleeveFrom },
+    ] },
   { name: 'Eyes', key: 'eyes', f: body.eyes, lo: [-0.05, 1.75, 0.055], hi: [0.05, 1.782, 0.09], h: 0.0006, target: 700, w: 'head' },
   { name: 'Gloves', key: 'glove', f: body.glovesL, lo: [0.35, 0.72, -0.08], hi: [0.64, 1.07, 0.09], h: 0.0013, target: 2600, mirror: true, w: 'noLegs', albedo: 1.0 },
   // Jersey + belt + pants: one surface, cut exactly into three materials (and the trim
@@ -47,14 +54,17 @@ const PARTS = [
   { name: 'Jersey', key: 'uniform', f: body.uniform, lo: [-0.46, 0.38, -0.25], hi: [0.46, 1.665, 0.23], h: 0.0032, target: 15600, albedo: 0.80,
     w: (x, y, z) => y < 1.10 ? 'noArms' : 'jersey',
     hide: inside(body.socks, 0.002),
-    cuts: [(x, y, z) => y - 1.089, (x, y, z) => y - 1.0815, (x, y, z) => 1.0525 - y, body.TRIM_D],
+    cuts: [(x, y, z) => y - 1.089, (x, y, z) => y - 1.0815, (x, y, z) => 1.0525 - y, body.TRIM_D, ...body.STRIPE_CUTS, ...body.PSTRIPE_CUTS],
     splits: [
       { name: 'Belt', albedo: 0.90, when: (x, y, z) => y > 1.0525 && y < 1.0815 },
+      { name: 'PantsStripe', albedo: 0.84, when: (x, y, z) => y <= 1.0525 && body.inPantsStripe(x, y, z) },
       { name: 'Pants', albedo: 0.84, when: (x, y, z) => y < 1.089 },
-      { name: 'JerseyTrim', albedo: 0.85, when: (x, y, z) => body.TRIM_D(x, y, z) < 0 },
+      { name: 'JerseyTrim', albedo: 0.85, when: (x, y, z) => body.TRIM_D(x, y, z) < 0 || body.inSleeveStripe(x, y, z) },
     ] },
   { name: 'Socks', key: 'socks', f: body.socks, lo: [0.0, 0.05, -0.12], hi: [0.22, 0.55, 0.12], h: 0.0024, target: 1500, mirror: true, w: 'noArms', albedo: 0.84,
-    hide: inside(body.cleats, 0.0015) },
+    hide: inside(body.cleats, 0.0015),
+    cuts: [(x, y, z) => body.sockT(x, y, z) - body.SOCK_SPLIT],
+    splits: [{ name: 'SocksLow', albedo: 0.84, when: (x, y, z) => body.sockT(x, y, z) > body.SOCK_SPLIT }] },
   { name: 'Cleats', key: 'cleat', f: body.cleatL, lo: [0.0, -0.02, -0.14], hi: [0.22, 0.15, 0.25], h: 0.0016, target: 2400, mirror: true, w: 'noArms', albedo: 1.0 },
   { name: 'Helmet', key: 'helmet', f: body.helmet, lo: [-0.16, 1.58, -0.21], hi: [0.16, 1.95, 0.18], h: 0.0020, target: 6000, w: 'head', albedo: 0.94 },
   { name: 'HelmetStripe', key: 'stripe', f: body.stripe, lo: [-0.035, 1.62, -0.20], hi: [0.035, 1.94, 0.17], h: 0.0009, target: 1400, w: 'head', albedo: 0.94 },
@@ -168,7 +178,7 @@ for (const P of PARTS) {
 
 // fabric detail: tiling normal maps on box-projected UVs
 const FABRIC = { Jersey: [jerseyNormal, 0.045], JerseyTrim: [sockNormal, 0.03], Pants: [pantsNormal, 0.05], Belt: [sockNormal, 0.03],
-  Socks: [sockNormal, 0.035], Gloves: [gloveNormal, 0.03] };
+  Socks: [sockNormal, 0.035], SocksLow: [sockNormal, 0.035], PantsStripe: [sockNormal, 0.03], Gloves: [gloveNormal, 0.03] };
 function addUV(m, scale) {
   const r = boxUV(m.pos, m.tris, scale), n = r.src.length, o = { tris: r.tris, uv: r.uv };
   const take = (arr, k, T) => { const out = new T(n*k); for (let i = 0; i < n; i++) for (let c = 0; c < k; c++) out[i*k+c] = arr[r.src[i]*k+c]; return out; };
@@ -212,7 +222,15 @@ if (!only || only.has('decals')) {
       const ao = ambientOcclusion(pos[3*v], pos[3*v+1], pos[3*v+2], [nrm[3*v], nrm[3*v+1], nrm[3*v+2]]); col.fill(0.35+0.65*ao, 3*v, 3*v+3); }
     (decals[mat] ||= []).push({ pos, nrm, col, jo, we, tris: Uint32Array.from(d.tris), uv: Float32Array.from(d.uv) });
   }
-  log(`decals: ${DEF.length}`);
+  // a logo patch on each side of the helmet, above the ear hole; the game paints the team's
+  for (const s of [1, -1]) {
+    const d = decal(body.shellOuter, { center: [0.14*s, 1.800, -0.030], normal: [s, 0.22, -0.05], up: [0, 1, 0], width: 0.094, height: 0.080, nu: 10, nv: 9, lift: 0.0016 });
+    const nv = d.pos.length/3, pos = Float32Array.from(d.pos), nrm = Float32Array.from(d.nrm), col = new Float32Array(nv*3).fill(1);
+    const jo = new Uint8Array(nv*4), we = new Float32Array(nv*4);
+    for (let v = 0; v < nv; v++) { const wt = W.weigh(pos[3*v], pos[3*v+1], pos[3*v+2], 'head'); jo.set(wt.j, 4*v); we.set(wt.w, 4*v); }
+    (decals.HelmetLogo ||= []).push({ pos, nrm, col, jo, we, tris: Uint32Array.from(d.tris), uv: Float32Array.from(d.uv) });
+  }
+  log(`decals: ${DEF.length} + helmet logos`);
 }
 
 // ---- heavy build: a morph target, not a second model ----------------------------------------
@@ -244,7 +262,7 @@ function heavyAt(x, y, z) {
   const head = (y > 1.60 && ax < 0.13) ? sst(1.66, 1.60, y) : 1;     // the face stays the face
   return (bodyW*(belly + torso + waist + seat + neck) + arm + leg)*head;
 }
-const HEAVY = new Set(['Skin', 'Jersey', 'JerseyTrim', 'Pants', 'Belt', 'Socks', 'Numbers', 'NameBar']);
+const HEAVY = new Set(['Skin', 'ArmSleeve', 'Wristband', 'Jersey', 'JerseyTrim', 'Pants', 'PantsStripe', 'Belt', 'Socks', 'SocksLow', 'Numbers', 'NameBar']);
 
 // ---- merge per material and export --------------------------------------------------------
 const MAT = {
@@ -256,6 +274,10 @@ const MAT = {
   Pants:       { baseColorFactor: [0.93, 0.93, 0.93, 1], metallicFactor: 0, roughnessFactor: 0.55 },
   Belt:        { baseColorFactor: [0.1, 0.1, 0.12, 1], metallicFactor: 0, roughnessFactor: 0.5 },
   Socks:       { baseColorFactor: [0.95, 0.95, 0.95, 1], metallicFactor: 0, roughnessFactor: 0.9 },
+  SocksLow:    { baseColorFactor: [0.95, 0.95, 0.95, 1], metallicFactor: 0, roughnessFactor: 0.9 },
+  PantsStripe: { baseColorFactor: [0.95, 0.95, 0.95, 1], metallicFactor: 0, roughnessFactor: 0.6 },
+  ArmSleeve:   { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.6 },
+  Wristband:   { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.85 },
   Cleats:      { baseColorFactor: [0.06, 0.06, 0.07, 1], metallicFactor: 0, roughnessFactor: 0.4 },
   Helmet:      { baseColorFactor: [0.95, 0.95, 0.95, 1], metallicFactor: 0.1, roughnessFactor: 0.22 },
   HelmetStripe:{ baseColorFactor: [0.95, 0.95, 0.95, 1], metallicFactor: 0.1, roughnessFactor: 0.25 },
@@ -296,6 +318,7 @@ for (const [name, [gen, scale]] of Object.entries(FABRIC)) {
 }
 MAT.Numbers = { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.6, baseColorTexture: { index: TEX.Numbers } };
 MAT.NameBar = { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.6, baseColorTexture: { index: TEX.NameBar } };
+MAT.HelmetLogo = { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0.1, roughnessFactor: 0.3, baseColorTexture: { index: TEX.NameBar } };
 for (const [name, list] of [...Object.entries(meshes), ...Object.entries(decals)]) {
   let nv = 0, nt = 0; for (const m of list) { nv += m.pos.length/3; nt += m.tris.length; }
   const hasUV = list.every(m => m.uv);
@@ -310,7 +333,7 @@ for (const [name, list] of [...Object.entries(meshes), ...Object.entries(decals)
   }
   totalTris += nt/3;
   const idx = nv < 65536 ? Uint16Array.from(tri) : tri;
-  const extra = name === 'Visor' ? { alphaMode: 'BLEND' } : (name === 'Numbers' || name === 'NameBar') ? { alphaMode: 'MASK', alphaCutoff: 0.5 } : {};
+  const extra = name === 'Visor' ? { alphaMode: 'BLEND' } : (name === 'Numbers' || name === 'NameBar' || name === 'HelmetLogo') ? { alphaMode: 'MASK', alphaCutoff: 0.5 } : {};
   const { __normal, ...pbr } = MAT[name];
   const mat = G.material({ name, pbrMetallicRoughness: pbr, ...extra, ...(__normal !== undefined ? { normalTexture: { index: __normal, scale: 0.55 } } : {}) });
   const attributes = {

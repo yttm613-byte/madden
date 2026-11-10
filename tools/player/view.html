@@ -35,8 +35,16 @@ const TEAM={
 let models=[];
 function tint(model, team, skin){
   model.traverse(o=>{ if(!o.isMesh) return; const m=o.material=o.material.clone(); m.vertexColors=!!o.geometry.attributes.color;
-    const c=(TEAM[team]||{})[m.name]; if(c!==undefined) m.color.setHex(c);
-    if(m.name==='Skin') m.color.setHex(skin||0x8d5a3c);
+    // sRGB hex into three's linear colours, as the game's setSRGB does: raw, royal blue rendered sky blue
+    const T=TEAM[team]||{}, EX={PantsStripe:T.Jersey, SocksLow:0xf2f3f5};
+    const c=T[m.name]!==undefined ? T[m.name] : EX[m.name]; if(c!==undefined) m.color.setHex(c).convertSRGBToLinear();
+    if(m.name==='Skin'||m.name==='ArmSleeve'||m.name==='Wristband') m.color.setHex(skin||0x8d5a3c).convertSRGBToLinear();
+    if(m.name==='Wristband' && window.__bands) m.color.setHex(0xf0f1f4).convertSRGBToLinear();
+    if(m.name==='ArmSleeve' && window.__sleeves) m.color.setHex(0x121317).convertSRGBToLinear();
+    if(m.name==='HelmetLogo'){ const cv=document.createElement('canvas'); cv.width=cv.height=128; const g=cv.getContext('2d');
+      g.translate(64,70); g.transform(1,0,-0.22,1,0,0); g.font='900 104px Arial Black, Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+      g.lineJoin='round'; g.lineWidth=13; g.strokeStyle='#10131a'; g.strokeText('G',0,0); g.fillStyle='#'+((T.HelmetStripe||0x1e58d8).toString(16).padStart(6,'0')); g.fillText('G',0,0);
+      const tx=new THREE.CanvasTexture(cv); tx.flipY=false; tx.encoding=THREE.sRGBEncoding; m.map=tx; m.alphaTest=0.5; m.transparent=false; m.polygonOffset=true; m.polygonOffsetFactor=-2; m.polygonOffsetUnits=-2; }
     m.envMapIntensity = m.name==='Helmet'?0.9:(m.name==='Skin'?0.45:0.7);
     o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; });
 }

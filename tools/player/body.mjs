@@ -55,15 +55,15 @@ export function buildBody(rig) {
 
   // ============================ NECK & TORSO ============================
   const neck = sunionK([
-    [roundCone([0, 1.440, -0.036], [0, 1.668, -0.012], 0.082, 0.067), 0],
+    [roundCone([0, 1.440, -0.036], [0, 1.668, -0.012], 0.090, 0.072), 0],
     [mirrorX(capsule([0.050, 1.702, -0.020], [0.021, 1.500, 0.052], 0.019)), 0.03],   // sternocleidomastoid
     [ellipsoid([0, 1.535, -0.066], [0.066, 0.068, 0.036]), 0.045],                    // back of the neck / traps
   ]);
   const torso = sunionK([
-    [ellipsoid([0, 1.370, 0.004], [0.182, 0.172, 0.126]), 0],
-    [ellipsoid([0, 1.170, 0.010], [0.162, 0.140, 0.114]), 0.06],
+    [ellipsoid([0, 1.370, 0.004], [0.190, 0.172, 0.134]), 0],
+    [ellipsoid([0, 1.170, 0.010], [0.154, 0.140, 0.112]), 0.06],
     [ellipsoid([0, 1.005, -0.006], [0.162, 0.105, 0.118]), 0.06],
-    [mirrorX(capsule([0.02, 1.505, -0.050], [0.165, 1.480, -0.040], 0.050)), 0.05],   // trapezius
+    [mirrorX(capsule([0.02, 1.512, -0.050], [0.165, 1.482, -0.040], 0.056)), 0.05],   // trapezius
     [mirrorX(ellipsoid([0.085, 1.415, 0.068], [0.088, 0.066, 0.045])), 0.04],         // pecs
   ]);
 
@@ -76,16 +76,16 @@ export function buildBody(rig) {
   const PF = (t, an, la) => add(add(add(E, mul(aF, t)), mul(antF, an)), mul(latF, la));
   const frU = [latU, aU, antU], frF = [latF, aF, antF];
   const armL = sunionK([
-    [roundCone(add(S, mul(aU, 0.012)), E, 0.056, 0.041), 0],
+    [roundCone(add(S, mul(aU, 0.012)), E, 0.061, 0.045), 0],
     [ellipsoid(PU(0.042, 0.004, 0.022), [0.058, 0.080, 0.064], frU), 0.03],      // deltoid
-    [ellipsoid(PU(0.160, 0.026, 0.000), [0.040, 0.090, 0.039], frU), 0.025],     // biceps
-    [ellipsoid(PU(0.135, -0.026, 0.004), [0.046, 0.100, 0.041], frU), 0.025],    // triceps
+    [ellipsoid(PU(0.160, 0.028, 0.000), [0.047, 0.094, 0.046], frU), 0.025],     // biceps
+    [ellipsoid(PU(0.135, -0.028, 0.004), [0.051, 0.102, 0.046], frU), 0.025],    // triceps
     [ellipsoid(PU(0.210, 0.004, 0.017), [0.031, 0.052, 0.026], frU), 0.02],      // brachialis
     [sphere(add(E, mul(antU, -0.008)), 0.039), 0.03],                            // elbow
     [sphere(add(add(E, mul(antU, -0.033)), mul(aU, -0.006)), 0.018), 0.015],     // olecranon
-    [roundCone(E, Wr, 0.044, 0.028), 0.03],
-    [ellipsoid(PF(0.070, 0.009, -0.011), [0.040, 0.086, 0.034], frF), 0.03],    // flexors
-    [ellipsoid(PF(0.050, 0.006, 0.022), [0.032, 0.080, 0.033], frF), 0.03],     // brachioradialis
+    [roundCone(E, Wr, 0.048, 0.031), 0.03],
+    [ellipsoid(PF(0.070, 0.009, -0.011), [0.045, 0.090, 0.039], frF), 0.03],    // flexors
+    [ellipsoid(PF(0.050, 0.006, 0.022), [0.036, 0.084, 0.037], frF), 0.03],     // brachioradialis
     [ellipsoid(PF(0.245, 0, 0), [0.020, 0.030, 0.031], frF), 0.02],             // wrist
   ]);
   const arms = mirrorX(armL);
@@ -128,26 +128,26 @@ export function buildBody(rig) {
     const P = (t, an, la) => add(add(add(H, mul(a, t)), mul(ant, an)), mul(lat, la));
     const Q = (t, an, la) => add(add(add(K, mul(a2, t)), mul(ant2, an)), mul(lat2, la));
     return sunionK([
-      [roundCone(add(H, [0, 0.01, 0]), K, 0.090, 0.058), 0],
-      [ellipsoid(P(0.20, 0.030, 0.010), [0.064, 0.175, 0.056], fr), 0.04],     // quads
-      [ellipsoid(P(0.17, -0.034, 0.000), [0.056, 0.160, 0.050], fr), 0.04],    // hamstrings
+      [roundCone(add(H, [0, 0.01, 0]), K, 0.097, 0.062), 0],
+      [ellipsoid(P(0.20, 0.032, 0.012), [0.071, 0.178, 0.064], fr), 0.04],     // quads
+      [ellipsoid(P(0.17, -0.036, 0.000), [0.062, 0.165, 0.058], fr), 0.04],    // hamstrings
       [ellipsoid(P(0.33, 0.028, -0.030), [0.034, 0.070, 0.036], fr), 0.03],    // vastus medialis
       [sphere(add(K, mul(ant, 0.010)), 0.051), 0.03],                          // knee
-      [roundCone(K, add(A, [0, 0.030, 0]), 0.055, 0.036), 0.03],
-      [ellipsoid(Q(0.120, -0.034, -0.006), [0.052, 0.120, 0.048], fr2), 0.03], // calf
-      [ellipsoid(Q(0.100, -0.022, 0.018), [0.036, 0.100, 0.036], fr2), 0.03],  // outer calf
+      [roundCone(K, add(A, [0, 0.030, 0]), 0.058, 0.039), 0.03],
+      [ellipsoid(Q(0.125, -0.036, -0.006), [0.059, 0.128, 0.056], fr2), 0.03], // calf
+      [ellipsoid(Q(0.105, -0.022, 0.020), [0.041, 0.104, 0.041], fr2), 0.03],  // outer calf
       [sphere(A, 0.036), 0.02],
     ]);
   })();
   const legs = mirrorX(legL);
   const pelvis = sunionK([
     [ellipsoid([0, 1.000, -0.004], [0.166, 0.110, 0.122]), 0],
-    [mirrorX(ellipsoid([0.080, 0.935, -0.068], [0.082, 0.090, 0.070])), 0.05],   // glutes
+    [mirrorX(ellipsoid([0.082, 0.938, -0.070], [0.088, 0.095, 0.080])), 0.05],   // glutes
   ]);
 
   // The tucked-in jersey's waist. The pants are built around it, so the jersey is
   // always INSIDE the pants below the waistband instead of poking out over them.
-  const WAIST = ellipsoid([0, 1.058, 0.000], [0.182, 0.100, 0.133]);
+  const WAIST = ellipsoid([0, 1.058, 0.000], [0.170, 0.100, 0.128]);
   let PANTS_BODY;
   // ============================ PANTS ============================
   const K_L = B('LeftLeg'), A_L = B('LeftFoot');
@@ -224,25 +224,35 @@ export function buildBody(rig) {
   // rises toward the neck so the helmet sits down into them. The first pads were a
   // modest bump on natural shoulders and read as a man in a T-shirt.
   const padsL = (() => {
-    // arch plate over each shoulder: flat on top, sloping gently out, riding up at the neck
-    const arch = roundBox([0.154, 1.554, -0.016], [0.168, 0.044, 0.174], 0.040, frameEuler(0, 0, -0.12));
-    const archIn = roundBox([0.100, 1.572, -0.020], [0.060, 0.030, 0.150], 0.030, frameEuler(0, 0, -0.30));
-    // cap (epaulet): a slab over the deltoid, face turned outward-up, following the arm
-    const capC = add(add(S, mul(latU, 0.092)), mul(aU, 0.000));
-    const capFr = [latU, aU, antU];
-    const cap = roundBox(capC, [0.036, 0.090, 0.132], 0.030, capFr);
-    const capTop = roundBox(add(capC, add(mul(aU, -0.056), mul(latU, -0.026))), [0.036, 0.048, 0.138], 0.032, capFr);
-    return sunionK([[arch, 0], [archIn, 0.04], [cap, 0.05], [capTop, 0.04]]);
+    // Modern pads are low and sloped: the yoke falls away from the neck to the point of
+    // the shoulder, and a rounded cap sits over the deltoid. The first pads here were a
+    // flat shelf with a slab epaulet on top of it; lit from above they read as a pillow,
+    // and with the arm down the slab's corner stood up like a wing.
+    const arch = roundBox([0.146, 1.548, -0.016], [0.148, 0.036, 0.158], 0.036, frameEuler(0, 0, -0.21));
+    const archIn = roundBox([0.094, 1.570, -0.020], [0.060, 0.028, 0.140], 0.028, frameEuler(0, 0, -0.34));
+    const capC = add(add(S, mul(latU, 0.060)), mul(aU, 0.012));
+    const cap = ellipsoid(capC, [0.058, 0.100, 0.122], [latU, aU, antU]);
+    return sunionK([[arch, 0], [archIn, 0.04], [cap, 0.06]]);
   })();
   const pads = sunionK([
     [mirrorX(padsL), 0],
-    [roundBox([0, 1.450, 0.084], [0.214, 0.106, 0.055], 0.048), 0.045],   // front plates
-    [roundBox([0, 1.458, -0.114], [0.224, 0.116, 0.062], 0.050), 0.045],  // back plates
+    [roundBox([0, 1.446, 0.090], [0.198, 0.100, 0.052], 0.046), 0.045],   // front plates
+    [roundBox([0, 1.456, -0.112], [0.206, 0.112, 0.060], 0.050), 0.045],  // back plates
   ]);
   // Where the trim colour goes: a band around the neck opening and one at each sleeve
   // hem. A soft 0..1 mask (1 inside the band) used both for the rib and the split.
   const sleeveEnd = add(S, mul(aU, 0.142));
   const axisD = (q) => { const r = sub(q, S), t = dot(r, aU); return len(sub(r, mul(aU, t))); };
+  // The sleeve stripe: a 2.4cm band round the cap, a finger above the hem. Its edges are
+  // planes across the arm (STRIPE_CUTS), cut one at a time so a long triangle cannot
+  // step over the band, which is what a single |t-c|-w field lets it do.
+  const ST0 = 0.076, ST1 = 0.100;
+  const sleeveT = (x, y, z) => { const q = x >= 0 ? [x, y, z] : [-x, y, z]; return dot(sub(q, sleeveEnd), aU) + 0.142; };
+  const sleeveR = (x, y, z) => axisD(x >= 0 ? [x, y, z] : [-x, y, z]);
+  const sleeveLat = (x, y, z) => dot(sub(x >= 0 ? [x, y, z] : [-x, y, z], S), latU);
+  const STRIPE_CUTS = [(x, y, z) => sleeveT(x, y, z) - ST0, (x, y, z) => sleeveT(x, y, z) - ST1,
+    (x, y, z) => sleeveR(x, y, z) - 0.150, (x, y, z) => -sleeveLat(x, y, z) - 0.035];
+  const inSleeveStripe = (x, y, z) => { const t = sleeveT(x, y, z); return t > ST0 && t < ST1 && sleeveR(x, y, z) < 0.150 && sleeveLat(x, y, z) > -0.035; };
   const TRIM_D = (x, y, z) => {
     const collarD = COLLAR(x, y, z) - 0.016;                             // < 0 within 1.6cm of the opening
     const q = x >= 0 ? [x, y, z] : [-x, y, z]; const t = dot(sub(q, sleeveEnd), aU);
@@ -257,9 +267,11 @@ export function buildBody(rig) {
   const COLLAR = sunionK([[roundCone([0, 1.46, -0.036], [0, 1.66, -0.014], 0.089, 0.085), 0], [ellipsoid([0, 1.555, 0.070], [0.050, 0.030, 0.050]), 0.03]]);
   const jersey = (() => {
     const core = sunionK([
-      [ellipsoid([0, 1.345, 0.000], [0.198, 0.180, 0.136]), 0],
-      [roundBox([0, 1.225, 0.030], [0.172, 0.165, 0.094], 0.075), 0.07],   // front of the torso: flat, not bulbous
-      [ellipsoid([0, 1.160, 0.006], [0.186, 0.170, 0.128]), 0.06],
+      [ellipsoid([0, 1.345, 0.000], [0.202, 0.180, 0.140]), 0],
+      [roundBox([0, 1.225, 0.030], [0.166, 0.165, 0.094], 0.075), 0.07],   // front of the torso: flat, not bulbous
+      [ellipsoid([0, 1.160, 0.006], [0.174, 0.170, 0.124]), 0.06],
+      [mirrorX(ellipsoid([0.142, 1.300, -0.036], [0.060, 0.135, 0.084])), 0.06],   // lats: the V from the pads to the waist
+      [ellipsoid([0, 1.370, -0.070], [0.165, 0.150, 0.082]), 0.06],                // upper back
       [WAIST, 0.06],
     ]);
     // sleeves: snug tubes over the cap and the top of the arm
@@ -343,6 +355,21 @@ export function buildBody(rig) {
     return union(cup, mirrorX(union(strap([0.026, 1.662, 0.080], [0.097, 1.694, 0.076]), strap([0.025, 1.650, 0.064], [0.099, 1.658, 0.016]))));
   })();
 
+  // ---- kit detail: fields the build cuts materials along ----
+  // Pants stripe: down the outside of each leg, hip to hem.
+  const HIP_L = B('LeftUpLeg');
+  const legAx = y => { const t = Math.max(0, Math.min(1, (HIP_L[1]-y)/(HIP_L[1]-K_L[1]))); return [HIP_L[0] + (K_L[0]-HIP_L[0])*t, HIP_L[2] + (K_L[2]-HIP_L[2])*t]; };
+  const PSTRIPE_W = 0.019;
+  const PSTRIPE_CUTS = [(x, y, z) => z - legAx(y)[1] - PSTRIPE_W, (x, y, z) => -(z - legAx(y)[1]) - PSTRIPE_W, (x, y, z) => legAx(y)[0] - Math.abs(x)];
+  const inPantsStripe = (x, y, z) => { const a = legAx(y); return Math.abs(z - a[1]) < PSTRIPE_W && Math.abs(x) > a[0]; };
+  // Socks: team colour to mid-calf, white below it.
+  const sockT = (x, y, z) => dot(sub(x >= 0 ? [x, y, z] : [-x, y, z], K_L), shinDir);
+  const SOCK_SPLIT = 0.250;
+  // Arm: a compression sleeve from above the elbow to the glove, and a wristband on it.
+  const armT = (x, y, z) => dot(sub(x >= 0 ? [x, y, z] : [-x, y, z], S), aU);
+  const foreT = (x, y, z) => dot(sub(x >= 0 ? [x, y, z] : [-x, y, z], E), aF);
+  const ARM = { sleeveFrom: 0.205, band0: 0.150, band1: 0.200, armT, foreT };
+
   // Jersey and pants as ONE surface: meshed once and cut into materials along the
   // waistline, so the tuck has no mesh-crossing seam at all.
   const uniform = smin2(jersey, pants, 0.003);
@@ -350,6 +377,7 @@ export function buildBody(rig) {
     uniform,
     armL, glovesL, cleatL, EYE, EYE_R, HC, S, aU, latU, antU,
     skinFull, head, neck, torso, arms, eyes, gloves, legs, pelvis, pants, belt, socks, cleats, jersey, pads, TRIM_D,
+    STRIPE_CUTS, inSleeveStripe, PSTRIPE_CUTS, inPantsStripe, sockT, SOCK_SPLIT, ARM, shellOuter,
     helmet, helmetFill, faceHole, stripe, facemask, visor, chinstrap,
   };
 }
