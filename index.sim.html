@@ -4762,7 +4762,19 @@
     scene.add(mergeMeshes(_towers.banks, new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff2c0,emissiveIntensity:1.2})));
     nearPosts=goalpost3D(0.5); goalpost3D(119.5);
     buildVideoBoards();
-    ballMesh=new THREE.Mesh(new THREE.SphereGeometry(0.4,20,16), new THREE.MeshStandardMaterial({color:0x3d1f0c,roughness:0.66,metalness:0.02})); ballMesh.scale.set(...BALL_LIVE);
+    // A football, not a brown egg: pointed ends, a white stripe near each, and laces along
+    // the top. The shape and the paint are done on the vertices, so it needs no texture.
+    { const bg=new THREE.SphereGeometry(0.4,56,48); bg.rotateZ(Math.PI/2);   /* poles on the long axis, so the stripes follow the mesh */
+      const P=bg.attributes.position, C=new Float32Array(P.count*3);
+      const lea=new THREE.Color(0x4a2410).convertSRGBToLinear(), dark=new THREE.Color(0x35190b).convertSRGBToLinear(), wh=new THREE.Color(0xe9e4d8).convertSRGBToLinear();
+      for(let i=0;i<P.count;i++){ const x=P.getX(i), u=Math.max(-1,Math.min(1,x/0.4)), k=Math.pow(Math.max(0,1-u*u),0.80)/Math.max(1e-4,Math.sqrt(Math.max(0,1-u*u)));
+        const y=P.getY(i)*k, z=P.getZ(i)*k; P.setXYZ(i,x,y,z);
+        const ang=Math.atan2(z,y), au=Math.abs(u);
+        const stripe=au>0.60&&au<0.70, lace=Math.abs(ang)<0.20&&au<0.34&&(Math.abs(ang)<0.035||(((u+1)*14)%1)<0.38), seam=Math.abs(Math.abs(ang)-Math.PI/2)<0.03||Math.abs(ang)>Math.PI-0.03;
+        const c=(stripe||lace)?wh:(seam?dark:lea); C[i*3]=c.r; C[i*3+1]=c.g; C[i*3+2]=c.b; }
+      bg.setAttribute('color',new THREE.BufferAttribute(C,3)); bg.computeVertexNormals();
+      ballMesh=new THREE.Mesh(bg, new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:0.62,metalness:0.02})); }
+    ballMesh.scale.set(...BALL_LIVE);
     { const white=new THREE.MeshStandardMaterial({color:0xe8e4d8,roughness:0.58});
       // laces run along the ball's long axis (X); the old box ran across it
       const trim=[];
