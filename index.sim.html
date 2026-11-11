@@ -1418,7 +1418,11 @@
     for(const r of G.receivers){ const dd=Math.hypot(r.x-zx,r.y-zy); if(dd<rb){rb=dd;rr=r;} }
     return rr ? {x:zx+(rr.x-zx)*0.35, y:zy+(rr.y-zy)*0.5} : {x:zx, y:zy};
   }
-  function nearestDefToBall(){ let best=null,bd=1e9; for(const d of G.defenders){ const dd=dist(d,G.carrier); if(dd<bd){bd=dd;best=d;} } return best; }
+  // Where the play is: the spot a pass is coming down while it is in the air, else the man
+  // with the ball. (It used to be the passer even with the ball in flight, so a switch
+  // during a throw gave you a pass rusher instead of the man covering the catch.)
+  function ballSpot(){ const b=G.ball; return (b&&b.active&&!b.ko&&!b.away&&G.passState==='air'&&b.tx!=null) ? {x:b.tx,y:b.ty} : G.carrier; }
+  function nearestDefToBall(skip){ const at=ballSpot(); let best=null,bd=1e9; for(const d of G.defenders){ if(d===skip) continue; const dd=dist(d,at); if(dd<bd){bd=dd;best=d;} } return best; }
   // depth: how far past the line the route actually goes before the receiver settles.
   // Without it every route was a sprint with no end, so the longer the quarterback
   // held the ball the deeper the whole field ran — measured over 220 throws, the
@@ -1574,7 +1578,9 @@
       const i=L.indexOf(G.userDef); G.userDef=L[(i+1)%L.length];
       const r=G.userDef.role||''; setMsg('YOU: '+({MLB:'MIDDLE LINEBACKER',LB:'LINEBACKER',DE:'DEFENSIVE END',DT:'DEFENSIVE TACKLE',S:'SAFETY',CB:'CORNERBACK'}[r]||r)+' #'+G.userDef.n,0.9);
       return; }
-    G.userDef = nearestDefToBall(); }
+    // live: the nearest man to the play; press again and it is the next nearest, so two
+    // presses always reach the other man in on it
+    const near=nearestDefToBall(); G.userDef = (near===G.userDef ? (nearestDefToBall(near)||near) : near); }
   // Run plays: press B to take over a blocker (lineman) and block; press again to go back to the runner.
   function toggleBlockerControl(){
     if(!actOff() || G.playType!=='run') return;
@@ -2818,6 +2824,7 @@
     G.ball={active:true,x:qb.x,y:qb.y,fromX:qb.x,fromY:qb.y,tx,ty,t:0,dur,rec:r,kind,arcK:kind==='bullet'?0.5:kind==='touch'?1.75:1};
     if(humanOff() && kind!=='auto') document.getElementById('spinpip').textContent=kind==='bullet'?'BULLET':'TOUCH';
     G.passState='air'; G.throwT=0.42; SFX.throw();
+    if(humanDef()) G.userDef=nearestDefToBall();        // ball's away: you get the man nearest the catch
     if(pressure>0.55) say(pick(["He gets it off under heavy pressure!","Throwing off his back foot!","Hurried throw — he had a man in his face!"]));
   }
   function updateBall(dt){
@@ -3612,11 +3619,13 @@
     // goes on are raked, so from the field the rows read as rows.
     const W=2048,H=512; const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
     g.fillStyle='#10141c'; g.fillRect(0,0,W,H);
-    const neutral=['#aab3c2','#b9854a','#4f6a9c','#5e9a6c','#8d85a0','#c2a84f','#6c7688','#d8d8dc','#7a3a6e','#3a7f66','#a8853a','#44566f','#2c3340','#3b2f2a','#20242c','#51413a','#7d2f2f'];
-    const home=['#2f6bd6','#3a86ff','#1f4f9e','#dfe6f2','#9fb8e8','#ffffff','#2f6bd6','#2f6bd6'];
-    const away=['#d23b34','#ff5340','#a3322c','#f0c0b8','#e88a7a','#ffffff','#d23b34'];
+    // A real crowd from the field is muted and mostly in the home colour: jackets and hoodies in
+    // dull tones, not confetti. (The first palette was bright and evenly mixed and read as sprinkles.)
+    const neutral=['#5b6472','#6f5a44','#3f4f6c','#4d6b55','#5d586a','#7a6c3c','#4a5260','#8c8f96','#55324e','#2f5a4b','#6a5830','#34425a','#262c38','#33292a','#1c2028','#40332f','#5a2a2a','#262c38','#1c2028'];
+    const home=['#2a5fc0','#3277e0','#1f4f9e','#c9d2e2','#7f9cd4','#2a5fc0','#2a5fc0','#1f4f9e','#e6e9ef'];
+    const away=['#bf3630','#de4a3a','#a3322c','#d8aaa2','#bf3630','#e6e9ef'];
     const skin=['#e8b890','#c89060','#a06840','#7a4a28','#f0c8a0','#d2a070','#5c3a22'];
-    const palAt=(x)=>{ const seg=(x/W*8)|0; if(seg%4===1) return home; if(seg%4===3) return Math.random()<0.6?away:neutral; return Math.random()<0.5?home:neutral; };
+    const palAt=(x)=>{ const seg=(x/W*8)|0; if(seg%4===1) return Math.random()<0.85?home:neutral; if(seg%4===3) return Math.random()<0.5?away:neutral; return Math.random()<0.62?home:neutral; };
     const rows=24, rh=H/rows, perRow=168, sw=W/perRow;
     for(let r=0;r<rows;r++){ const y=H-(r+0.5)*rh;
       g.fillStyle='#1b212c'; g.fillRect(0, y-rh*0.5, W, rh);                                 // the tread
@@ -3627,7 +3636,9 @@
         if(Math.random()<0.045){ g.fillStyle='#232b3a'; g.fillRect(x-sw*0.36,yy-rh*0.2,sw*0.72,rh*0.5); continue; }   // empty seat
         const pal=palAt(x);
         g.fillStyle=pal[(Math.random()*pal.length)|0]; g.beginPath(); g.ellipse(x,yy+rh*0.12,sw*0.42,rh*0.30,0,0,7); g.fill();   // shoulders
-        g.fillStyle=skin[(Math.random()*skin.length)|0]; g.beginPath(); g.arc(x,yy-rh*0.20,sw*0.25,0,7); g.fill();             // head
+        g.fillStyle=skin[(Math.random()*skin.length)|0]; g.beginPath(); g.arc(x,yy-rh*0.20,sw*0.22,0,7); g.fill();             // head
+        if(Math.random()<0.75){ g.fillStyle=['#17130f','#231a12','#3a2a1a','#0f0f12','#5a4630','#8a8a8a'][(Math.random()*6)|0]; g.beginPath(); g.arc(x,yy-rh*0.23,sw*0.23,Math.PI*1.02,Math.PI*1.98); g.fill(); }   // hair
+        if(Math.random()<0.10){ g.strokeStyle=g.fillStyle=skin[(Math.random()*skin.length)|0]; g.lineWidth=sw*0.16; g.beginPath(); g.moveTo(x-sw*0.3,yy); g.lineTo(x-sw*0.38,yy-rh*0.42); g.moveTo(x+sw*0.3,yy); g.lineTo(x+sw*0.38,yy-rh*0.42); g.stroke(); }   // arms up
         if(Math.random()<0.3){ g.fillStyle=pal[(Math.random()*pal.length)|0]; g.fillRect(x-sw*0.25,yy-rh*0.36,sw*0.5,rh*0.13); }  // a cap
       }
     }
