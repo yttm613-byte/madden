@@ -513,3 +513,11 @@ The Skin mesh carries three morph targets: `heavy` (0) and two face shapes, `fac
 first time he is posed (`u.bodyVar` block). The light model has the same head, decimated (its
 vertices take their nearest original's colour, normal and morphs), because on the FAST and LITE
 tiers it is the only model drawn.
+
+## Balance changes from the owner's play-test (human side only)
+
+`runK()`: a scrambling quarterback runs at 0.86x, a called run at 1.045x. In `resolveCatch`,
+a human offense's pass counts as off target at 2.0x the catch radius (CPU 1.7x) and its catch
+odds get x1.14 (cap 0.97). Measured with a scripted test of 24 picked throws on PRO: 15 and
+12 caught before (normal and very early throws), 19 and 19 after. These move the human-side
+baselines in this file; the CPU's are untouched.

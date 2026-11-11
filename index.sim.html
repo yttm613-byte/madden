@@ -2188,6 +2188,11 @@
     return !!(sprintHeld || (kbSplit()?codes.ShiftLeft:keys['shift']) || (pd&&pd.b[PB.RT])); }
   function stamOf(t){ return t==='cpu' ? (G.stamina2==null?100:G.stamina2) : G.stamina; }
   function setStam(t,v){ if(t==='cpu') G.stamina2=v; else G.stamina=v; }
+  // Owner's play-test (Nov 2026): the quarterback ran for too much every time he took off,
+  // the halfback's runs were too hard, and too many picked passes fell incomplete. A
+  // quarterback is not a halfback: scrambling, he is a step slower; a called run gets a
+  // touch more burst. (Both apply to the human side only; the CPU's speeds are unchanged.)
+  function runK(){ return (G.playType==='pass' && G.passState==='scramble') ? 0.86 : (G.playType==='run' ? 1.045 : 1); }
   function moveEntity(ent,dt,base,sprint,team){
     team=team||'user';
     const sf=ent.sf||1; base*=sf; sprint*=sf;          // his speed rating
@@ -2645,7 +2650,7 @@
         c.vx=back; c.vy+=(fieldMid-c.y)*0.4*dt;
         c.x+=c.vx*dt; c.y+=c.vy*dt;
         const inp=inputVec(G.offense); if(inp.m>0.15){ c.y+=inp.y*S.carrier*0.5*dt; }   // you can still slide
-      } else moveEntity(c,dt,S.carrier,S.sprint,G.offense);
+      } else { const k=runK(); moveEntity(c,dt,S.carrier*k,S.sprint*k,G.offense); }
     }
     else cpuDropAI(c,dt,elapsed);
 
@@ -2862,7 +2867,7 @@
     const b=G.ball, r=b.rec, pt={x:b.tx,y:b.ty};
     // separation = tightest REAL (non-fill) defender's distance to the receiver, in yards
     let nd=1e9; for(const d of G.defenders) if(d.job!=='rush' && !d.fill) nd=Math.min(nd,dist(d,r));
-    const sepY=nd/PPY, rd=dist(r,pt), overthrown = b.away || rd>S.catchR*1.7; G.ball.active=false;
+    const sepY=nd/PPY, rd=dist(r,pt), overthrown = b.away || rd>S.catchR*(humanOff()?2.0:1.7); G.ball.active=false;
     // realistic outcome odds by how open the receiver is (normal completion & INT rates)
     let pCatch,pInt;
     // Pick odds halved when routes got real depths: a receiver who SETTLES has less
@@ -2885,6 +2890,7 @@
       pInt   *= 1 + Math.max(0, Math.min(1.6, (airY-8)*0.06));
       pCatch *= 1 - Math.min(0.45, (rd/PPY)*0.15);
       pCatch = Math.min(0.985, pCatch*(1+rz(r.rt,'hnd')*0.004)*wx().cat);   // his hands, and the weather
+      if(humanOff()) pCatch = Math.min(0.97, pCatch*1.14);                    // the receiver you picked fights for it (play-test: too many fell incomplete)
     }
     // your defender went up for it as it arrived
     const ud=humanDef()?G.userDef:null;
@@ -3003,7 +3009,7 @@
         ub.y=Math.max(fieldTop,Math.min(fieldBot,ub.y));
         for(const d of G.defenders){ if(dist(d,ub)<S.blockR){ d.blocked=0.2; const a=Math.atan2(d.y-ub.y,d.x-ub.x); d.x+=Math.cos(a)*S.def*0.5*dt; d.y+=Math.sin(a)*S.def*0.5*dt; } }
       } else if(G.diveC){ if(diveStep(c,dt)) return; }
-      else moveEntity(c,dt,S.carrier,S.sprint,G.offense);
+      else { const k=runK(); moveEntity(c,dt,S.carrier*k,S.sprint*k,G.offense); }
     }
     else cpuRunAI(c,dt);
     if(Math.hypot(c.vx,c.vy) > S.carrier*1.03){ G.trail.push({x:c.x,y:c.y}); if(G.trail.length>9) G.trail.shift(); }
