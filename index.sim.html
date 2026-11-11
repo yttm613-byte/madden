@@ -4428,10 +4428,18 @@
     renderer.setRenderTarget(old.rt); renderer.setClearColor(cc,old.ca); renderer.shadowMap.autoUpdate=old.sh;
     g.visible=false; scene.add(g);
   }
-  function loadPlayers(){
+  function loadPlayers(attempt){
+    attempt=attempt||0;
     const note=document.getElementById('loadnote');
-    new THREE.GLTFLoader().load('assets/gridiron_player.glb', (gltf)=>{
-      playerProto=gltf;
+    // Say WHY it failed, and try again by itself first: a load can fail for a passing
+    // reason (a dropped connection, a tab opened mid-update), and "could not load" with
+    // no cause gave nothing to go on.
+    const fail=(what,e)=>{ const msg=(e&&(e.message||(e.target&&e.target.status&&('HTTP '+e.target.status))||e.type))||String(e||'unknown');
+      console.error(what, e);
+      if(attempt<2){ if(note) note.textContent='LOADING PLAYERS… retrying'; setTimeout(()=>loadPlayers(attempt+1), 1200*(attempt+1)); return; }
+      if(note) note.innerHTML='Could not load the players ('+what+': '+String(msg).slice(0,90).replace(/[<>&]/g,'')+') — <a href="" style="color:var(--gold)">reload</a> to try again'; };
+    new THREE.GLTFLoader().load('assets/gridiron_player.glb', (gltf)=>{ try{
+      playerProto=gltf; pPool.length=0;
       const aniso=upgradeTextures(playerProto.scene);
       if(window.__gbDebug) console.log('texture anisotropy:',aniso);
       for(let i=0;i<24;i++) pPool.push(makePlayer());
@@ -4442,8 +4450,9 @@
         new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.DoubleSide,transparent:true,opacity:0.85,fog:false}));
         r.rotation.x=-Math.PI/2; r.position.y=0.06; r.visible=false; scene.add(r); ringPool.push(r); }
       playersReady=true; document.getElementById('start').classList.remove('loading');
+      }catch(e){ fail('setup', e); }
     }, (ev)=>{ if(note && ev && ev.total) note.textContent='LOADING PLAYERS… '+Math.min(99,Math.round(100*ev.loaded/ev.total))+'%'; },
-    (e)=>{ console.error('player glb load failed', e); if(note) note.innerHTML='Could not load the players — <a href="" style="color:var(--gold)">reload</a> to try again'; });
+    (e)=>fail('download', e));
   }
   let wxRain=null, wxSnow=null, wxCover=null, wxField=null, wxApron=null, wxSky=null, wxT=0, wxSnd=null;
   const FIELD_K=0.62;
@@ -5119,9 +5128,15 @@
         // Body types by position: linemen are big men (the model's heavy morph: belly,
         // neck, seat, thighs), backs and receivers lean. A little width on top of it.
         if(u.baseS){
-          const hv = (role==='OL'||role==='C') ? 1.0 : (role==='DL' ? 0.85 : (role==='TE'||role==='FB') ? 0.45 : (role==='LB' ? 0.25 : 0));
+          // No two men are built alike: each has his own frame within what his position
+          // allows, and his own head shape. A lineman is a big man, not an inflated one:
+          // the full heavy morph on a fitted jersey read as a balloon, so it tops out lower.
+          if(u.bodyVar==null){ u.bodyVar=Math.random()*2-1; u.bodyVar2=Math.random()*2-1;
+            const hb=u.B&&u.B.Head; if(hb){ const a=1+(Math.random()-0.5)*0.07, b2=1+(Math.random()-0.5)*0.07; hb.scale.set(a, b2, 1+(Math.random()-0.5)*0.05); } }
+          const bv=u.bodyVar;
+          const hv = Math.max(0, Math.round(((role==='OL'||role==='C') ? 0.62+bv*0.16 : (role==='DL' ? 0.52+bv*0.18 : (role==='TE'||role==='FB') ? 0.28+bv*0.12 : (role==='LB' ? 0.18+bv*0.10 : 0.03+bv*0.05)))*50)/50);
           if(hv!==u.heavy){ u.heavy=hv; for(const m of u.morphs) m.morphTargetInfluences[0]=hv; }
-          const wide = (role==='OL'||role==='C') ? 1.07 : (role==='DL' ? 1.05 : (role==='TE'||role==='FB') ? 1.03 : (role==='LB' ? 1.02 : 0.97));
+          const wide = 0.975 + hv*0.085 + u.bodyVar2*0.018;
           const tall = (role==='OL'||role==='C'||role==='DL') ? 1.01 : 1.0;
           u.model.scale.set(u.baseS*u.buildVg*wide, u.baseS*u.buildVh*tall, u.baseS*u.buildVg*wide);
         }
