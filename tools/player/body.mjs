@@ -299,7 +299,11 @@ export function buildBody(rig) {
   };
   const TRIM_MASK = (x, y, z) => smoothstep(0.0008, -0.0008, TRIM_D(x, y, z));
   // Crew collar, a touch lower at the front of the throat than at the nape.
-  const COLLAR = sunionK([[roundCone([0, 1.46, -0.036], [0, 1.66, -0.014], 0.089, 0.085), 0], [ellipsoid([0, 1.555, 0.070], [0.050, 0.030, 0.050]), 0.03]]);
+  // A V-neck, as on the reference photographs: the round neck hole plus a wedge in front
+  // whose point sits on the breastbone. (The first collar's front notch was a small
+  // ellipsoid, which opened a keyhole in the chest plate, not a V.)
+  const COLLAR = sunionK([[roundCone([0, 1.46, -0.036], [0, 1.66, -0.014], 0.089, 0.085), 0],
+    [(x, y, z) => Math.max((Math.abs(x)*0.80 - (y-1.468)*0.62)*0.79, 0.015 - z, y - 1.64), 0.012]]);
   const jersey = (() => {
     // over a real body the jersey is simply that body's own shape, a finger's width out
     // (kept a little inside the armpit line, so no sliver of it reaches the arm)
