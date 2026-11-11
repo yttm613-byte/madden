@@ -21,3 +21,27 @@ that by the player's skin tone, so one head serves every tone and needs no textu
 
 `../build.mjs` uses it for the `Skin/headneck` part of the full model. The light (LOD)
 model keeps the sculpted head; `SCULPT_HEAD=1` forces the sculpted head on the full one.
+
+# The real body
+
+`body_prep.py` goes further than `prep.py` (which it replaces for `head.json`): it poses
+the whole MakeHuman body onto the player's skeleton and bakes it to a distance field.
+
+    node -e "..."            # rig_joints.json: the player's bind joints, from ../rig.mjs
+    python3 body_prep.py <mpfb>/data <assets>/skins
+
+MakeHuman ships Mixamo-named bones and skin weights for its mesh
+(`data/rigs/standard/rig.mixamo.json`, `weights.mixamo.json`), and the player uses a
+Mixamo skeleton, so each bone carries its share of the body onto the player's bone.
+Outputs: `head.json`, `arm_detail.json` (photographed skin detail for the arms, looked
+up by position) and `body_sdf.bin.gz` + `.json` (signed distance on a 4mm grid, x >= 0).
+`../body.mjs` builds the torso, arms, legs, and everything worn, round that field; the
+jersey follows a blurred copy of it so cloth spans the hollows. `SCULPT_BODY=1` builds
+the old hand-sculpted body.
+
+# Credits
+
+- Body, head, skin photographs, Mixamo rig mapping and weights: the MakeHuman project
+  (makehumancommunity.org), CC0.
+- Reference photographs of players and helmets, looked at only, not included:
+  Wikimedia Commons.

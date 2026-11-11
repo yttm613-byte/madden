@@ -10,6 +10,8 @@
  * one with a lip at its edge, so the seam is a real overlap rather than two meshes
  * crossing at a jagged line.
  */
+import fs from 'fs';
+import zlib from 'zlib';
 import { sphere, ellipsoid, roundCone, capsule, roundBox, torus, plane, union, sunion, sunionK, intersect,
   subtract, ssubtract, smax, smin, shell, offset, mirrorX, displace, frameY, frameEuler, norm, sub, add, mul, cross, dot, lerp3,
   fbm3, noise3, smoothstep, len } from './sdf.mjs';
@@ -22,9 +24,41 @@ const rot = (v, axis, ang) => { // rotate vector v about unit axis (Rodrigues)
   return [v[0]*c + cr[0]*s + axis[0]*d*(1-c), v[1]*c + cr[1]*s + axis[1]*d*(1-c), v[2]*c + cr[2]*s + axis[2]*d*(1-c)];
 };
 
+// The real body: signed distance to MakeHuman's CC0 body posed on this skeleton, on a 4mm
+// grid (human/body_prep.py). Everything worn is built round it. SCULPT_BODY=1 keeps the
+// hand-sculpted body instead.
+function realBody() {
+  const meta = JSON.parse(fs.readFileSync(new URL('./human/body_sdf.json', import.meta.url)));
+  const buf = zlib.gunzipSync(fs.readFileSync(new URL('./human/body_sdf.bin.gz', import.meta.url)));
+  const a = new Int16Array(buf.buffer, buf.byteOffset, buf.length/2), [nx, ny, nz] = meta.n, [lx, ly, lz] = meta.lo, h = meta.h, u = meta.unit;
+  const sampler = arr => (x, y, z) => {
+    let fx = (Math.abs(x)-lx)/h, fy = (y-ly)/h, fz = (z-lz)/h, out = 0;
+    const cl = (v, n) => { const c = Math.max(0, Math.min(n-1.001, v)); out += (v-c)*(v-c); return c; };
+    fx = cl(fx, nx); fy = cl(fy, ny); fz = cl(fz, nz);
+    const i = fx|0, j = fy|0, k = fz|0, tx = fx-i, ty = fy-j, tz = fz-k, o = (i*ny + j)*nz + k, sx = ny*nz, sy = nz;
+    const c00 = arr[o]*(1-tz) + arr[o+1]*tz, c01 = arr[o+sy]*(1-tz) + arr[o+sy+1]*tz, c10 = arr[o+sx]*(1-tz) + arr[o+sx+1]*tz, c11 = arr[o+sx+sy]*(1-tz) + arr[o+sx+sy+1]*tz;
+    return ((c00*(1-ty) + c01*ty)*(1-tx) + (c10*(1-ty) + c11*ty)*tx)*u + Math.sqrt(out)*h;
+  };
+  // A blurred copy (sigma 2cm): cloth does not follow every muscle, it spans the hollows.
+  // The grid holds x >= 0 only, so the blur reflects at x = 0 the way the body does.
+  const soft = Float32Array.from(a), tmp = new Float32Array(a.length), R = 10, w = [];
+  for (let d = -R; d <= R; d++) w.push(Math.exp(-d*d/(2*5*5)));
+  const ws = w.reduce((p, c) => p + c, 0), i0 = Math.round(-lx/h);
+  const pass = (src, dst, n, stride, mirror) => { const outer = a.length/n/stride;
+    for (let b = 0; b < outer; b++) for (let r = 0; r < stride; r++) { const base = b*n*stride + r;
+      for (let q = 0; q < n; q++) { let acc = 0;
+        for (let d = -R; d <= R; d++) { let t = q + d; if (mirror && t < i0) t = 2*i0 - t; t = t < 0 ? 0 : t >= n ? n-1 : t; acc += w[d+R]*src[base + t*stride]; }
+        dst[base + q*stride] = acc/ws; } } };
+  pass(soft, tmp, nz, 1, false); pass(tmp, soft, ny, nz, false); pass(soft, tmp, nx, ny*nz, true);
+  return { exact: sampler(a), soft: sampler(tmp) };
+}
+
 export function buildBody(rig) {
   const B = n => { const p = rig.byName[n].bindPos; return [p.x, p.y, p.z]; };
   const FWD = [0, 0, 1];
+  const REAL = process.env.SCULPT_BODY ? null : realBody(), RB = REAL && REAL.exact;
+  // the line between the trunk and an arm: down the armpit, then out along the inside of the arm
+  const xb = y => 0.185 + Math.max(0, 1.45 - y)*0.42;
 
   // ============================ HEAD ============================
   const EYE = [0.0315, 1.766, 0.0735], EYE_R = 0.0122;
@@ -54,12 +88,12 @@ export function buildBody(rig) {
   const eyes = mirrorX(sphere(EYE, EYE_R));
 
   // ============================ NECK & TORSO ============================
-  const neck = sunionK([
+  const neck = RB ? intersect(RB, (x, y, z) => Math.max(Math.abs(y-1.57)-0.16, Math.abs(x)-0.13)) : sunionK([
     [roundCone([0, 1.440, -0.036], [0, 1.668, -0.012], 0.090, 0.072), 0],
     [mirrorX(capsule([0.050, 1.702, -0.020], [0.021, 1.500, 0.052], 0.019)), 0.03],   // sternocleidomastoid
     [ellipsoid([0, 1.535, -0.066], [0.066, 0.068, 0.036]), 0.045],                    // back of the neck / traps
   ]);
-  const torso = sunionK([
+  const torso = RB ? intersect(RB, (x, y, z) => Math.max(Math.abs(x)-xb(y), 0.90-y, y-1.62)) : sunionK([
     [ellipsoid([0, 1.370, 0.004], [0.190, 0.172, 0.134]), 0],
     [ellipsoid([0, 1.170, 0.010], [0.154, 0.140, 0.112]), 0.06],
     [ellipsoid([0, 1.005, -0.006], [0.162, 0.105, 0.118]), 0.06],
@@ -75,7 +109,7 @@ export function buildBody(rig) {
   const PU = (t, an, la) => add(add(add(S, mul(aU, t)), mul(antU, an)), mul(latU, la));
   const PF = (t, an, la) => add(add(add(E, mul(aF, t)), mul(antF, an)), mul(latF, la));
   const frU = [latU, aU, antU], frF = [latF, aF, antF];
-  const armL = sunionK([
+  const armL = RB ? intersect(RB, (x, y, z) => xb(y)-x, plane(add(Wr, mul(aF, 0.02)), aF)) : sunionK([
     [roundCone(add(S, mul(aU, 0.012)), E, 0.061, 0.045), 0],
     [ellipsoid(PU(0.042, 0.004, 0.022), [0.058, 0.080, 0.064], frU), 0.03],      // deltoid
     [ellipsoid(PU(0.160, 0.028, 0.000), [0.047, 0.094, 0.046], frU), 0.025],     // biceps
@@ -89,7 +123,7 @@ export function buildBody(rig) {
     [ellipsoid(PF(0.245, 0, 0), [0.020, 0.030, 0.031], frF), 0.02],             // wrist
   ]);
   const arms = mirrorX(armL);
-  const skinFull = sunionK([[torso, 0], [neck, 0.05], [head, 0.035], [arms, 0.05]]);
+  const skinFull = RB ? sunionK([[intersect(RB, (x, y, z) => Math.max(0.88-y, y-1.66)), 0], [head, 0.035]]) : sunionK([[torso, 0], [neck, 0.05], [head, 0.035], [arms, 0.05]]);
 
   // ============================ GLOVES ============================
   const glovesL = (() => {
@@ -139,8 +173,9 @@ export function buildBody(rig) {
       [sphere(A, 0.036), 0.02],
     ]);
   })();
-  const legs = mirrorX(legL);
-  const pelvis = sunionK([
+  const legs = RB ? union(intersect(RB, (x, y, z) => Math.max(y-1.02, 0.072-y, Math.abs(x)-xb(y))), mirrorX(sphere(B('LeftFoot'), 0.036))) : mirrorX(legL);
+  // with a real body the pelvis and legs are one surface, so nothing is blended on top of itself
+  const pelvis = RB ? intersect(RB, (x, y, z) => Math.max(y-1.13, 0.072-y, Math.abs(x)-xb(y))) : sunionK([
     [ellipsoid([0, 1.000, -0.004], [0.166, 0.110, 0.122]), 0],
     [mirrorX(ellipsoid([0.082, 0.938, -0.070], [0.088, 0.095, 0.080])), 0.05],   // glutes
   ]);
@@ -158,11 +193,11 @@ export function buildBody(rig) {
       const H = B('LeftUpLeg'), K = K_L;
       const h = [H[0]*s, H[1], H[2]], k = [K[0]*s, K[1], K[2]];
       const a = norm(sub(k, h)), ant = norm(sub(FWD, mul(a, dot(FWD, a)))), lat = norm(cross(a, ant));
-      pads.push([roundBox(add(add(h, mul(a, 0.20)), mul(ant, 0.082)), [0.056, 0.092, 0.014], 0.012, [lat, a, ant]), 0.022]);   // thigh pad
-      pads.push([roundBox(add(add(k, mul(ant, 0.062)), mul(a, -0.010)), [0.048, 0.050, 0.013], 0.011, [lat, a, ant]), 0.020]); // knee pad
+      pads.push([roundBox(add(add(h, mul(a, 0.20)), mul(ant, RB ? 0.076 : 0.082)), [0.054, 0.090, 0.012], 0.011, [lat, a, ant]), 0.03]);   // thigh pad
+      pads.push([roundBox(add(add(k, mul(ant, RB ? 0.050 : 0.062)), mul(a, -0.010)), RB ? [0.040, 0.046, 0.010] : [0.048, 0.050, 0.013], RB ? 0.009 : 0.011, [lat, a, ant]), RB ? 0.03 : 0.020]); // knee pad
       pads.push([ellipsoid([0.156*s, 0.994, 0.004], [0.020, 0.056, 0.066]), 0.04]);   // hip pad
     }
-    const bodyShape = sunionK([[pelvis, 0], [legs, 0.06], ...pads, [ellipsoid([0, 0.99, -0.118], [0.058, 0.048, 0.02]), 0.04], [WAIST, 0.05]]);
+    const bodyShape = sunionK([[pelvis, 0], ...(RB ? [] : [[legs, 0.06]]), ...pads, [ellipsoid([0, 0.99, -0.118], [0.058, 0.048, 0.02]), 0.04], [WAIST, 0.05]]);
     let p = offset(bodyShape, 0.0085);
     PANTS_BODY = p;
     // folds: behind the knee and across the hip crease
@@ -266,7 +301,11 @@ export function buildBody(rig) {
   // Crew collar, a touch lower at the front of the throat than at the nape.
   const COLLAR = sunionK([[roundCone([0, 1.46, -0.036], [0, 1.66, -0.014], 0.089, 0.085), 0], [ellipsoid([0, 1.555, 0.070], [0.050, 0.030, 0.050]), 0.03]]);
   const jersey = (() => {
-    const core = sunionK([
+    // over a real body the jersey is simply that body's own shape, a finger's width out
+    // (kept a little inside the armpit line, so no sliver of it reaches the arm)
+    const inJ = (x, y, z) => Math.max(Math.abs(x)-xb(y)+0.018, 0.90-y, y-1.62);
+    const softTorso = RB && intersect(REAL.soft, inJ);
+    const core = RB ? sunionK([[offset(intersect(RB, inJ), 0.005), 0], [offset(softTorso, 0.017), 0.02], [WAIST, 0.05]]) : sunionK([
       [ellipsoid([0, 1.345, 0.000], [0.202, 0.180, 0.140]), 0],
       [roundBox([0, 1.225, 0.030], [0.166, 0.165, 0.094], 0.075), 0.07],   // front of the torso: flat, not bulbous
       [ellipsoid([0, 1.160, 0.006], [0.174, 0.170, 0.124]), 0.06],

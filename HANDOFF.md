@@ -496,3 +496,11 @@ Always look for and use what is freely available before sculpting by hand: refer
 photographs (several, not one) and CC0 models or data. Do it unprompted. The head came
 from MakeHuman this way; the body under the uniform is next (legs ~5% short, torso long,
 upper arm ~13% long against the same real human).
+
+## Real body
+
+The body under the uniform is now MakeHuman's CC0 body posed on our skeleton and baked to
+a distance field (`tools/player/human/body_prep.py`, `body_sdf.bin.gz`); `body.mjs` builds
+torso, arms, legs, jersey, pants and socks round it. See `tools/player/human/README.md`
+(also the credits). Standing and walking poses live in the `default:` case of `applyPose`.
+Still the old proportions of the rig (legs ~5% short): the body is fitted to the rig's joints.

@@ -87,6 +87,18 @@ function ambientOcclusion(x, y, z, n) {
   return Math.max(0, Math.min(1, 1 - 1.15*occ/wsum));
 }
 
+// photographed skin detail for the arms, looked up by position (human/arm_detail.json)
+const armDetail = (() => {
+  if (process.env.SCULPT_BODY || process.env.LOD) return null;
+  const d = JSON.parse(fs.readFileSync(new URL('human/arm_detail.json', import.meta.url))), cell = 0.012, grid = new Map();
+  const key = (i, j, k) => i*73856093 ^ j*19349663 ^ k*83492791;
+  for (let v = 0; v < d.pos.length/3; v++) { const x = Math.abs(d.pos[3*v]), k = key(Math.floor(x/cell), Math.floor(d.pos[3*v+1]/cell), Math.floor(d.pos[3*v+2]/cell));
+    if (!grid.has(k)) grid.set(k, []); grid.get(k).push(v); }
+  return (x, y, z) => { x = Math.abs(x); let best = 1e9, bi = -1; const ci = Math.floor(x/cell), cj = Math.floor(y/cell), ck = Math.floor(z/cell);
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) { const l = grid.get(key(ci+a, cj+b, ck+c)); if (!l) continue;
+      for (const v of l) { const q = (Math.abs(d.pos[3*v])-x)**2 + (d.pos[3*v+1]-y)**2 + (d.pos[3*v+2]-z)**2; if (q < best) { best = q; bi = v; } } }
+    return bi < 0 ? null : [d.col[3*bi], d.col[3*bi+1], d.col[3*bi+2]]; };
+})();
 // per-part albedo multipliers baked into the vertex colour
 function albedo(part, x, y, z, n) {
   if (part === 'Helmet') {
@@ -97,6 +109,7 @@ function albedo(part, x, y, z, n) {
   }
   if (part === 'Skin') {
     const ax = Math.abs(x);
+    if (armDetail && ax > 0.20 && y < 1.60) { const c = armDetail(x, y, z); if (c) return c; }
     // eyebrows
     const bx = (ax-0.034)/0.020, by = (y-1.7875 + 0.004*bx*bx)/0.0042;
     if (z > 0.06 && bx*bx + by*by < 1) return [0.42, 0.38, 0.36];
