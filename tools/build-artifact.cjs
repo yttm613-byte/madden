@@ -51,6 +51,14 @@ if (!fs.existsSync(FONTS)) { console.error('missing ' + FONTS + ' — the bundle
 const fontCss = fs.readFileSync(FONTS, 'utf8');
 s = s.replace('<style>', '<style>\n' + fontCss + '\n');
 
+// ---- the recorded commentary, inline: line text -> data URI ---------------------------------
+if (fs.existsSync('assets/voice/manifest.json')) {
+  const man = JSON.parse(fs.readFileSync('assets/voice/manifest.json', 'utf8')), vox = {};
+  for (const [text, file] of Object.entries(man)) vox[text] = 'data:audio/mpeg;base64,' + fs.readFileSync('assets/voice/' + file).toString('base64');
+  const tag = '<script>window.__gbVoice=' + JSON.stringify(vox).replace(/</g, '\\u003c') + ';</scr' + 'ipt>';
+  const at = s.indexOf('<script');
+  s = s.slice(0, at) + tag + s.slice(at);
+}
 // ---- 3. the model and the HDR environment as data URIs ---------------------------
 const glb = b64('assets/gridiron_player.glb');
 const hdr = b64('assets/env.hdr');

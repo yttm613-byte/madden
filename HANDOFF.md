@@ -521,3 +521,12 @@ a human offense's pass counts as off target at 2.0x the catch radius (CPU 1.7x) 
 odds get x1.14 (cap 0.97). Measured with a scripted test of 24 picked throws on PRO: 15 and
 12 caught before (normal and very early throws), 19 and 19 after. These move the human-side
 baselines in this file; the CPU's are untouched.
+
+## Recorded commentary
+
+The booth's fixed lines are recorded clips, not the browser's voice: `tools/voice/extract.py`
+lists them from index.html, `tools/voice/make.py` reads them with two free Piper voices
+(joe: play-by-play, CC0; bryce: analyst, public domain) into `assets/voice/*.mp3` +
+`manifest.json`. `speakExpressive` plays the clip when the exact text has one (`voxFor`),
+else falls back to speech synthesis (lines built from names/scores, and two-player wording).
+Change or add a line in index.html -> rerun both scripts. The bundle inlines the clips.

@@ -2073,8 +2073,27 @@
   // before it, and the whole line rises toward the payoff. Web Speech has no SSML, so
   // this is done by queueing separate utterances with different pitch/rate/volume.
   const HIT_WORDS=/^(TOUCHDOWN|SIX|INTERCEPTED|PICKED|SACKED|SAFETY|GONE|HOUSE|MONSTER|HUGE|BIG|WOW|OH|NO|YES|GOOD|WIDE|BOOM|MAN|MY|KIDDING|UNBELIEVABLE|ELECTRIC|BANANAS|ROBBERY|JUKE|FIRST|DOWN|BLITZ|FUMBLE|COMPLETE|CAUGHT|DROPPED|STUFFED|BURIED)[!?.,]*$/i;
+  // The booth is RECORDED: every fixed line was read once by two free neural voices
+  // (tools/voice, clips in assets/voice) and is played back here. The browser's own
+  // synthetic voice is only the fallback, for the few lines built from names and scores
+  // and for when the clips cannot load.
+  let VOX=(typeof window!=='undefined' && window.__gbVoice)||null, voxCur=null; const voxQ=[];
+  if(!VOX && typeof fetch!=='undefined') fetch('assets/voice/manifest.json').then(r=>r.ok?r.json():null).then(m=>{ if(m){ VOX={}; for(const k in m) VOX[k]='assets/voice/'+m[k]; } }).catch(()=>{});
+  function voxNext(){ const u=voxQ.shift(); if(!u){ voxCur=null; return; }
+    let a; try{ a=new Audio(u); }catch(e){ voxCur=null; return; }
+    voxCur=a; a.volume=1; const done=()=>{ if(voxCur===a){ voxCur=null; voxNext(); } }; a.onended=done; a.onerror=done;
+    try{ const pr=a.play(); if(pr&&pr.catch) pr.catch(done); }catch(e){ done(); } }
+  function voxStop(){ voxQ.length=0; if(voxCur){ const a=voxCur; voxCur=null; try{ a.pause(); }catch(e){} } }
+  function voxFor(text){ if(!VOX||!text) return null; if(VOX[text]) return [VOX[text]];
+    for(const sc of SCREAMS){ const rest=text.slice(sc.length+1); if(text.startsWith(sc+' ') && VOX[sc] && VOX[rest]) return [VOX[sc],VOX[rest]]; }
+    return null; }
   function speakExpressive(text,o){ o=o||{};
-    if(!commOn||typeof window==='undefined'||!window.speechSynthesis) return;
+    if(!commOn||typeof window==='undefined') return;
+    { const vx=voxFor(text);
+      if(vx){ try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){}
+        if(o.cancel) voxStop(); voxQ.push(...vx); if(!voxCur) voxNext(); return; }
+      if(o.cancel) voxStop(); }
+    if(!window.speechSynthesis) return;
     try{
       if(o.cancel) window.speechSynthesis.cancel();
       const v=o.analyst?colVoice:pbVoice;
@@ -6088,7 +6107,7 @@
     setTimeout(()=>{ resize3D(); document.getElementById('stage').focus(); },60);
   }));
   const commBtn=document.getElementById('commtog');
-  commBtn.addEventListener('click',()=>{ commOn=!commOn; commBtn.classList.toggle('off',!commOn); if(!commOn && typeof window!=='undefined' && window.speechSynthesis){ try{window.speechSynthesis.cancel();}catch(e){} } });
+  commBtn.addEventListener('click',()=>{ commOn=!commOn; if(!commOn) voxStop(); commBtn.classList.toggle('off',!commOn); if(!commOn && typeof window!=='undefined' && window.speechSynthesis){ try{window.speechSynthesis.cancel();}catch(e){} } });
   cv.addEventListener('pointerdown',()=>{ audioInit(); document.getElementById('stage').focus(); });
 
   window.__gbNoDraw=true; window.__gbRatings=window.__gbRatings||'neutral'; window.__gbWeather=window.__gbWeather||'clear'; window.__gbNoIntro=true; window.__gbNoTips=true; window.__gbNoLod=true; try{ window.AudioContext=undefined; window.webkitAudioContext=undefined; Object.defineProperty(window,'speechSynthesis',{value:undefined,configurable:true}); }catch(e){}

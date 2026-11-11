@@ -45,3 +45,5 @@ the old hand-sculpted body.
   (makehumancommunity.org), CC0.
 - Reference photographs of players and helmets, looked at only, not included:
   Wikimedia Commons.
+- Announcer voices: Piper TTS (MIT) with the voices "joe" (CC0) and "bryce" (public
+  domain) from huggingface.co/rhasspy/piper-voices; the clips are in `assets/voice`.
