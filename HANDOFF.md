@@ -510,4 +510,6 @@ The rig itself now has real proportions: `HU` in `tools/player/rig.mjs` raised t
 The Skin mesh carries three morph targets: `heavy` (0) and two face shapes, `faceA` and
 `faceB` (1, 2), made by `human/body_prep.py` from MakeHuman's face targets. The game's
 `mergePartsGeometry` copies up to three, and each player mixes his own face and frame the
-first time he is posed (`u.bodyVar` block). The light model has only `heavy`.
+first time he is posed (`u.bodyVar` block). The light model has the same head, decimated (its
+vertices take their nearest original's colour, normal and morphs), because on the FAST and LITE
+tiers it is the only model drawn.

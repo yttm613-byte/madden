@@ -89,7 +89,7 @@ function ambientOcclusion(x, y, z, n) {
 
 // photographed skin detail for the arms, looked up by position (human/arm_detail.json)
 const armDetail = (() => {
-  if (process.env.SCULPT_BODY || process.env.LOD) return null;
+  if (process.env.SCULPT_BODY) return null;
   const d = JSON.parse(fs.readFileSync(new URL('human/arm_detail.json', import.meta.url))), cell = 0.012, grid = new Map();
   const key = (i, j, k) => i*73856093 ^ j*19349663 ^ k*83492791;
   for (let v = 0; v < d.pos.length/3; v++) { const x = Math.abs(d.pos[3*v]), k = key(Math.floor(x/cell), Math.floor(d.pos[3*v+1]/cell), Math.floor(d.pos[3*v+2]/cell));
@@ -143,7 +143,11 @@ function loadReal(file) {
   for (let v = 0; v < nv; v++) { const l = Math.hypot(nrm[3*v], nrm[3*v+1], nrm[3*v+2]) || 1;
     at.set(pos[3*v]+','+pos[3*v+1]+','+pos[3*v+2], { n: [nrm[3*v]/l, nrm[3*v+1]/l, nrm[3*v+2]/l], c: [d.col[3*v], d.col[3*v+1], d.col[3*v+2]],
       fA: d.fA ? [d.fA[3*v], d.fA[3*v+1], d.fA[3*v+2]] : null, fB: d.fB ? [d.fB[3*v], d.fB[3*v+1], d.fB[3*v+2]] : null }); }
-  return { m: { pos, tris }, at };
+  // a decimated vertex is no longer one of the originals: it takes its nearest one's colour, normal and morphs
+  const near = (x, y, z) => { let best = 1e9, bi = 0;
+    for (let v = 0; v < nv; v++) { const q = (pos[3*v]-x)**2 + (pos[3*v+1]-y)**2 + (pos[3*v+2]-z)**2; if (q < best) { best = q; bi = v; } }
+    return at.get(pos[3*bi]+','+pos[3*bi+1]+','+pos[3*bi+2]); };
+  return { m: { pos, tris }, at, near };
 }
 const meshes = {};   // material -> [{pos, nrm, col, jo, we, tris}]
 for (const P of PARTS) {
@@ -151,12 +155,14 @@ for (const P of PARTS) {
   log(`${P.name}/${P.key}`);
   // A real head (MakeHuman, CC0; see human/README.md) replaces the sculpted one on the full
   // model: its own shape, its own normals, and a photographed skin detail colour per vertex.
-  const real = P.mesh && !process.env.LOD && !process.env.SCULPT_HEAD ? loadReal(P.mesh) : null;
+  // (the light model gets the same head, decimated: on the fast tiers it is the only model drawn)
+  const real = P.mesh && !process.env.SCULPT_HEAD ? loadReal(P.mesh) : null;
   let m = real ? real.m : surfaceNets(P.f, P.lo, P.hi, P.h, { log: s => log(s) });
   if (!real) { m = makeManifold(m); if (m.splits) log(`  manifold splits: ${m.splits}`);
     project(P.f, m, P.h); }
   if (P.hide) { const before = m.tris.length/3; m = cull(m, P.hide); log(`  culled ${before - m.tris.length/3} hidden tris`); }
   if (!real) m = largestComponents(m, 64, 40);
+  if (real && process.env.LOD) m = decimate(m, Math.max(600, Math.round(P.target * (+process.env.LOD) * 1.25)), { log: s => log(s) });
   // LOD=0.3 builds a lighter model for far players: every part decimated to that share
   // of its triangle target (same skeleton, weights and parts, so it poses identically)
   if (!real) { m = decimate(m, Math.max(60, Math.round(P.target * (+process.env.LOD || 1))), { log: s => log(s), protect: P.protect || null });
@@ -185,7 +191,7 @@ for (const P of PARTS) {
     const fA = real ? new Float32Array(nv*3) : null, fB = real ? new Float32Array(nv*3) : null;   // face-shape morphs
     for (let v = 0; v < nv; v++) {
       const x0 = m.pos[3*v], y = m.pos[3*v+1], z = m.pos[3*v+2];
-      const rv = real ? real.at.get(x0+','+y+','+z) : null;
+      const rv = real ? (real.at.get(x0+','+y+','+z) || real.near(x0, y, z)) : null;
       const g = rv ? rv.n : gradient(P.f, x0, y, z);
       const x = x0*s, n = [g[0]*s, g[1], g[2]];
       pos.set([x, y, z], 3*v); nrm.set(n, 3*v);
