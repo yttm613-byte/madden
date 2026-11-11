@@ -17,15 +17,19 @@
 import THREE from './three.mjs';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
+// how far the hips (and everything worn at the waist) were raised to real proportions
+export const HU = 0.045;
 
 // ---- rest-pose joint positions (metres; y up, facing +z, character's left = +x) ----
 // A 6'2" (1.88 m) player. Proportions from standard adult-male anthropometry,
 // pushed toward an NFL build: thick neck, long arms, big hands and feet.
 const P = {
-  Hips: V(0, 1.000, 0.000),
-  Spine: V(0, 1.095, -0.012),
-  Spine1: V(0, 1.205, -0.018),
-  Spine2: V(0, 1.320, -0.020),
+  // Hips, knees and the lower spine sit where a real man's do (measured on the MakeHuman
+  // body at this eye height): the first table had the legs 5% short and the trunk long.
+  Hips: V(0, 1.000+HU, 0.000),
+  Spine: V(0, 1.130, -0.012),
+  Spine1: V(0, 1.228, -0.018),
+  Spine2: V(0, 1.330, -0.020),
   Neck: V(0, 1.560, -0.040),
   Head: V(0, 1.655, -0.018),
   HeadTop_End: V(0, 1.880, -0.005),
@@ -35,8 +39,8 @@ const P = {
   LeftArm: V(0.200, 1.498, -0.040),
   LeftForeArm: V(0.268, 1.196, -0.058),
   LeftHand: V(0.300, 0.931, -0.030),
-  LeftUpLeg: V(0.098, 0.952, 0.008),
-  LeftLeg: V(0.106, 0.525, 0.018),
+  LeftUpLeg: V(0.098, 0.952+HU, 0.008),
+  LeftLeg: V(0.106, 0.553, 0.018),
   LeftFoot: V(0.112, 0.090, -0.030),
   LeftToeBase: V(0.118, 0.026, 0.108),
   LeftToe_End: V(0.122, 0.022, 0.205),

@@ -11,6 +11,7 @@
  * crossing at a jagged line.
  */
 import fs from 'fs';
+import { HU } from './rig.mjs';
 import zlib from 'zlib';
 import { sphere, ellipsoid, roundCone, capsule, roundBox, torus, plane, union, sunion, sunionK, intersect,
   subtract, ssubtract, smax, smin, shell, offset, mirrorX, displace, frameY, frameEuler, norm, sub, add, mul, cross, dot, lerp3,
@@ -173,16 +174,16 @@ export function buildBody(rig) {
       [sphere(A, 0.036), 0.02],
     ]);
   })();
-  const legs = RB ? union(intersect(RB, (x, y, z) => Math.max(y-1.02, 0.072-y, Math.abs(x)-xb(y))), mirrorX(sphere(B('LeftFoot'), 0.036))) : mirrorX(legL);
+  const legs = RB ? union(intersect(RB, (x, y, z) => Math.max(y-1.02-HU, 0.072-y, Math.abs(x)-xb(y))), mirrorX(sphere(B('LeftFoot'), 0.036))) : mirrorX(legL);
   // with a real body the pelvis and legs are one surface, so nothing is blended on top of itself
-  const pelvis = RB ? intersect(RB, (x, y, z) => Math.max(y-1.13, 0.072-y, Math.abs(x)-xb(y))) : sunionK([
+  const pelvis = RB ? intersect(RB, (x, y, z) => Math.max(y-1.13-HU, 0.072-y, Math.abs(x)-xb(y))) : sunionK([
     [ellipsoid([0, 1.000, -0.004], [0.166, 0.110, 0.122]), 0],
     [mirrorX(ellipsoid([0.082, 0.938, -0.070], [0.088, 0.095, 0.080])), 0.05],   // glutes
   ]);
 
   // The tucked-in jersey's waist. The pants are built around it, so the jersey is
   // always INSIDE the pants below the waistband instead of poking out over them.
-  const WAIST = ellipsoid([0, 1.058, 0.000], [0.170, 0.100, 0.128]);
+  const WAIST = ellipsoid([0, 1.058+HU, 0.000], [0.170, 0.100, 0.128]);
   let PANTS_BODY;
   // ============================ PANTS ============================
   const K_L = B('LeftLeg'), A_L = B('LeftFoot');
@@ -195,9 +196,9 @@ export function buildBody(rig) {
       const a = norm(sub(k, h)), ant = norm(sub(FWD, mul(a, dot(FWD, a)))), lat = norm(cross(a, ant));
       pads.push([roundBox(add(add(h, mul(a, 0.20)), mul(ant, RB ? 0.076 : 0.082)), [0.054, 0.090, 0.012], 0.011, [lat, a, ant]), 0.03]);   // thigh pad
       pads.push([roundBox(add(add(k, mul(ant, RB ? 0.050 : 0.062)), mul(a, -0.010)), RB ? [0.040, 0.046, 0.010] : [0.048, 0.050, 0.013], RB ? 0.009 : 0.011, [lat, a, ant]), RB ? 0.03 : 0.020]); // knee pad
-      pads.push([ellipsoid([0.156*s, 0.994, 0.004], [0.020, 0.056, 0.066]), 0.04]);   // hip pad
+      pads.push([ellipsoid([0.156*s, 0.994+HU, 0.004], [0.020, 0.056, 0.066]), 0.04]);   // hip pad
     }
-    const bodyShape = sunionK([[pelvis, 0], ...(RB ? [] : [[legs, 0.06]]), ...pads, [ellipsoid([0, 0.99, -0.118], [0.058, 0.048, 0.02]), 0.04], [WAIST, 0.05]]);
+    const bodyShape = sunionK([[pelvis, 0], ...(RB ? [] : [[legs, 0.06]]), ...pads, [ellipsoid([0, 0.99+HU, -0.118], [0.058, 0.048, 0.02]), 0.04], [WAIST, 0.05]]);
     let p = offset(bodyShape, 0.0085);
     PANTS_BODY = p;
     // folds: behind the knee and across the hip crease
@@ -205,15 +206,15 @@ export function buildBody(rig) {
       const ax = Math.abs(x), dk = Math.hypot(ax-K_L[0], y-K_L[1]-0.01);
       const back = smoothstep(K_L[2]+0.005, K_L[2]-0.03, z);
       const knee = back*smoothstep(0.08, 0.02, dk)*0.0028*Math.sin(y*170 + 1.2*noise3(x*18, y*18, z*18));
-      const hip = smoothstep(0.05, 0.0, Math.abs(y-0.915+0.25*(ax-0.1)))*smoothstep(-0.02, 0.04, z)*0.0014*Math.sin((y+0.3*ax)*190);
+      const hip = smoothstep(0.05, 0.0, Math.abs(y-0.915-HU+0.25*(ax-0.1)))*smoothstep(-0.02, 0.04, z)*0.0014*Math.sin((y+0.3*ax)*190);
       return knee + hip;
     });
-    p = smax2(p, plane([0, 1.086, 0], [0, 1, 0]), 0.004);
+    p = smax2(p, plane([0, 1.086+HU, 0], [0, 1, 0]), 0.004);
     const hem = s => plane(add([K_L[0]*s, K_L[1], K_L[2]], mul([shinDir[0]*s, shinDir[1], shinDir[2]], 0.082)), [shinDir[0]*s, shinDir[1], shinDir[2]]);
     const h1 = hem(1), h2 = hem(-1);
     return smax2(p, (x, y, z) => x >= 0 ? h1(x, y, z) : h2(x, y, z), 0.004);
   })();
-  const belt = intersect(offset(sunionK([[pelvis, 0], [WAIST, 0.05]]), 0.0142), plane([0, 1.083, 0], [0, 1, 0]), plane([0, 1.052, 0], [0, -1, 0]));
+  const belt = intersect(offset(sunionK([[pelvis, 0], [WAIST, 0.05]]), 0.0142), plane([0, 1.083+HU, 0], [0, 1, 0]), plane([0, 1.052+HU, 0], [0, -1, 0]));
 
   // ============================ SOCKS ============================
   const SOCK_TOP = add(K_L, mul(shinDir, 0.030));
@@ -324,20 +325,20 @@ export function buildBody(rig) {
     let j = sunionK([[core, 0], [pads, 0.038], [mirrorX(sleeveL), 0.03]]);
     // wrinkles where the jersey tucks in, and a little drag under the pads
     j = displace(j, (x, y, z) => {
-      const tuck = smoothstep(1.16, 1.10, y)*smoothstep(1.075, 1.10, y);
+      const tuck = smoothstep(1.16+HU, 1.10+HU, y)*smoothstep(1.075+HU, 1.10+HU, y);
       const w = tuck*0.0034*Math.sin(y*105 + 1.9*noise3(x*7, y*2, z*7) + Math.abs(x)*14);
       const side = smoothstep(0.12, 0.18, Math.abs(x));
-      const drape = side*smoothstep(1.34, 1.27, y)*smoothstep(1.14, 1.22, y)*0.0026*Math.sin((y + 0.55*Math.abs(z))*105 + 2*noise3(x*12, 0, z*12));
+      const drape = side*smoothstep(1.34, 1.27, y)*smoothstep(1.14+HU, 1.22+HU/2, y)*0.0026*Math.sin((y + 0.55*Math.abs(z))*105 + 2*noise3(x*12, 0, z*12));
       // the cloth hangs off the chest plate and pulls across the belly
-      const belly = smoothstep(1.36, 1.30, y)*smoothstep(1.12, 1.20, y)*(1-side)*0.0022*Math.sin(x*52 + 3.0*noise3(x*5, y*9, z*5) + y*26);
+      const belly = smoothstep(1.36, 1.30, y)*smoothstep(1.12+HU, 1.20+HU/2, y)*(1-side)*0.0022*Math.sin(x*52 + 3.0*noise3(x*5, y*9, z*5) + y*26);
       return w + drape + belly;
     });
     // neck opening with a shallow V in front
     j = cut(j, COLLAR, 0.012);
     // tucked: below the waistband the jersey is held 5mm inside the pants
-    const tuck = (x, y, z) => PANTS_BODY(x, y, z) + 0.005 - 0.6*smoothstep(1.092, 1.115, y);
+    const tuck = (x, y, z) => PANTS_BODY(x, y, z) + 0.005 - 0.6*smoothstep(1.092+HU, 1.115+HU, y);
     j = smax2(j, tuck, 0.006);
-    return smax2(j, plane([0, 1.02, 0], [0, -1, 0]), 0.01);
+    return smax2(j, plane([0, 1.02+HU, 0], [0, -1, 0]), 0.01);
   })();
 
 

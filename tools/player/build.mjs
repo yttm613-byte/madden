@@ -5,7 +5,7 @@
  * Deterministic and dependency-free: the same source always produces the same file.
  */
 import fs from 'fs';
-import { buildRig } from './rig.mjs';
+import { buildRig, HU } from './rig.mjs';
 import { buildBody } from './body.mjs';
 import { surfaceNets, project, makeManifold, cull, manifoldReport, largestComponents, splitByField } from './mesher.mjs';
 import { decimate } from './qem.mjs';
@@ -52,13 +52,13 @@ const PARTS = [
   // bands) along planes and the trim contour. Weighted like the jersey above the belt
   // and like the legs below it.
   { name: 'Jersey', key: 'uniform', f: body.uniform, lo: [-0.46, 0.38, -0.25], hi: [0.46, 1.665, 0.23], h: 0.0032, target: 15600, albedo: 0.80,
-    w: (x, y, z) => y < 1.10 ? 'noArms' : 'jersey',
+    w: (x, y, z) => y < 1.10+HU ? 'noArms' : 'jersey',
     hide: inside(body.socks, 0.002),
-    cuts: [(x, y, z) => y - 1.089, (x, y, z) => y - 1.0815, (x, y, z) => 1.0525 - y, body.TRIM_D, ...body.STRIPE_CUTS, ...body.PSTRIPE_CUTS],
+    cuts: [(x, y, z) => y - 1.089 - HU, (x, y, z) => y - 1.0815 - HU, (x, y, z) => 1.0525 + HU - y, body.TRIM_D, ...body.STRIPE_CUTS, ...body.PSTRIPE_CUTS],
     splits: [
-      { name: 'Belt', albedo: 0.90, when: (x, y, z) => y > 1.0525 && y < 1.0815 },
-      { name: 'PantsStripe', albedo: 0.84, when: (x, y, z) => y <= 1.0525 && body.inPantsStripe(x, y, z) },
-      { name: 'Pants', albedo: 0.84, when: (x, y, z) => y < 1.089 },
+      { name: 'Belt', albedo: 0.90, when: (x, y, z) => y > 1.0525+HU && y < 1.0815+HU },
+      { name: 'PantsStripe', albedo: 0.84, when: (x, y, z) => y <= 1.0525+HU && body.inPantsStripe(x, y, z) },
+      { name: 'Pants', albedo: 0.84, when: (x, y, z) => y < 1.089+HU },
       { name: 'JerseyTrim', albedo: 0.85, when: (x, y, z) => body.TRIM_D(x, y, z) < 0 || body.inSleeveStripe(x, y, z) },
     ] },
   { name: 'Socks', key: 'socks', f: body.socks, lo: [0.0, 0.05, -0.12], hi: [0.22, 0.55, 0.12], h: 0.0024, target: 1500, mirror: true, w: 'noArms', albedo: 0.84,
@@ -238,7 +238,7 @@ if (!only || only.has('decals')) {
   const DEF = [
     // real numbers are big: chest to belly on the front, most of the back
     ['Numbers', { center: [0, 1.318, 0.12], normal: [0, 0, 1], up: [0, 1, 0], width: 0.285, height: 0.240, nu: 26, nv: 22 }],
-    ['Numbers', { center: [0, 1.285, -0.13], normal: [0, 0, -1], up: [0, 1, 0], width: 0.320, height: 0.290, nu: 28, nv: 24 }],
+    ['Numbers', { center: [0, 1.305, -0.13], normal: [0, 0, -1], up: [0, 1, 0], width: 0.300, height: 0.270, nu: 28, nv: 24 }],
     ['NameBar', { center: [0, 1.462, -0.14], normal: [0, -0.18, -1], up: [0, 1, -0.18], width: 0.24, height: 0.045, nu: 20, nv: 4 }],
   ];
   for (const s of [1, -1]) {
@@ -284,10 +284,10 @@ function heavyAt(x, y, z) {
   const [dA, tA] = segT(q, SA, WR), armW = sst(0.125, 0.080, dA)*sst(0.02, 0.12, tA);
   const [dL, tL] = segT(q, HPJ, ANK), legW = sst(0.16, 0.105, dL)*sst(0.05, 0.15, tL);
   const bodyW = Math.max(0, 1 - armW - legW);
-  const belly = 0.050*Math.exp(-(((y-1.14)/0.13)**2) - (ax/0.15)**2)*sst(-0.02, 0.10, z);
-  const torso = 0.016*sst(0.94, 1.04, y)*sst(1.62, 1.52, y);
-  const waist = 0.016*Math.exp(-(((y-1.07)/0.10)**2) - ((ax-0.15)/0.07)**2);
-  const seat = 0.024*Math.exp(-(((y-0.94)/0.09)**2) - ((ax-0.08)/0.10)**2)*sst(0.0, -0.10, z);
+  const belly = 0.050*Math.exp(-(((y-1.14-HU*0.6)/0.13)**2) - (ax/0.15)**2)*sst(-0.02, 0.10, z);
+  const torso = 0.016*sst(0.94+HU, 1.04+HU, y)*sst(1.62, 1.52, y);
+  const waist = 0.016*Math.exp(-(((y-1.07-HU)/0.10)**2) - ((ax-0.15)/0.07)**2);
+  const seat = 0.024*Math.exp(-(((y-0.94-HU)/0.09)**2) - ((ax-0.08)/0.10)**2)*sst(0.0, -0.10, z);
   const neck = 0.010*sst(1.44, 1.50, y)*sst(1.67, 1.60, y)*sst(0.12, 0.08, ax);
   const arm = armW*(0.014*(1-tA) + 0.007*tA);
   const leg = legW*(0.020*(1-tL) + 0.008*tL)*sst(0.10, 0.30, y);

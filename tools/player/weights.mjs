@@ -7,6 +7,7 @@
  * deforms: wide at the hip and shoulder, narrow at the knuckles.
  */
 import THREE from './three.mjs';
+import { HU } from './rig.mjs';
 
 const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x-a)/(b-a))); return t*t*(3-2*t); };
 
@@ -47,7 +48,7 @@ export function makeWeigher(rig) {
     L[side+'Arm'] = chain([side+'Arm', side+'ForeArm', side+'Hand', side+'HandMiddle1', side+'HandMiddle4'], [0.060, 0.042, 0.030, 0.030, 0.012]);
     L[side+'Leg'] = chain([side+'UpLeg', side+'Leg', side+'Foot', side+'ToeBase', side+'Toe_End'], [0.092, 0.056, 0.040, 0.040, 0.03]);
   }
-  const torsoCh = chain([v3(0, 0.90, -0.01), 'Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head', 'HeadTop_End'], [0.13, 0.15, 0.14, 0.14, 0.16, 0.065, 0.075, 0.07]);
+  const torsoCh = chain([v3(0, 0.90+HU, -0.01), 'Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head', 'HeadTop_End'], [0.13, 0.15, 0.14, 0.14, 0.16, 0.065, 0.075, 0.07]);
 
   // ---- per-limb internal weighting ---------------------------------------------------
   function torsoW(p, out) {

@@ -503,4 +503,4 @@ The body under the uniform is now MakeHuman's CC0 body posed on our skeleton and
 a distance field (`tools/player/human/body_prep.py`, `body_sdf.bin.gz`); `body.mjs` builds
 torso, arms, legs, jersey, pants and socks round it. See `tools/player/human/README.md`
 (also the credits). Standing and walking poses live in the `default:` case of `applyPose`.
-Still the old proportions of the rig (legs ~5% short): the body is fitted to the rig's joints.
+The rig itself now has real proportions: `HU` in `tools/player/rig.mjs` raised the hips 4.5cm (and the knees), and every waist-height constant in body.mjs, build.mjs and weights.mjs adds it.
