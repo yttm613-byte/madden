@@ -141,7 +141,8 @@ function loadReal(file) {
   }
   const at = new Map();
   for (let v = 0; v < nv; v++) { const l = Math.hypot(nrm[3*v], nrm[3*v+1], nrm[3*v+2]) || 1;
-    at.set(pos[3*v]+','+pos[3*v+1]+','+pos[3*v+2], { n: [nrm[3*v]/l, nrm[3*v+1]/l, nrm[3*v+2]/l], c: [d.col[3*v], d.col[3*v+1], d.col[3*v+2]] }); }
+    at.set(pos[3*v]+','+pos[3*v+1]+','+pos[3*v+2], { n: [nrm[3*v]/l, nrm[3*v+1]/l, nrm[3*v+2]/l], c: [d.col[3*v], d.col[3*v+1], d.col[3*v+2]],
+      fA: d.fA ? [d.fA[3*v], d.fA[3*v+1], d.fA[3*v+2]] : null, fB: d.fB ? [d.fB[3*v], d.fB[3*v+1], d.fB[3*v+2]] : null }); }
   return { m: { pos, tris }, at };
 }
 const meshes = {};   // material -> [{pos, nrm, col, jo, we, tris}]
@@ -181,6 +182,7 @@ for (const P of PARTS) {
   for (const s of (P.mirror ? [1, -1] : [1])) {
     const nv = m.pos.length/3, pos = new Float32Array(nv*3), nrm = new Float32Array(nv*3), col = new Float32Array(nv*3);
     const jo = new Uint8Array(nv*4), we = new Float32Array(nv*4);
+    const fA = real ? new Float32Array(nv*3) : null, fB = real ? new Float32Array(nv*3) : null;   // face-shape morphs
     for (let v = 0; v < nv; v++) {
       const x0 = m.pos[3*v], y = m.pos[3*v+1], z = m.pos[3*v+2];
       const rv = real ? real.at.get(x0+','+y+','+z) : null;
@@ -188,6 +190,7 @@ for (const P of PARTS) {
       const x = x0*s, n = [g[0]*s, g[1], g[2]];
       pos.set([x, y, z], 3*v); nrm.set(n, 3*v);
       const ao = ambientOcclusion(x, y, z, n);
+      if (rv && rv.fA) { fA.set(rv.fA, 3*v); fB.set(rv.fB, 3*v); }
       const al = rv ? rv.c : albedo(P.name, x, y, z, n);
       const shade = (0.30 + 0.70*ao)*(P.albedo || 1);
       col.set([al[0]*shade, al[1]*shade, al[2]*shade], 3*v);
@@ -196,7 +199,7 @@ for (const P of PARTS) {
     }
     const tris = Uint32Array.from(m.tris);
     if (s < 0) for (let i = 0; i < tris.length; i += 3) { const t = tris[i+1]; tris[i+1] = tris[i+2]; tris[i+2] = t; }
-    if (!matOf) { (meshes[P.name] ||= []).push({ pos, nrm, col, jo, we, tris }); continue; }
+    if (!matOf) { (meshes[P.name] ||= []).push({ pos, nrm, col, jo, we, tris, fA, fB }); continue; }
     const lists = P.splits.map(() => []), base = [];
     for (let i = 0; i < tris.length; i += 3) (matOf[i/3] >= 0 ? lists[matOf[i/3]] : base).push(tris[i], tris[i+1], tris[i+2]);
     (meshes[P.name] ||= []).push(subset({ pos, nrm, col, jo, we }, base));
@@ -381,10 +384,14 @@ for (const [name, list] of [...Object.entries(meshes), ...Object.entries(decals)
       d[3*v] = nx/nl*h; d[3*v+1] = ny/nl*h; d[3*v+2] = nz/nl*h;
     }
     targets = [{ POSITION: G.accessor(d, 'VEC3', { minmax: true, target: 34962 }) }];
+    // the head's two face-shape morphs ride on the Skin mesh, after 'heavy'
+    if (list.some(m => m.fA)) for (const key of ['fA', 'fB']) { const f = new Float32Array(nv*3); let o = 0;
+      for (const m of list) { if (m[key]) f.set(m[key], o*3); o += m.pos.length/3; }
+      targets.push({ POSITION: G.accessor(f, 'VEC3', { minmax: true, target: 34962 }) }); }
   }
   const prim = { attributes, indices: G.accessor(idx, 'SCALAR', { target: 34963 }), material: mat };
   if (targets) prim.targets = targets;
-  const mesh = G.mesh({ name, primitives: [prim], ...(targets ? { weights: [0], extras: { targetNames: ['heavy'] } } : {}) });
+  const mesh = G.mesh({ name, primitives: [prim], ...(targets ? { weights: targets.map(() => 0), extras: { targetNames: ['heavy', 'faceA', 'faceB'].slice(0, targets.length) } } : {}) });
   G.json.nodes[root].children.push(G.node({ name, mesh, skin }));
   log(`mesh ${name}: ${nt/3} tris, ${nv} verts`);
 }

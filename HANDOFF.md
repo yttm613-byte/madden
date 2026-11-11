@@ -504,3 +504,10 @@ a distance field (`tools/player/human/body_prep.py`, `body_sdf.bin.gz`); `body.m
 torso, arms, legs, jersey, pants and socks round it. See `tools/player/human/README.md`
 (also the credits). Standing and walking poses live in the `default:` case of `applyPose`.
 The rig itself now has real proportions: `HU` in `tools/player/rig.mjs` raised the hips 4.5cm (and the knees), and every waist-height constant in body.mjs, build.mjs and weights.mjs adds it.
+
+## Faces and builds differ per player
+
+The Skin mesh carries three morph targets: `heavy` (0) and two face shapes, `faceA` and
+`faceB` (1, 2), made by `human/body_prep.py` from MakeHuman's face targets. The game's
+`mergePartsGeometry` copies up to three, and each player mixes his own face and frame the
+first time he is posed (`u.bodyVar` block). The light model has only `heavy`.

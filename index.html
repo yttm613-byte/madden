@@ -3808,12 +3808,13 @@
     let nv=0, ni=0; for(const m of parts){ nv+=m.geometry.attributes.position.count; ni+=m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count; }
     if(nv>65535) return null;
     const pos=new Float32Array(nv*3), nor=new Float32Array(nv*3), col=new Float32Array(nv*3), sw=new Float32Array(nv*4), si=new Uint16Array(nv*4),
-          mph=new Float32Array(nv*3), pid=new Float32Array(nv), rme=new Float32Array(nv*3), uv=new Float32Array(nv*2), idx=new Uint16Array(ni);
+          NM=Math.min(3, Math.max(1, ...parts.map(m=>((m.geometry.morphAttributes||{}).position||[]).length))), mph=Array.from({length:NM},()=>new Float32Array(nv*3)), pid=new Float32Array(nv), rme=new Float32Array(nv*3), uv=new Float32Array(nv*2), idx=new Uint16Array(ni);
     let v0=0, i0=0;
     for(const m of parts){ const g=m.geometry, A=g.attributes, n=A.position.count, k=LOD_BODY_PARTS.indexOf(m.material.name), R=PART_RME[m.material.name];
       const put=(dst,attr,w,def)=>{ for(let v=0;v<n;v++) for(let c=0;c<w;c++) dst[(v0+v)*w+c] = attr ? attr.array[v*attr.itemSize+c] : def; };
       put(pos,A.position,3,0); put(nor,A.normal,3,0); put(col,A.color,3,1); put(sw,A.skinWeight,4,0); put(si,A.skinIndex,4,0); put(uv,A.uv,2,0);
-      const mt=g.morphAttributes && g.morphAttributes.position && g.morphAttributes.position[0]; put(mph,mt,3,0);
+      // morph 0 is the heavy build; the Skin mesh also carries two face shapes (1, 2)
+      for(let q=0;q<NM;q++){ const mt=g.morphAttributes && g.morphAttributes.position && g.morphAttributes.position[q]; put(mph[q],mt,3,0); }
       for(let v=0;v<n;v++){ pid[v0+v]=k; rme[(v0+v)*3]=R[0]; rme[(v0+v)*3+1]=R[1]; rme[(v0+v)*3+2]=R[2]; }
       if(g.index) for(let j=0;j<g.index.count;j++) idx[i0+j]=g.index.array[j]+v0; else for(let j=0;j<n;j++) idx[i0+j]=v0+j;
       v0+=n; i0+=g.index ? g.index.count : n; }
@@ -3822,7 +3823,7 @@
     geo.setAttribute('color',new THREE.BufferAttribute(col,3)); geo.setAttribute('skinWeight',new THREE.BufferAttribute(sw,4));
     geo.setAttribute('skinIndex',new THREE.BufferAttribute(si,4)); geo.setAttribute('partId',new THREE.BufferAttribute(pid,1));
     geo.setAttribute('partRME',new THREE.BufferAttribute(rme,3)); geo.setAttribute('uv',new THREE.BufferAttribute(uv,2)); geo.setIndex(new THREE.BufferAttribute(idx,1));
-    geo.morphAttributes.position=[new THREE.BufferAttribute(mph,3)];
+    geo.morphAttributes.position=mph.map(a=>new THREE.BufferAttribute(a,3));
     geo.morphTargetsRelative = parts.some(m=>m.geometry.morphTargetsRelative);
     return geo;
   }
@@ -5143,6 +5144,8 @@
           // allows, and his own head shape. A lineman is a big man, not an inflated one:
           // the full heavy morph on a fitted jersey read as a balloon, so it tops out lower.
           if(u.bodyVar==null){ u.bodyVar=Math.random()*2-1; u.bodyVar2=Math.random()*2-1;
+            { const fa=Math.random()*1.3-0.4, fb=Math.random()*1.3-0.4;                      // his own face: a mix of two shapes
+              for(const m of u.morphs) if(m.morphTargetInfluences.length>2){ m.morphTargetInfluences[1]=fa; m.morphTargetInfluences[2]=fb; } }
             const hb=u.B&&u.B.Head; if(hb){ const a=1+(Math.random()-0.5)*0.07, b2=1+(Math.random()-0.5)*0.07; hb.scale.set(a, b2, 1+(Math.random()-0.5)*0.05); } }
           const bv=u.bodyVar;
           const hv = Math.max(0, Math.round(((role==='OL'||role==='C') ? 0.62+bv*0.16 : (role==='DL' ? 0.52+bv*0.18 : (role==='TE'||role==='FB') ? 0.28+bv*0.12 : (role==='LB' ? 0.18+bv*0.10 : 0.03+bv*0.05)))*50)/50);

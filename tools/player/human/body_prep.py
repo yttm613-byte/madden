@@ -112,7 +112,23 @@ for f in keep:
     a=[vm[v] for v,_ in f]
     for k in range(1,len(a)-1): tris+=[a[0],a[k],a[k+1]]
 pos=P[[v-1 for v in ids]]
-json.dump({'pos':[round(float(x),5) for x in pos.ravel()],'tris':tris,'col':[round(float(x),3) for x in col.ravel()]},open('head.json','w'))
+# two directions a face can vary in, as per-vertex offsets the game mixes per player
+def tdelta(lst):
+    d=np.zeros_like(V)
+    for name,w in lst:
+        for ln in gzip.open(D+'targets/'+name+'.target.gz','rt'):
+            p=ln.split()
+            if len(p)==4 and p[0][0]!='#': d[int(p[0])]+=w*np.array([float(p[1]),float(p[2]),float(p[3])])
+    eye=sorted({v-1 for gg,f in F if gg in ('helper-l-eye','helper-r-eye') for v,_ in f})
+    d-=d[eye].mean(0)                                  # the eyes stay where the eyeballs are
+    return (SH*d[[v-1 for v in ids]])
+fA=tdelta([('macrodetails/african-male-young',0.5),('macrodetails/caucasian-male-young',-0.5),('head/head-square',0.7),('chin/chin-width-incr',0.6),('nose/nose-width2-incr',0.6),('cheek/l-cheek-bones-incr',0.5),('cheek/r-cheek-bones-incr',0.5)])
+fB=tdelta([('macrodetails/asian-male-young',0.5),('macrodetails/african-male-young',-0.5),('head/head-oval',0.7),('chin/chin-prominent-incr',0.6),('nose/nose-scale-horiz-decr',0.5),('head/head-fat-incr',0.4)])
+fade=np.clip((pos[:,1]-1.60)/0.05,0,1)[:,None]       # the face only: nothing moves at the collar
+fA*=fade; fB*=fade
+print('face delta max (mm)',round(float(np.abs(fA).max()*1000),1),round(float(np.abs(fB).max()*1000),1))
+json.dump({'pos':[round(float(x),5) for x in pos.ravel()],'tris':tris,'col':[round(float(x),3) for x in col.ravel()],
+  'fA':[round(float(x),5) for x in fA.ravel()],'fB':[round(float(x),5) for x in fB.ravel()]},open('head.json','w'))
 print('head verts',len(ids),'tris',len(tris)//3)
 
 # ---- skin detail colours for the whole body, looked up by position (arms use it) -------------
