@@ -2131,12 +2131,38 @@
       vol:1,
       rampPitch:important?0.09:0.04, rampRate:important?0.13:0.05 });
   }
+  function sayQ(text){ if(TWO_P&&text) text=text.replace(/the CPU/gi,'Player Two').replace(/CPU/g,'Player Two'); caption(text); if(commOn) speakExpressive(text,{cancel:false,pitch:0.95,rate:1.1,vol:1,rampPitch:0.05,rampRate:0.05}); }
   function color(text){ if(text) speakExpressive(text,{ cancel:false, analyst:true, // deeper, drawling analyst with its own swing
     pitch:0.68+Math.random()*0.12, rate:0.96+Math.random()*0.16, vol:0.96, rampPitch:0.06, rampRate:0.05 }); }
   const COLOR_HYPE=["You love to see that, baby!","Are you KIDDING me right now?","That's a poster — frame it!","Put that one in the Hall of Fame!","He is absolutely COOKING out there!","The crowd has completely lost it!","That's grown-man football right there!","Somebody check on that defender — he got embarrassed!","I have not seen feet like that in years!","Get this man a cape!","Call the police, because that was a ROBBERY!","Did you see the JUKE?! My goodness!","He turned that man's ankles into spaghetti!","That's a SportsCenter top-ten, no doubt!"];
   const COLOR_DEF=["That's a coaching clinic on defense!","They wanted that one BAD.","You simply cannot block that.","Sniffed it out the whole way — beautiful.","Defense wins championships, baby!","That's how you set the tone!","He read the quarterback's mail on that one!","Textbook tackling — wrap and drive!"];
   const COLOR_OOPS=["He's gonna want that one back.","That's a teaching-tape moment — the bad kind.","Somebody blew the assignment, no question.","You cannot do that at this level.","The coordinator is FUMING up in the box.","That's a throw he makes in his sleep — and he missed it.","Put that one on the bloopers reel."];
   const COLOR_GEN=["Field position is everything in this league.","Momentum's a funny thing, isn't it?","This is why they play sixty minutes.","Chess match out there, I tell ya.","Big-time players make big-time plays."];
+  // Game context: what the booth says about the SITUATION (score, quarter, clock, down and
+  // distance), all fixed lines so each has a recorded clip. Down-and-distance clips are generated
+  // by the same formula in tools/voice/extract.py (keep the two in step).
+  const DOWN_W=['','First','Second','Third','Fourth'], NUM_W=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen'];
+  function downLine(){ const d=Math.min(4,Math.max(1,G.down||1)), toGo=Math.max(1,Math.round((G.firstX-G.los)/PPY)), toGoal=(GOAL_X-G.los)/PPY;
+    if(toGoal<=toGo+0.5) return DOWN_W[d]+' and goal.'; return DOWN_W[d]+' and '+(toGo<=15?NUM_W[toGo]:'long')+'.'; }
+  const COLOR_CTX_TIED=["All knotted up out there — anybody's ball game.","Level on the scoreboard, and it feels like one play decides it."];
+  const COLOR_CTX_UP=["You've got the edge on the scoreboard — now keep your foot on the gas.","Control of this game is yours, but nothing is safe in this league."];
+  const COLOR_CTX_DOWN=["You're chasing this one — you need points, and you need them soon.","Behind on the scoreboard, and the pressure is building."];
+  const COLOR_CTX_BIGUP=["This one is getting away from them — a blowout in the making.","A multiple-score lead, and the other sideline is running out of answers."];
+  const COLOR_CTX_BIGDOWN=["You're in a deep hole — you need a big play, right now.","Two scores down. Time to take some shots."];
+  const COLOR_CTX_CLOSE4=["A one-score game in the fourth quarter — every snap matters.","Fourth quarter, nothing separating them. This is what you play for."];
+  const COLOR_CTX_LATE_BEHIND=["The clock is the enemy now — you have to score.","Under two minutes, and you're out of time to waste."];
+  const COLOR_CTX_LATE_AHEAD=["Protect the football, stay in bounds and let the clock do the work.","Run the clock down — don't give them a window."];
+  const COLOR_CTX_Q1=["Early in the first quarter — both sides feeling each other out.","Opening quarter, and each team is looking for a rhythm."];
+  const COLOR_CTX_Q2=["Second quarter, and the game is starting to take shape.","Heading toward the half — a score here swings the momentum."];
+  const COLOR_CTX_Q3=["Second half now, and the adjustments will tell the story.","Third quarter — this is where games get won."];
+  function gameContext(){ if(!G) return null; const q=G.qtr||1, left=gameLeft(), d=(G.userScore||0)-(G.cpuScore||0);
+    if(left<120 && d<0 && d>=-16) return pick(COLOR_CTX_LATE_BEHIND); if(left<120 && d>0 && d<=16) return pick(COLOR_CTX_LATE_AHEAD);
+    if(q>=4 && Math.abs(d)<=8) return pick(COLOR_CTX_CLOSE4);
+    if(d>=15) return pick(COLOR_CTX_BIGUP); if(d<=-15) return pick(COLOR_CTX_BIGDOWN);
+    if(q>=3 && d>0) return pick(COLOR_CTX_UP); if(q>=3 && d<0) return pick(COLOR_CTX_DOWN);
+    if(d===0 && q>=2) return pick(COLOR_CTX_TIED);
+    return pick(q===1?COLOR_CTX_Q1:q===2?COLOR_CTX_Q2:COLOR_CTX_Q3); }
+  let lastCtx=0;
   function commentate(raw){
     if(!raw) return; const m=raw.toUpperCase();
     const ym=raw.match(/([+-]?\d+)\s*YD/); const yd=ym?parseInt(ym[1]):null;
@@ -2198,7 +2224,11 @@
     else if(G.down===3) pool=["Third down — gotta move the sticks.","Key third down right here."];
     else if(late) pool=["Clock is a factor now.","Two-minute territory — urgency on.","Hurry-up offense, clock ticking."];
     else pool=["Here's the snap!","And the ball is snapped.","They're off!","Set... and snapped!","Here we go!"];
-    say(pick(pool));
+    // the situation first: down and distance (a recorded clip), then the booth's read on the game
+    const special = toGoal<=20 || G.down>=3 || late, dl=downLine();
+    if(special){ say(pick(pool)); sayQ(dl); } else say(dl);
+    const nowT=(typeof performance!=='undefined'?performance.now():Date.now());
+    if(nowT-lastCtx>20000 && Math.random()<0.5){ const c=gameContext(); if(c){ lastCtx=nowT; color(c); } }
   }
 
   // crisp movement for human-controlled entity
@@ -3750,10 +3780,10 @@
   // wears the same number all game and the pool reassigns players every snap.
   const _numCache=new Map(), _nameCache=new Map();
   function decalTex(c){ const t=new THREE.CanvasTexture(c); t.flipY=false; if(THREE.sRGBEncoding) t.encoding=THREE.sRGBEncoding;
-    t.anisotropy=8; t.minFilter=THREE.LinearMipmapLinearFilter; t.generateMipmaps=true; return t; }
+    t.anisotropy=16; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter; t.generateMipmaps=true; return t; }
   function jerseyNumberTex(n, trim){
     const key=n+'|'+trim; if(_numCache.has(key)) return _numCache.get(key);
-    const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
+    const c=document.createElement('canvas'); c.width=c.height=512; const g=c.getContext('2d'); g.scale(2,2);   // 2x resolution: the back number is the most-seen thing on the field
     const txt=String(n);
     g.font='700 206px Oswald, Anton, "Arial Narrow", Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
     const w=g.measureText(txt).width, sx=Math.min(0.86, 226/(w||1));   // the patches are wider than tall
@@ -3779,7 +3809,7 @@
   }
   function nameplateTex(name){
     if(_nameCache.has(name)) return _nameCache.get(name);
-    const c=document.createElement('canvas'); c.width=256; c.height=64; const g=c.getContext('2d');
+    const c=document.createElement('canvas'); c.width=512; c.height=128; const g=c.getContext('2d'); g.scale(2,2);
     g.font='600 44px Oswald, "Arial Narrow", Arial, sans-serif'; g.textAlign='center'; g.textBaseline='middle';
     const w=g.measureText(name).width, sx=Math.min(0.78, 236/(w||1));
     g.save(); g.translate(128,34); g.scale(sx,1); g.lineWidth=6; g.lineJoin='round'; g.strokeStyle='rgba(10,12,18,0.85)'; g.strokeText(name,0,0);

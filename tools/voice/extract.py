@@ -20,5 +20,9 @@ for i,l in enumerate(src):
             if k<0: continue
         who='analyst' if ('COLOR_' in pre.split('const')[-1] and inblock and 'COLOR_' in l[:60]) or pre.rfind('aside=')>max(pre.rfind('line='),pre.rfind('say(')) or pre.rfind('color(')>pre.rfind('say(') else 'pbp'
         out.setdefault(t,who)
+# down-and-distance clips: same formula as downLine() in index.html
+D=['First','Second','Third','Fourth']; N=['one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','long','goal']
+for d in D:
+    for n in N: out.setdefault(d+(' and goal.' if n=='goal' else ' and '+n+'.'),'pbp')
 json.dump(out,open(sys.argv[1],'w'),ensure_ascii=False,indent=0)
 print(len(out),'lines;',sum(1 for v in out.values() if v=='analyst'),'analyst')
