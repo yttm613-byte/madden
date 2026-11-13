@@ -27,7 +27,7 @@ for i,(text,who) in enumerate(lines.items()):
     name=('p' if who=='pbp' else 'a')+hashlib.md5(text.encode()).hexdigest()[:8]+'.mp3'
     with wave.open(TMPW,'wb') as w: V[who].synthesize_wav(spoken(text), w, syn_config=cfg)
     # a shouted line: a little higher and quicker, and louder; everything trimmed and levelled
-    af=('asetrate=22050*%s,aresample=22050,'%('1.06' if big else '1.03') if hype and who=='pbp' else '')+'highpass=f=90,equalizer=f=140:t=q:w=1:g=3,equalizer=f=3200:t=q:w=1.2:g=2.5,acompressor=threshold=-21dB:ratio=3.5:attack=4:release=90:makeup=3,aecho=0.8:0.55:38:0.14,silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse,loudnorm=I=-16:TP=-1.5:LRA=9'
+    af=('asetrate=22050*%s,aresample=22050,'%('1.06' if big else '1.03') if hype and who=='pbp' else '')+'highpass=f=90,equalizer=f=140:t=q:w=1:g=3,equalizer=f=3200:t=q:w=1.2:g=2.5,acompressor=threshold=-21dB:ratio=3.5:attack=4:release=90:makeup=3,silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse,loudnorm=I=-16:TP=-1.5:LRA=9'
     subprocess.run([FF,'-v','error','-y','-i',TMPW,'-af',af,'-ac','1','-ar','22050','-b:a','32k',os.path.join(out,name)],check=True)
     man[text]=name; total+=os.path.getsize(os.path.join(out,name))
 json.dump(man,open(os.path.join(out,'manifest.json'),'w',encoding='utf8'),ensure_ascii=False,indent=0)
