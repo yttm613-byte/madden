@@ -11,12 +11,16 @@ import tempfile, json, sys, os, re, wave, subprocess, hashlib
 from piper import PiperVoice, SynthesisConfig
 TMPW=os.path.join(tempfile.gettempdir(),'_v.wav'); FF=os.environ.get('FFMPEG','ffmpeg')
 lines=json.load(open(sys.argv[1],encoding='utf8')); vdir=sys.argv[2]; out=sys.argv[3]; os.makedirs(out,exist_ok=True)
-V={'pbp':PiperVoice.load(os.path.join(vdir,'en_US-joe-medium.onnx')),'analyst':PiperVoice.load(os.path.join(vdir,'en_US-bryce-medium.onnx'))}
+V={'pbp':PiperVoice.load(os.path.join(vdir,'en_US-joe-medium.onnx'))}
+if os.path.exists(os.path.join(vdir,'en_US-bryce-medium.onnx')): V['analyst']=PiperVoice.load(os.path.join(vdir,'en_US-bryce-medium.onnx'))
+# NEW_ONLY=1: record only lines with no clip yet and merge into the existing manifest (a missing voice just skips its lines)
+mf=os.path.join(out,'manifest.json'); old=json.load(open(mf,encoding='utf8')) if os.path.exists(mf) else {}
+if os.environ.get('NEW_ONLY'): lines={t:w for t,w in lines.items() if t not in old and w in V}
 def spoken(t):
     # the engine spells out words in capitals; say them, and let the punctuation carry the shout
     t=re.sub(r"[A-Z][A-Z']{2,}", lambda m: m.group(0).capitalize(), t)
     return t.replace('—',', ').replace('–',', ').replace('…','...').replace('CPU','C P U')
-man={}; total=0
+man=dict(old) if os.environ.get('NEW_ONLY') else {}; total=0
 for i,(text,who) in enumerate(lines.items()):
     hype=text.count('!')>=1; big=text.isupper() or text.count('!')>=2
     cfg=SynthesisConfig(length_scale=(0.80 if big else 0.86 if hype else 0.90) if who=='pbp' else (0.96 if hype else 1.0), noise_scale=0.85 if hype else 0.7, noise_w_scale=1.0 if hype else 0.8)

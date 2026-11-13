@@ -24,5 +24,5 @@ for i,l in enumerate(src):
 D=['First','Second','Third','Fourth']; N=['one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','long','goal']
 for d in D:
     for n in N: out.setdefault(d+(' and goal.' if n=='goal' else ' and '+n+'.'),'pbp')
-json.dump(out,open(sys.argv[1],'w'),ensure_ascii=False,indent=0)
+json.dump(out,open(sys.argv[1],'w',encoding='utf8'),ensure_ascii=False,indent=0)
 print(len(out),'lines;',sum(1 for v in out.values() if v=='analyst'),'analyst')
