@@ -79,6 +79,12 @@
   #rlabels{position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden;}
   #rlabels .rl{position:absolute; width:19px; height:19px; margin:-24px 0 0 -10px; border-radius:50%; background:#9cc2ff; color:#08101a; font:700 12px/19px 'Oswald',sans-serif; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.5);}
   #rlabels .rl.sel{background:var(--gold);} #rlabels .rl.hot{background:#ff8a7a;}
+  #dlabels{position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden;}
+  #dlabels .dl{position:absolute; width:20px; height:20px; margin:-26px 0 0 -10px; border-radius:50%; background:#ffb0a6; color:#08101a; font:700 12px/20px 'Oswald',sans-serif; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.5); pointer-events:auto; cursor:pointer; touch-action:none;}
+  #dlabels .dl.sel{background:var(--gold);}
+  #dlabels .dl::after{content:''; position:absolute; left:50%; top:-8px; width:44px; height:70px; margin-left:-22px; border-radius:22px;}
+  #rlabels .rl.pick{pointer-events:auto; cursor:pointer; touch-action:none;}
+  #rlabels .rl.pick::after{content:''; position:absolute; left:50%; top:-10px; width:56px; height:88px; margin-left:-28px; border-radius:28px;}
   #rlabels .rl.off{opacity:.8; outline:2px dashed rgba(255,255,255,.7); outline-offset:1px;}
   #mute{position:absolute; top:8px; right:8px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
   #commtog{position:absolute; top:8px; right:48px; z-index:5; cursor:pointer; font-size:18px; line-height:1; padding:5px 7px; border-radius:8px; background:rgba(10,16,24,.55); border:1px solid #2c3e57; user-select:none;}
@@ -346,7 +352,7 @@
     </div>
     <div id="audible" class="hidden"></div>
     <div id="presnap-bar" class="hidden"><span data-a="audible">AUDIBLE</span><span data-a="flip">FLIP</span></div>
-    <div id="rlabels"></div>
+    <div id="rlabels"></div><div id="dlabels"></div>
 
     <div id="defcall" class="hidden">
       <div id="dc-head"></div>
@@ -373,7 +379,7 @@
       <h1 class="title">GRIDIRON<br>BLITZ<small>HEAD TO HEAD</small></h1>
       <div class="keys kbd-only" id="quickhelp">Arrows/WASD run · <b>Space</b> hikes, throws, spins · <b>Shift</b> sprints · <b>Q/E</b> juke · <a href="#" id="howto" style="color:var(--gold)">How to play ▸</a></div>
       <div class="keys kbd-only hidden" id="fullhelp">
-        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · 1–5 pick receiver · <b>tap Space for a touch pass, hold it for a bullet</b> · <b>Q·E juke</b> · <b>R</b> stiff arm · <b>Z</b> dive (a QB slides) · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> announcer voice · <b>P</b> pause.<br>
+        <b>Offense:</b> Arrows / WASD to run — <b>Up = downfield</b>, left/right cut · Sprint Shift · Space to snap, throw, or spin · 1–5 throw to that receiver · <b>tap Space for a touch pass, hold it for a bullet</b> · <b>Q·E juke</b> · <b>R</b> stiff arm · <b>Z</b> dive (a QB slides) · <b>B</b> on runs = control a blocker · <b>F</b> fullscreen · <b>V</b> announcer voice · <b>P</b> pause.<br>
         <b>Before the snap:</b> <b>C</b> audible · <b>X</b> flip the play · a receiver's number then an arrow = hot route (↑ go, ↓ curl, slant or out), or then <b>M</b> = send him in motion (a defender who follows him is in man coverage).<br>
         <b>Defense:</b> you control one defender — Space switches to whoever's nearest the ball. Run them down, and <b>Q/E dives</b> for the tackle (extra reach; miss it and you're on the floor). Blocked? <b>Q/E rips free</b> of the blocker instead. Ball in the air? <b>R</b> goes up for it — time it right and it's yours.<br>
         <b>Clock &amp; kicks:</b> <b>T</b> (or tap the clock) calls a timeout, three a half · Space while a punt comes down to you = fair catch · behind in the fourth quarter, Space on your kickoff = onside kick.<br>
@@ -448,6 +454,8 @@
   // Fraction of defenders who will eventually beat their block. Tuned against the
   // full-game sim toward an NFL-ish sack rate (~6-7% of dropbacks).
   const SHED_P = 0.06;
+  // A doubled pass rusher gets to his win time at this share of the pace (see blockNearest).
+  let DBL_RATE = 0.5, DBL_R = 8;
   // Four quarters of this length. 75*4 keeps the same total game length as the
   // single 300-second clock it replaced, so pacing is unchanged.
   // (the default; the start screen's QUARTERS button makes it 2:30 or 5:00 and remembers it)
@@ -677,9 +685,9 @@
     playcall:{ key:'Call a play: <b>← →</b> change formation, <b>1–9</b> call it (or click a card). Green plays run, blue plays pass.',
          pad:g=>'Call a play: the stick moves the cursor, '+g(PB.A)+' calls it, '+g(PB.LB)+g(PB.RB)+' change formation.',
          touch:'Call a play: tap a formation tab, then a play. Green plays run, blue plays pass.' },
-    pass:{ key:'A pass: <b>Space</b> snaps. Each receiver wears a number — press it to pick him, then <b>tap Space</b> for a lofted touch pass or <b>hold it</b> for a bullet.',
+    pass:{ key:'A pass: <b>Space</b> snaps. Each receiver wears a number — <b>press it to throw to him</b>: tap it for a lofted touch pass, hold it for a bullet. <b>Space</b> throws to the gold one.',
          pad:g=>'A pass: '+g(PB.A)+' snaps. Each receiver wears the button that throws to him — <b>tap</b> for a touch pass, <b>hold</b> for a bullet.',
-         touch:'A pass: tap <b>HIKE</b>, then <b>THROW</b> goes to the gold receiver (<b>REC ▸</b> picks another). Tap for touch, hold for a bullet.' },
+         touch:'A pass: tap <b>HIKE</b>, then <b>tap a receiver</b> to throw to him, or <b>THROW</b> for the gold one. Tap for a touch pass, hold for a bullet.' },
     run:{ key:'A run: <b>Space</b> snaps, then follow your blockers. <b>Q/E</b> juke, <b>R</b> stiff arm, <b>Z</b> dive for the last yard, <b>Space</b> spins.',
          pad:g=>'A run: '+g(PB.A)+' snaps. '+g(PB.X)+' jukes, '+g(PB.B)+' stiff arm, '+g(PB.Y)+' dive, '+g(PB.RT)+' sprint.',
          touch:'A run: tap <b>HIKE</b>, drag to run. <b>JUKE</b> cuts, <b>STIFF</b> / <b>DIVE</b> appear when they help.' },
@@ -1041,10 +1049,26 @@
     // The base 4-3 already plays its safeties deep on a pass (see baseDefense); a call
     // only adds to that. Clearing it here sent both safeties to the same spot ten yards
     // deep in the middle on every balanced or blitz call.
-    ds.forEach(d=>{ d.blitz=false; d.deepX=0; d.zone=null; });
+    ds.forEach(d=>{ d.blitz=false; d.deepX=0; d.zone=null; d.third=false; d.quarter=false; });
     if(call==='blitz'){
       [...ds].sort((a,b)=>dist(a,G.carrier)-dist(b,G.carrier)).slice(0,2).forEach(d=>{ d.blitz=true; if(d.job==='cover'||d.job==='spy') d.job='rush';
         d.winAt=Math.min(d.winAt, 2.1+Math.random()*1.9); });   // a blitz is how early pressure happens
+    } else if(call==='prevent' && G.playType==='pass'){
+      // Prevent: four deep and everyone else under them, all of it zone. It used to be
+      // man coverage with the two deepest men four yards deeper and the corners trailing
+      // 60% further behind: against an empty set one safety was still manned up on the
+      // tight end, a go route caught at 21 yards had nobody within 12, and it was the
+      // worst call in the book against the deep ball (measured, 27 CPU touchdowns in 150
+      // empty-deep dropbacks, 17 in 150 quick-game ones). Now the corners take the deep
+      // outside quarters and the safeties the inside ones, five yards deeper than Cover 3,
+      // over the top of the deepest man in each; the backers and the nickel sit at the
+      // sticks and rally to whatever is thrown in front of them.
+      for(const d of ds){
+        if(d.job==='cover' && d.assign) d.assign=null;
+        if(d.role==='CB' && !d.nickel){ d.job='cover'; d.third=true; d.deepX=yd(5); d.x=Math.min(GOAL_X+yd(8), Math.max(d.x, G.los+yd(11))); }
+        else if(d.role==='S'){ d.job='cover'; d.deep=true; d.mid=false; d.quarter=true; d.deepX=yd(5); d.x=Math.min(GOAL_X+yd(8), Math.max(d.x, G.los+yd(16))); }
+        else if(d.job==='cover') d.deepX=yd(2.5);
+      }                                  // (they line up deep, too: from their usual spots they were still backpedalling when the ball went up)
     } else if(call==='prevent'){
       [...ds].sort((a,b)=>b.x-a.x).slice(0,2).forEach(d=>{ d.deep=true; d.deepX=yd(4); if(d.job==='rush') d.job='spy'; });
       for(const d of ds) if(d.role==='CB' && d.cush) d.cush*=1.6;          // corners play off and keep it all in front
@@ -1376,12 +1400,21 @@
     if(d.third){       // a Cover 3 corner: deep outside third, everything in it kept in front
       let deepest=G.los+yd(6);
       for(const r of G.receivers) if((r.y-fieldMid)*half>yd(7) && r.x>deepest) deepest=r.x;
-      return {x:Math.max(G.los+yd(11)+(d.deepX||0), deepest+yd(3)), y:fieldMid+half*yd(16)};
+      return {x:Math.min(GOAL_X+yd(8.5), Math.max(G.los+yd(11)+(d.deepX||0), deepest+yd(3))), y:fieldMid+half*yd(16)};
     }
     if(d.deep && d.mid){ // the middle third
       let deepest=G.los+yd(6);
       for(const r of G.receivers) if(Math.abs(r.y-fieldMid)<yd(12) && r.x>deepest) deepest=r.x;
-      return {x:Math.max(G.los+yd(13)+(d.deepX||0), deepest+yd(4)), y:fieldMid};
+      return {x:Math.min(GOAL_X+yd(8.5), Math.max(G.los+yd(13)+(d.deepX||0), deepest+yd(4))), y:fieldMid};
+    }
+    if(d.deep && d.quarter){ // prevent's inside quarter: the seam and the post, the corners have the outside
+      // (Given a half, each safety shaded out to the go route on his side and the post
+      // ran into the space between them: measured 63% complete with six yards to spare.)
+      let deepest=G.los+yd(6), dr=null;
+      for(const r of G.receivers){ const o=(r.y-fieldMid)*half; if(o>-yd(4) && o<yd(14) && r.x>deepest){ deepest=r.x; dr=r; } }
+      let ty=fieldMid+half*yd(5.5);
+      if(dr && dr.x>G.los+yd(8)) ty+=(dr.y-ty)*0.5;
+      return {x:Math.min(GOAL_X+yd(8.5), Math.max(G.los+yd(12)+(d.deepX||0), deepest+yd(3.5))), y:ty};
     }
     if(d.deep){
       // a safety takes his half and keeps the deepest man in it in front of him —
@@ -1392,7 +1425,7 @@
       for(const r of G.receivers) if((r.y-fieldMid)*half>-yd(4) && r.x>deepest){ deepest=r.x; dr=r; }
       let ty=fieldMid+half*yd(9.5);
       if(dr && dr.x>G.los+yd(8)) ty+=(dr.y-ty)*0.5;
-      return {x:Math.max(G.los+yd(12)+(d.deepX||0), deepest+yd(3.5)), y:ty};
+      return {x:Math.min(GOAL_X+yd(8.5), Math.max(G.los+yd(12)+(d.deepX||0), deepest+yd(3.5))), y:ty};
     }
     if(d.zone==='robber'){ // the middle hole at ten yards, sinking under whatever crosses it
       const zx=G.los+yd(9.5), zy=fieldMid+(qb.y-fieldMid)*0.5; let rr=null, rb=yd(9);
@@ -1406,7 +1439,7 @@
     }
     if(d.role==='DT') return {x:G.los+yd(2), y:qb.y};     // the spy mirrors the quarterback
     // underneath: a hook or curl zone where he lined up, sinking under the route in it
-    const zx=G.los+yd(7.5), zy=d.homeY; let rr=null, rb=yd(8);
+    const zx=G.los+yd(7.5)+(d.deepX||0), zy=d.homeY; let rr=null, rb=yd(8);
     for(const r of G.receivers){ const dd=Math.hypot(r.x-zx,r.y-zy); if(dd<rb){rb=dd;rr=r;} }
     return rr ? {x:zx+(rr.x-zx)*0.35, y:zy+(rr.y-zy)*0.5} : {x:zx, y:zy};
   }
@@ -1458,7 +1491,9 @@
   // blocker stayed on him, with no way to ever beat the block. Once every rusher got
   // a man assigned, that meant literally zero sacks. Only a minority of rushers win
   // their matchup, and it takes them a beat — winAt is Infinity for the rest.
-  function rushWinP(){ return G && G.offense==='user' ? ((G.diff&&G.diff.rush)||0.10) : 0.11; }
+  // (0.11 against the CPU's passer until backs and tight ends kept in to block started
+  // doubling: that took two points off his sack rate under every coverage call)
+  function rushWinP(){ return G && G.offense==='user' ? ((G.diff&&G.diff.rush)||0.10) : 0.13; }
   function def(x,y,delay,n,job,assign){ return {x,y,vx:0,vy:0,n,react:delay,whiff:0,blocked:0,homeY:y,job,assign,_takenBy:null,
     engT:0, shed:false,
     // Pass rushers ALWAYS beat their block eventually — protection breaks down, and
@@ -1506,12 +1541,13 @@
     if(k==='f') toggleFullscreen();
     if(k==='t') callTimeout('user');       // stop the clock between plays
     if(k==='b') toggleBlockerControl();   // run plays: take control of a lineman and block
-    if(/^[1-5]$/.test(k) && actOff()){ const i=+k-1; if(G.receivers[i]){ G.sel=i; G.selLock=1.4; } }
+    if(/^[0-9]$/.test(k) && G && G.phase==='presnap' && actDef()){ pickDef(k==='0'?9:+k-1); }
+    if(/^[1-5]$/.test(k) && actOff()){ if(pickRec(+k-1) && !e.repeat) startThrow('num'); }   // his number throws to him
     keys[k]=true;
   });
   addEventListener('keyup',e=>{ if(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
     const k=e.key.toLowerCase(); codes[e.code]=false; if(k==='shift') sprintHeld=false;
-    if(k===' ') releaseThrow('key'); if(e.code==='Enter'||e.code==='NumpadEnter') releaseThrow('key2'); keys[k]=false; });
+    if(k===' ') releaseThrow('key'); if(/^[1-5]$/.test(k)) releaseThrow('num'); if(e.code==='Enter'||e.code==='NumpadEnter') releaseThrow('key2'); keys[k]=false; });
   // Player 2's half of the keyboard.
   function p2Key(e){
     const c=e.code;
@@ -1520,7 +1556,7 @@
     if(c==='Slash'){ jukeAuto(inputVec('cpu').y); return; }
     if(c==='Period'){ if(actDef()) swatBall(); else stiffArm(); return; }
     if(c==='Comma'){ carrierDive(); return; }
-    if(c==='KeyL'){ if(actOff() && G.receivers.length){ G.sel=(G.sel+1)%G.receivers.length; G.selLock=1.4; } return; }
+    if(c==='KeyL'){ if(actOff() && G.receivers.length) pickRec((G.sel+1)%G.receivers.length); return; }
     if(c==='Semicolon'){ callTimeout('cpu'); return; }
     if(c==='KeyK'){ toggleBlockerControl(); return; }
     if(c==='Quote'){ if(G.phase==='presnap' && actOff()) (G.audibleOpen?closeAudible():openAudible()); return; }
@@ -1560,9 +1596,13 @@
   // the lineman over the ball, so there was no way to line up as an end or a safety:
   // now it steps through the defense, linebackers first, then the line, then the back end.
   const DEF_ORDER={MLB:0,LB:1,DE:2,DT:3,S:4,CB:5};
+  function defOrder(){ return [...G.defenders].sort((a,b)=>((DEF_ORDER[a.role]??6)-(DEF_ORDER[b.role]??6)) || (a.y-b.y)); }
+  // Before the snap, take a defender directly: his number (1-9, 0 for the tenth) or a tap on him.
+  function pickDef(i){ if(!G || G.phase!=='presnap' || !actDef()) return false; const d=defOrder()[i]; if(!d) return false;
+    G.userDef=d; const r=d.role||''; setMsg('YOU: '+({MLB:'MIDDLE LINEBACKER',LB:'LINEBACKER',DE:'DEFENSIVE END',DT:'DEFENSIVE TACKLE',S:'SAFETY',CB:'CORNERBACK'}[r]||r)+' #'+d.n,0.9); return true; }
   function switchDef(){
     if(G.phase==='presnap' && G.defenders.length){
-      const L=[...G.defenders].sort((a,b)=>((DEF_ORDER[a.role]??6)-(DEF_ORDER[b.role]??6)) || (a.y-b.y));
+      const L=defOrder();
       const i=L.indexOf(G.userDef); G.userDef=L[(i+1)%L.length];
       const r=G.userDef.role||''; setMsg('YOU: '+({MLB:'MIDDLE LINEBACKER',LB:'LINEBACKER',DE:'DEFENSIVE END',DT:'DEFENSIVE TACKLE',S:'SAFETY',CB:'CORNERBACK'}[r]||r)+' #'+G.userDef.n,0.9);
       return; }
@@ -1670,6 +1710,11 @@
   // over the underneath defenders; keep holding and it goes as a BULLET, flat and on
   // him sooner, but a linebacker standing in the lane can get a hand on it.
   const BULLET_T=0.17;
+  // Pick a receiver. The pick is yours for the rest of the play: it used to last 1.4s,
+  // after which the game went back to highlighting whoever it judged most open, so a man
+  // picked early in the drop was not the man the ball went to. Until you pick, THROW
+  // (Space, the pad's button, the touch button) goes to the most open man.
+  function pickRec(i){ if(!G || !G.receivers[i]) return false; G.sel=i; G.selLock=99; return true; }
   function startThrow(src,btn){ if(!G||G.phase!=='live'||!actOff()||G.playType!=='pass'||G.passState!=='drop'||G.windup) return; G.windup={t:0,held:true,src,btn}; }
   function releaseThrow(src,btn){ const w=G&&G.windup; if(w && w.src===src && (btn==null||w.btn===btn)) w.held=false; }
   function tickWindup(dt){ const w=G.windup; if(!w) return;
@@ -1762,7 +1807,7 @@
   const move2_btn=document.getElementById('t-move2');
   move2_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); audioInit(); const l=move2_btn.textContent;
     if(l==='SWAT') swatBall(); else if(l==='STIFF') stiffArm(); else if(l) carrierDive(); });
-  next_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); if(actOff()&&G.receivers.length){ G.sel=(G.sel+1)%G.receivers.length; G.selLock=1.4; } });
+  next_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); if(actOff()&&G.receivers.length) pickRec((G.sel+1)%G.receivers.length); });
   sprint_btn.addEventListener('pointerdown',e=>{ e.preventDefault(); sprintHeld=true; });
   ['pointerup','pointerleave','pointercancel'].forEach(ev=> sprint_btn.addEventListener(ev,()=>sprintHeld=false));
 
@@ -1943,7 +1988,7 @@
       return;
     }
     if(G.phase==='live' && off && G.playType==='pass' && G.passState==='drop'){
-      const k=iconsNow().indexOf(i); if(k>=0 && !G.windup){ G.sel=k; G.selLock=1.4; startThrow('pad'+s,i); }
+      const k=iconsNow().indexOf(i); if(k>=0 && !G.windup){ pickRec(k); startThrow('pad'+s,i); }
       return;
     }
     if(G.phase==='live' && off){
@@ -1969,15 +2014,20 @@
     G.paused = on==null ? !G.paused : !!on;
     const el=document.getElementById('pause'); el.classList.toggle('hidden', !G.paused);
     if(!G.paused) document.getElementById('p-resume').textContent='Resume';
-    if(G.paused){ document.getElementById('p-help').innerHTML = TWO_P ? twoPHelp() : PAD.used
+    if(G.paused){ document.getElementById('p-help').innerHTML = TWO_P ? twoPHelp() : (!PAD.used && lastInput==='touch')
+        ? '<b>Before the snap:</b> HIKE snaps · tap a receiver\u2019s number for a hot route or motion · AUDIBLE · FLIP<br>'
+          +'<b>Passing:</b> tap a receiver to throw to him, or THROW for the gold one — tap for a touch pass, hold for a bullet<br>'
+          +'<b>Running:</b> thumb on the left half moves · SPRINT · JUKE · SPIN · STIFF / DIVE<br>'
+          +'<b>Defense:</b> SWITCH · DIVE · SWAT goes up for the ball'
+        : PAD.used
         ? '<b>Before the snap:</b> '+gb(PB.A)+'hike · '+gb(PB.X)+'audible · '+gb(PB.Y)+'hot route or motion · '+gb(PB.RB)+'flip · '+gb(PB.VIEW)+'timeout<br>'
           +'<b>Passing:</b> each receiver\u2019s button throws to him — tap for a touch pass, hold for a bullet · '+gb(PB.RT)+'scramble<br>'
           +'<b>Running:</b> stick moves · '+gb(PB.RT)+'sprint · '+gb(PB.X)+'juke · flick '+(PAD.ps?'R':'RS')+' to juke · '+gb(PB.B)+'stiff arm · '+gb(PB.Y)+'dive (QB: slide) · '+gb(PB.A)+'spin<br>'
           +'<b>Defense:</b> '+gb(PB.B)+'switch · '+gb(PB.X)+'dive, or rip free of a block · '+gb(PB.Y)+'go up for the ball · '+gb(PB.RT)+'sprint'
         : '<b>Before the snap:</b> Space hike · C audible · X flip · 1–5 then an arrow = hot route, then M = motion · T timeout<br>'
-          +'<b>Passing:</b> 1–5 pick a receiver · tap Space for a touch pass, hold it for a bullet<br>'
+          +'<b>Passing:</b> 1–5 throws to that receiver, Space to the gold one · tap for a touch pass, hold for a bullet<br>'
           +'<b>Running:</b> arrows/WASD · Shift sprint · Q/E juke · R stiff arm · Z dive (QB: slide) · Space spin<br>'
-          +'<b>Defense:</b> Space switch · Q/E dive, or rip free of a block · R go up for the ball · P pause';
+          +'<b>Defense:</b> before the snap 1–9, 0 (or tap a number) picks your man · Space switch · Q/E dive, or rip free of a block · R go up for the ball · P pause';
       try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){} }
   }
   function quitToMenu(){
@@ -2207,12 +2257,34 @@
       if(b.stalk && tg && !tg.shed && (!tg._takenBy || tg._takenBy===b) && pool.includes(tg)) best=tg;   // (a claim lapses beyond 2.4yd, so not "is he mine" but "is he nobody else's")
       else for(const d of pool){ if(d.shed || (d._takenBy&&d._takenBy!==b)) continue;
         const dd = b.stalk ? dist(d,f)*0.35+dist(d,b) : dist(d,f)+dist(d,b)*0.6; if(dd<bd){bd=dd;best=d;} }
+      // A back or tight end kept in with nobody to block helps: he doubles the rusher
+      // nearest him (not whichever one is about to win: helping exactly the man who was
+      // winning took every sack out of the game). Every rusher used to have exactly one
+      // blocker and beat him on his own clock whatever else was going on, so keeping men
+      // in bought nothing: PA MAX, eight blocking three or four, was sacked 26% of the
+      // time. The line itself stays man for man, as the pass rush was calibrated; a spare
+      // lineman doubling too took sacks from 7.8% of dropbacks to 2%.
+      if(!best && b.pos && G.playType==='pass' && G.passState==='drop' && !G._returning && !only){
+        let h=null, hk=1e9;
+        // (one helper to a man: three kept in all doubling the nearest tackle left both
+        // ends one on one)
+        const now=G.playT||0;
+        for(const d of pool){ if(d===G.userDef || d.shed || !d._takenBy || d._takenBy===b) continue; const dd=dist(d,b); if(dd>yd(DBL_R)) continue;
+          const k = dd + ((d.hcl && d.hcl!==b && now-d.hclT<0.1) ? yd(20) : 0);
+          if(k<hk){ hk=k; h=d; } }
+        b.target=null;
+        if(h){ h.hcl=b; h.hclT=now; const gx=h.x*0.62+f.x*0.38, gy=h.y*0.62+f.y*0.38, a=Math.atan2(gy-b.y,gx-b.x);
+          b.vx=Math.cos(a)*S.blocker; b.vy=Math.sin(a)*S.blocker; b.x+=b.vx*dt; b.y+=b.vy*dt;
+          if(dist(b,h)<S.blockR) h.dblT=G.playT||0; }
+        b.y=Math.max(fieldTop,Math.min(fieldBot,b.y)); continue;
+      }
       b.target=best;
       if(best){ best._takenBy=b;
         // Clock the matchup from the moment a blocker picks him up, not from actual
         // contact. Counting contact frames only, the average shed landed at 4.7s —
         // long after the ball was gone, which is why sacks sat near zero.
-        best.engT+=dt;
+        // (doubled, he gets there at half the pace)
+        best.engT += ((G.playT||0)-(best.dblT==null?-9:best.dblT) < 0.1) ? dt*DBL_RATE : dt;
         // On a run (but not a return, where these are coverage men sprinting downfield)
         // a penetrating lineman is on his own much faster clock — see def().
         const wa = (best.pen && G.playType==='run' && !G._returning) ? best.penAt : best.winAt;
@@ -4238,7 +4310,7 @@
   /*POSE-LIB-END*/
   function loadPlayers(){
     const note=document.getElementById('loadnote');
-    new THREE.GLTFLoader().load('assets/gridiron_player.glb', (gltf)=>{
+    const onModel=(gltf)=>{
       playerProto=gltf;
       const aniso=upgradeTextures(playerProto.scene);
       if(window.__gbDebug) console.log('texture anisotropy:',aniso);
@@ -4249,8 +4321,22 @@
         new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.DoubleSide,transparent:true,opacity:0.85,fog:false}));
         r.rotation.x=-Math.PI/2; r.position.y=0.06; r.visible=false; scene.add(r); ringPool.push(r); }
       playersReady=true; document.getElementById('start').classList.remove('loading');
-    }, (ev)=>{ if(note && ev && ev.total) note.textContent='LOADING PLAYERS… '+Math.min(99,Math.round(100*ev.loaded/ev.total))+'%'; },
-    (e)=>{ console.error('player glb load failed', e); if(note) note.innerHTML='Could not load the players — <a href="" style="color:var(--gold)">reload</a> to try again'; });
+    };
+    new THREE.GLTFLoader().load('assets/gridiron_player.glb', onModel, (ev)=>{ if(note && ev && ev.total) note.textContent='LOADING PLAYERS… '+Math.min(99,Math.round(100*ev.loaded/ev.total))+'%'; },
+    (e)=>{ console.warn('player glb failed, trying it in pieces', e); loadPlayerParts(note, onModel); });
+  }
+  // Some school and office networks cut a large download short (a laptop got 66 KB of
+  // the 3 MB model). The same file is also kept as 61 pieces of 48 KB in assets/parts,
+  // fetched a few at a time and put back together.
+  const PART_N=61, PART_BYTES=2993588;
+  async function loadPlayerParts(note, done){
+    try{ const bufs=new Array(PART_N); let got=0;
+      const one=async i=>{ for(let t=0;t<4;t++){ try{ const r=await fetch('assets/parts/p'+String(i).padStart(3,'0'),{cache:'no-store'}); if(r.ok){ const b=await r.arrayBuffer(); if(b.byteLength===49152||i===PART_N-1) return b; } }catch(e){} await new Promise(z=>setTimeout(z,400*(t+1))); } throw new Error('piece '+i); };
+      for(let i=0;i<PART_N;i+=6){ await Promise.all(Array.from({length:Math.min(6,PART_N-i)},(_,k)=>one(i+k).then(b=>{ bufs[i+k]=b; got++; if(note) note.textContent='LOADING PLAYERS… '+Math.round(99*got/PART_N)+'%'; }))); }
+      const all=new Uint8Array(PART_BYTES); let o=0; for(const b of bufs){ all.set(new Uint8Array(b),o); o+=b.byteLength; }
+      if(o!==PART_BYTES) throw new Error('model '+o+' of '+PART_BYTES+' bytes');
+      new THREE.GLTFLoader().parse(all.buffer,'assets/',done,e=>{ throw e; });
+    }catch(e){ console.error('player model failed', e); if(note) note.innerHTML='Could not load the players ('+(e&&e.message||e)+') — <a href="" style="color:var(--gold)">reload</a> to try again'; }
   }
   let wxRain=null, wxSnow=null, wxCover=null, wxField=null, wxSky=null, wxT=0, wxSnd=null;
   function initWeather3D(){
@@ -4605,7 +4691,17 @@
           el.style.left=lx.toFixed(1)+'px'; el.style.top=ly.toFixed(1)+'px';
           const op=padOf(G.offense), ic=((PAD.used||TWO_P)&&op)?iconsNow()[i]:-1, txt=ic>=0?padGlyph(ic,op.ps):String(i+1);
           if(el.textContent!==txt) el.textContent=txt;
-          const cls='rl'+(ic>=0?' g'+ic:'')+(off?' off':'')+(G.phase==='live'&&i===G.sel?' sel':'')+(G.hotSel===i?' hot':'')+(G.phase==='presnap'&&G.playType==='pass'?' tap':''); if(el.className!==cls) el.className=cls; }); } }
+          const cls='rl'+(ic>=0?' g'+ic:'')+(off?' off':'')+(G.phase==='live'&&i===G.sel?' sel':'')+(G.hotSel===i?' hot':'')+(G.phase==='presnap'&&G.playType==='pass'?' tap':'')+(G.phase==='live'&&G.passState==='drop'?' pick':''); if(el.className!==cls) el.className=cls; }); } }
+    const dlab=document.getElementById('dlabels');
+    if(dlab){ const dc=document.getElementById('defcall'), showD=!repFrame && G.phase==='presnap' && humanDef() && !TWO_P && G.defenders.length && (!dc || dc.classList.contains('hidden'));
+      if(!showD){ if(dlab.childElementCount) dlab.innerHTML=''; }
+      else { const L=defOrder(); while(dlab.childElementCount<L.length){ const d=document.createElement('div'); d.className='dl'; dlab.appendChild(d); }
+        while(dlab.childElementCount>L.length) dlab.lastChild.remove();
+        const W=renderer.domElement.clientWidth||760, H=renderer.domElement.clientHeight||560;
+        L.forEach((d,i)=>{ const el=dlab.children[i]; _lab.set(WX(d.x),2.45,WZ(d.y)).project(camera);
+          el.style.left=Math.max(12,Math.min(W-12,(_lab.x+1)/2*W)).toFixed(1)+'px'; el.style.top=Math.max(28,Math.min(H-6,(1-_lab.y)/2*H)).toFixed(1)+'px';
+          const t=i<9?String(i+1):i===9?'0':''; if(el.textContent!==t) el.textContent=t;
+          const c='dl'+(d===G.userDef?' sel':''); if(el.className!==c) el.className=c; }); } }
     const bar=_presnapBar||(_presnapBar=document.getElementById('presnap-bar'));
     if(bar){ const on=!repFrame && G.offense==='user' && G.phase==='presnap'; if(bar.classList.contains('hidden')===on) bar.classList.toggle('hidden',!on); }
   }
@@ -5671,6 +5767,17 @@
   document.getElementById('audible').addEventListener('click',e=>{
     const h=e.target.closest('span[data-hot]'); if(h){ closeAudible(); if(h.dataset.hot==='__x'){ G.hotSel=null; setMsg('',0); } else if(h.dataset.hot==='motion') startMotion(G.hotSel); else hotRoute(h.dataset.hot); return; }
     const c=e.target.closest('span[data-play]'); if(!c) return; if(c.dataset.play==='__close') closeAudible(); else audibleTo(c.dataset.play); });
+  // During the drop, press a receiver (his number, or the man under it: the number's hit
+  // area runs down over him) to throw to him: a tap is a touch pass, a hold a bullet, as
+  // with THROW. Touch used to have only REC ▸, stepping through them one at a time.
+  document.getElementById('rlabels').addEventListener('pointerdown',e=>{ const el=e.target.closest('.rl.pick');
+    if(!el || !G || G.phase!=='live' || G.passState!=='drop' || !actOff()) return;
+    e.preventDefault(); e.stopPropagation(); audioInit();
+    if(pickRec([...el.parentNode.children].indexOf(el))) startThrow('tap', e.pointerId); });
+  // (only that finger lets go: lifting the one on the stick must not turn a bullet into a lob)
+  ['pointerup','pointercancel'].forEach(ev=> addEventListener(ev,e=>releaseThrow('tap', e.pointerId)));
+  document.getElementById('dlabels').addEventListener('pointerdown',e=>{ const el=e.target.closest('.dl'); if(!el) return;
+    e.preventDefault(); e.stopPropagation(); pickDef([...el.parentNode.children].indexOf(el)); });
   // Touch: tap a receiver's number before the snap for his hot-route menu.
   document.getElementById('rlabels').addEventListener('click',e=>{ const el=e.target.closest('.rl'); if(!el || G.phase!=='presnap' || G.offense!=='user' || G.playType!=='pass') return;
     const i=[...el.parentNode.children].indexOf(el), r=G.receivers[i]; if(!r) return;
@@ -5689,7 +5796,7 @@
     const n=padSlots();
     el.innerHTML = n>=2 ? 'two controllers: P1 and P2' : n===1 ? 'P1 on the keyboard · P2 on the controller' : 'one keyboard: P1 WASD + Space · P2 arrows + Enter<br>(or plug in a controller)'; }
   function twoPHelp(){ const d=twoPDevices(), n=padSlots();
-    const kb1='<b>P1</b> WASD move · Space hike, throw (tap = touch, hold = bullet), spin, switch · left Shift sprint · Q/E juke (defense: dive) · R stiff arm (defense: go up for the ball) · Z dive · 1–5 pick a receiver · C audible · T timeout';
+    const kb1='<b>P1</b> WASD move · Space hike, throw (tap = touch, hold = bullet), spin, switch · left Shift sprint · Q/E juke (defense: dive) · R stiff arm (defense: go up for the ball) · Z dive · 1–5 throw to a receiver · C audible · T timeout';
     const kb2='<b>P2</b> arrows move · Enter hike, throw, spin, switch · right Shift sprint · / juke (defense: dive) · . stiff arm (defense: go up for the ball) · , dive · L next receiver · \u2019 audible · ; timeout · in menus arrows and Enter';
     const pad=t=>'<b>'+t+'</b> the controller: stick moves · '+gb(PB.RT)+' sprint · '+gb(PB.A)+' hike, spin, switch · each receiver\u2019s button throws to him · '+gb(PB.X)+' juke · '+gb(PB.B)+' stiff arm · '+gb(PB.Y)+' dive, or go up for the ball';
     return (n>=2 ? pad('P1')+'<br>'+pad('P2') : n===1 ? kb1.replace('WASD move','WASD or arrows move')+'<br>'+pad('P2') : kb1+'<br>'+kb2)

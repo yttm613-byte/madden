@@ -103,7 +103,7 @@ loop()           1170   requestAnimationFrame driver
 | `jerseyNumberTex` | 2358 | Paints a player's roster number / surname onto the jersey decals. |
 | Pose library (`/*POSE-LIB-BEGIN*/`) | 2503 | All procedural animation: `applyPose` (30 states — stances for every position, pass set, engaged blocks, drive blocks, backpedal, shuffle, QB drop/set/throw/handoff, carry with a real tuck and stiff-arm, reach and secure, wrap, dive, fall, get-up, celebrations, kick, fair-catch signal), cross-fades between states (`poseBlendFrom`), ground contact (`poseGround`), two-bone IK (`ik2`), `footFlat` and `headLook`. Self-contained so `tools/posebook.html` can render it. |
 | Controllers (`PAD`, `pollPad`, `padPress`) | 1330 | Gamepad API, standard layout, polled once a frame from `loop`. Every menu gets a cursor (`padMenuEls`/`padNavTick`, A clicks the focused element). On a pass each receiver's button comes from `padIcons()` (the back A, widest left X, widest right B, slots Y then RB), frozen at the snap in `G.icons`. `padBar` is the context strip of what the buttons do now. Rumble fires from any rise in `G.shake`. PlayStation pads show their own glyphs (`PAD.ps`). |
-| Throws, moves, playing the ball | 1250 | A throw is a press and a release: `startThrow` → `tickWindup` → `throwBall('touch'|'bullet')`. Let go before `BULLET_T` (0.17s) and it is a touch pass (slower, lofted, `arcK` 1.75), hold and it is a bullet (faster, flat, `arcK` 0.5). The CPU still calls `throwBall()` = `'auto'`, the old calibrated throw. `laneCheck` lets defenders in the lane tip a *user's* low ball (and your own defender tip a CPU pass), using `passH`, the same arc the renderer draws. `stiffArm` (+0.40 on the next frontal tackle-break roll), `carrierDive`/`diveStep` (dive forward, a QB slides; the play ends where he lands), `swatBall` (your defender goes up; timed at the catch point it knocks the ball away or picks it). |
+| Throws, moves, playing the ball | 1250 | A throw is a press and a release: `startThrow` → `tickWindup` → `throwBall('touch'|'bullet')`. Let go before `BULLET_T` (0.17s) and it is a touch pass (slower, lofted, `arcK` 1.75), hold and it is a bullet (faster, flat, `arcK` 0.5). The CPU still calls `throwBall()` = `'auto'`, the old calibrated throw. `laneCheck` lets defenders in the lane tip a *user's* low ball (and your own defender tip a CPU pass), using `passH`, the same arc the renderer draws. `stiffArm` (+0.40 on the next frontal tackle-break roll), `carrierDive`/`diveStep` (dive forward, a QB slides; the play ends where he lands), `swatBall` (your defender goes up; timed at the catch point it knocks the ball away or picks it). **Picking the receiver:** everything goes through `pickRec(i)` — a number key 1–5, a pad receiver button, pressing a receiver on screen (his number bubble, or the man under it: `#rlabels .rl.pick::after` is a 56×88px hit area; mouse or touch), REC ▸ on touch or L for player 2 stepping through them. A number key, a pad button and a press on a receiver also start the throw (tap = touch pass, hold = bullet). The pick lasts the play (`selLock=99`, reset in `setupPlay`); until you pick, THROW / Space goes to the man the game judges most open (the auto-select at the end of the user's drop update). |
 | Ratings (`POS_R`, `rz`, `rateUp`) | 440 | Six ratings per man (spd, elu, hnd, acc, str, tkl; 40-99), generated around per-position averages (`POS_R`, sd 7). The sim reads each as **points above his position's average** (`rz`), so an average team is the calibrated game: speed ±0.3%/point (`e.sf`, and defenders' `d.spd`), elusiveness shifts the broken-tackle roll `c.brk`, tackling −0.25%/point on the break chance, hands ±0.4%/point on the catch, accuracy ±1.2%/point on throw error, strength moves a defender's `winAt`. `rateUp()` stamps `rt`/`sf` on every man when a unit takes the field (setupPlay, kickoffs, punts, interception returns). The sim build sets `window.__gbRatings='neutral'` (everyone exactly average); harnesses take `RATINGS=random` to re-roll real rosters each play. |
 | Your team (`myTeam`, `foldSeason`, `progressTeam`, `COLORWAYS`, `teamAbbr`) | 480 | One persistent roster in localStorage `gb-team` (`v`, `roster`, `seasonNo`, season `stats`, `history`). Season games fold stats into it and turn yards/TDs/tackles/sacks/picks into +1 rating bumps (two at most a man a game; the line gains strength after a 90-yard rushing day or a clean pocket). Opponents' rosters are seeded by their abbreviation (`oppRoster`), so each is the same men every meeting. Two-player games use fresh even rosters for both sides. The team screen (`showTeam`) lists starters by unit with ratings, season stats, leaders and past seasons, and is where you name the team (`T.name`; `teamAbbr()` makes the scoreboard's three letters: initials from three words, else the city's first three) and pick one of ten `COLORWAYS` (`T.kit`, applied to `TEAM_KIT.user` by `applyMyKit`). `applyOpponent` puts an opponent whose jersey is within 110 (RGB distance) of yours in road whites (`kitClash`). The window key handlers ignore keys typed into an input. |
 | League (`simWeek`, `standings`, `seasonMVP`) | 4850 | Each week of a season the other teams play each other (`simWeek`: seeded by week, season and `SEASON.seed`; the bye goes to whoever has played most; the stronger side wins by a logistic on `str`), and your opponent's result is yours reversed. `standings` sorts by win share, point difference, strength. When the regular season ends with four wins, `SEASON.titleOpp` is the top other team and `seasonOpp` returns it. The final screen shows the standings (and the season MVP from the season totals once it is over); the team screen shows the whole table. |
@@ -278,6 +278,31 @@ convoy (`passBlocks`, `G._scrRel`).
 is how safeties once shadowed every receiver nine yards ahead all the way to the
 end zone. `resolveCatch` resets them.
 
+**A pick must go through `pickRec`.** While `G.selLock` is 0 the drop update re-picks
+the most open receiver every frame. The lock used to be 1.4s, so a receiver you chose
+early in the drop was quietly swapped for the "most open" one before you threw. Setting
+`G.sel` directly from a new control works for a frame and then is lost.
+
+**Protection doubles only with backs and tight ends, and only the man nearest them.**
+Every rusher had exactly one blocker and beat him on his own clock, so keeping men in
+bought nothing (PA MAX, eight blocking three or four: sacked 26%). A blocker with no man
+(`!best && b.pos`, in `blockNearest`) now doubles the nearest rusher within `DBL_R` (8
+yards), one helper to a man (`hcl`), and a doubled rusher's clock runs at `DBL_RATE`
+(0.5). Letting helpers pick the rusher about to win took every sack out of the game;
+letting spare linemen double too took sacks from 7.8% of dropbacks to 2%; picking up a
+man who had already beaten his block did the same. The line stays man for man, as the
+rush was calibrated, and `rushWinP` against the CPU's passer went from 0.11 to 0.13 to
+put back the two points the doubles took.
+
+**Prevent is four deep and all zone, and its safeties play the inside quarters.** It was
+man coverage with the two deepest men four yards deeper and softer corners: one safety
+stayed manned up on the tight end against an empty set, and it was the worst call in the
+book against the deep ball (27 CPU touchdowns in 150 empty-deep dropbacks). Given halves
+(`d.deep`), the two safeties shaded out to the go routes and the post ran between them
+(63% complete with six yards to spare); `d.quarter` keeps them inside, the corners take the
+outside (`d.third`), everyone lines up deep (`deepX`, and a start 11–16 yards off), and the
+deep spots are clamped to the end zone.
+
 ---
 
 ## 4. Measured baselines — do not undo these
@@ -300,10 +325,12 @@ like with like.
 | Gains by band, same (≤-1, 0, 1-2, 3-4, 5-6, 7-9, 10-14, 15-19, 20+) | 9 8 21 16 16 13 5 1 2 % | 10 8 21 21 13 11 8 3 3 % |
 | Carries of 20+ that go the distance, same | 0–13 of ~50 a run, typically 3 (was 40 of 68: the back never tired) | ~1 in 10 |
 | Your completion rate, original four passes (`passtrace`, random-timing QB) | 60–63% | 65% |
-| Your interceptions / sacks / net yards per dropback | ~2.1% / 5.5–7% / 6.1 | 2.3% / 6.5% / 6.3 |
+| Your interceptions / sacks / net yards per dropback | ~2.1% / 5.5–7% / 6.1 (every pass play, `PLAYS=all`: 2.8% / 6.2% / 4.7, was 2.0% / 8.0% / 3.9 before backs doubled and prevent was rebuilt) | 2.3% / 6.5% / 6.3 |
 | Your QB by throw, every pass play (`PLAYS=all`, random timing): old auto / all bullets / all touch / smart (touch past 12 yd) | 69% 2.2% INT 4.40 / 68.6% 2.5% 4.31 (sacks 9.5%: the windup) / 65.8% 1.5% 4.27 / 69% 1.0% 4.71 yd | — |
 | CPU completion, every pass play (`passtrace PLAYS=all`, human-like defender) | 63–68% | 65% |
-| CPU sacked (your line rushes four ~65% of the time, wins sooner against him, and he needs 0.22–1.0s to react) | 4.5% (three runs; was 0.2–1.1%) | 6.5% |
+| CPU sacked (your line rushes four ~65% of the time, wins sooner against him, and he needs 0.22–1.0s to react) | 4.5% (three runs; was 0.2–1.1%); every pass play against the base defence 7.2%, and averaged over the six coverage calls (`playdiag 40 all`, `DEF=`) 5.6% | 6.5% |
+| The coverage matrix (`playdiag 40 all`, `DEF=`, 800 CPU dropbacks each): completion / net / sacks / TDs / 40+ gains | man 65% 7.8 6.0% 0.6% 13 · cover2 57% 8.9 6.4% 2.9% 40 · zone 68% 8.7 4.4% 1.3% 29 · blitz 66% 8.0 5.4% 0% 12 · firezone 65% 8.8 4.5% 1.9% 32 · prevent 73% 7.0 6.8% 0.4% 3, deep balls 20% complete (prevent was 70% 10.2 2.9% 36: the worst call against the deep ball) | — |
+| Sacks by protection (`playdiag 400`), before the backs doubled → after | PA MAX (8 blocking) 26% → 11–13% · play action (7) 20% → 8–9% · verticals (7) 19% → 12–14% · four verts (6) 16–18% → 13–14% · empty deep (5) 16% → 11–15% · quick game 0% | — |
 | CPU interceptions / net yards per dropback (same) | 0.5–1.9% / 7.2–8.6 | 2.3% / 6.3 |
 | CPU completion by air yards: 0–9 / 10–19 / 20+ | 78–79% / 55–57% / 33–42% | 72% / 55% / 35% |
 | CPU screens (`passtrace SIDES=cpu PLAYS=screen,bubble`): the back's / the bubble | 91% for 5.1 yd / 91–94% for 4.7–5.0 yd (were 65–70% for 10–15 yd, all thrown deep to the go routes / 87–89% for 1.3) | ~80% for ~6 / ~4–5 yd |
@@ -343,8 +370,14 @@ Roughly in order of how much they would improve the game.
    `contain`. Measure with `runshape`, several runs: repeat runs of 2,600 carries differ
    by more than sampling error (5+ from 31% to 38%), so one run proves nothing.
 2. ~~The AI pass rush never sacks the CPU quarterback~~ — 4.5% now (see the
-   baselines). He still gets the ball out in ~1.5s on average (NFL ~2.7s) and
-   rarely throws more than ~18 yards downfield.
+   baselines). He still gets the ball out in ~1.5s on average (NFL ~2.7s). (He does
+   throw deep: 17% of attempts across the book go 20+ air yards.)
+   **Man coverage gives up big yards after the catch on slants**: the quick game nets
+   13 yards a dropback against man (YAC ~10, a tenth of completions going 40+) and
+   6–8 against the zones, because the man trails his receiver and the deep help is
+   12+ yards off. The harness's defender does nothing until the ball is thrown, so a
+   player who calls a coverage takes some of it back; measure with `playdiag` before
+   changing man leverage, which moves every pass rate.
 3. ~~Screens net ~3 yards~~ — the back's screen nets ~5 (91% complete; NFL ~6) with the
    guard and tackle on his side releasing into it at 0.5s, the bubble ~5 (NFL 4-5). See
    the screens trap.
@@ -402,6 +435,7 @@ at another server, which is how to A/B against a worktree of the last commit):
 carries make 10 and how many 20-yard ones score; `PRE='js'` tries a value in the page first — the sim build's
 `__sim.ev` — without editing the game),
 `passtrace` (both quarterbacks; `BOT=human|none`, `USERQB=random|smart`, `PLAYS=all` for every pass play),
+`playdiag` (CPU pass plays one at a time: per target, air yards, YAC and the separation at arrival; sacks by time and rusher; `DEF=` a coverage call, and `all` plus `DEF=` is a row of the coverage matrix),
 `returntrace` (kick and punt returns), `yactrace` (a whole game with a scripted
 player, plus yards after catch and contact-to-tackle frames), `depthtrace`
 (completion by throw depth), `tacklenow` (frames from contact to whistle),
