@@ -79,6 +79,10 @@
   #rlabels{position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden;}
   #rlabels .rl{position:absolute; width:19px; height:19px; margin:-24px 0 0 -10px; border-radius:50%; background:#9cc2ff; color:#08101a; font:700 12px/19px 'Oswald',sans-serif; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.5);}
   #rlabels .rl.sel{background:var(--gold);} #rlabels .rl.hot{background:#ff8a7a;}
+  #dlabels{position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden;}
+  #dlabels .dl{position:absolute; width:20px; height:20px; margin:-26px 0 0 -10px; border-radius:50%; background:#ffb0a6; color:#08101a; font:700 12px/20px 'Oswald',sans-serif; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,.5); pointer-events:auto; cursor:pointer; touch-action:none;}
+  #dlabels .dl.sel{background:var(--gold);}
+  #dlabels .dl::after{content:''; position:absolute; left:50%; top:-8px; width:44px; height:70px; margin-left:-22px; border-radius:22px;}
   #rlabels .rl.pick{pointer-events:auto; cursor:pointer; touch-action:none;}
   #rlabels .rl.pick::after{content:''; position:absolute; left:50%; top:-10px; width:56px; height:88px; margin-left:-28px; border-radius:28px;}
   #rlabels .rl.off{opacity:.8; outline:2px dashed rgba(255,255,255,.7); outline-offset:1px;}
@@ -348,7 +352,7 @@
     </div>
     <div id="audible" class="hidden"></div>
     <div id="presnap-bar" class="hidden"><span data-a="audible">AUDIBLE</span><span data-a="flip">FLIP</span></div>
-    <div id="rlabels"></div>
+    <div id="rlabels"></div><div id="dlabels"></div>
 
     <div id="defcall" class="hidden">
       <div id="dc-head"></div>
@@ -1537,6 +1541,7 @@
     if(k==='f') toggleFullscreen();
     if(k==='t') callTimeout('user');       // stop the clock between plays
     if(k==='b') toggleBlockerControl();   // run plays: take control of a lineman and block
+    if(/^[0-9]$/.test(k) && G && G.phase==='presnap' && actDef()){ pickDef(k==='0'?9:+k-1); }
     if(/^[1-5]$/.test(k) && actOff()){ if(pickRec(+k-1) && !e.repeat) startThrow('num'); }   // his number throws to him
     keys[k]=true;
   });
@@ -1591,9 +1596,13 @@
   // the lineman over the ball, so there was no way to line up as an end or a safety:
   // now it steps through the defense, linebackers first, then the line, then the back end.
   const DEF_ORDER={MLB:0,LB:1,DE:2,DT:3,S:4,CB:5};
+  function defOrder(){ return [...G.defenders].sort((a,b)=>((DEF_ORDER[a.role]??6)-(DEF_ORDER[b.role]??6)) || (a.y-b.y)); }
+  // Before the snap, take a defender directly: his number (1-9, 0 for the tenth) or a tap on him.
+  function pickDef(i){ if(!G || G.phase!=='presnap' || !actDef()) return false; const d=defOrder()[i]; if(!d) return false;
+    G.userDef=d; const r=d.role||''; setMsg('YOU: '+({MLB:'MIDDLE LINEBACKER',LB:'LINEBACKER',DE:'DEFENSIVE END',DT:'DEFENSIVE TACKLE',S:'SAFETY',CB:'CORNERBACK'}[r]||r)+' #'+d.n,0.9); return true; }
   function switchDef(){
     if(G.phase==='presnap' && G.defenders.length){
-      const L=[...G.defenders].sort((a,b)=>((DEF_ORDER[a.role]??6)-(DEF_ORDER[b.role]??6)) || (a.y-b.y));
+      const L=defOrder();
       const i=L.indexOf(G.userDef); G.userDef=L[(i+1)%L.length];
       const r=G.userDef.role||''; setMsg('YOU: '+({MLB:'MIDDLE LINEBACKER',LB:'LINEBACKER',DE:'DEFENSIVE END',DT:'DEFENSIVE TACKLE',S:'SAFETY',CB:'CORNERBACK'}[r]||r)+' #'+G.userDef.n,0.9);
       return; }
@@ -2018,7 +2027,7 @@
         : '<b>Before the snap:</b> Space hike · C audible · X flip · 1–5 then an arrow = hot route, then M = motion · T timeout<br>'
           +'<b>Passing:</b> 1–5 throws to that receiver, Space to the gold one · tap for a touch pass, hold for a bullet<br>'
           +'<b>Running:</b> arrows/WASD · Shift sprint · Q/E juke · R stiff arm · Z dive (QB: slide) · Space spin<br>'
-          +'<b>Defense:</b> Space switch · Q/E dive, or rip free of a block · R go up for the ball · P pause';
+          +'<b>Defense:</b> before the snap 1–9, 0 (or tap a number) picks your man · Space switch · Q/E dive, or rip free of a block · R go up for the ball · P pause';
       try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){} }
   }
   function quitToMenu(){
@@ -4301,7 +4310,7 @@
   /*POSE-LIB-END*/
   function loadPlayers(){
     const note=document.getElementById('loadnote');
-    new THREE.GLTFLoader().load('assets/gridiron_player.glb', (gltf)=>{
+    const onModel=(gltf)=>{
       playerProto=gltf;
       const aniso=upgradeTextures(playerProto.scene);
       if(window.__gbDebug) console.log('texture anisotropy:',aniso);
@@ -4312,8 +4321,22 @@
         new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.DoubleSide,transparent:true,opacity:0.85,fog:false}));
         r.rotation.x=-Math.PI/2; r.position.y=0.06; r.visible=false; scene.add(r); ringPool.push(r); }
       playersReady=true; document.getElementById('start').classList.remove('loading');
-    }, (ev)=>{ if(note && ev && ev.total) note.textContent='LOADING PLAYERS… '+Math.min(99,Math.round(100*ev.loaded/ev.total))+'%'; },
-    (e)=>{ console.error('player glb load failed', e); if(note) note.innerHTML='Could not load the players — <a href="" style="color:var(--gold)">reload</a> to try again'; });
+    };
+    new THREE.GLTFLoader().load('assets/gridiron_player.glb', onModel, (ev)=>{ if(note && ev && ev.total) note.textContent='LOADING PLAYERS… '+Math.min(99,Math.round(100*ev.loaded/ev.total))+'%'; },
+    (e)=>{ console.warn('player glb failed, trying it in pieces', e); loadPlayerParts(note, onModel); });
+  }
+  // Some school and office networks cut a large download short (a laptop got 66 KB of
+  // the 3 MB model). The same file is also kept as 61 pieces of 48 KB in assets/parts,
+  // fetched a few at a time and put back together.
+  const PART_N=61, PART_BYTES=2993588;
+  async function loadPlayerParts(note, done){
+    try{ const bufs=new Array(PART_N); let got=0;
+      const one=async i=>{ for(let t=0;t<4;t++){ try{ const r=await fetch('assets/parts/p'+String(i).padStart(3,'0'),{cache:'no-store'}); if(r.ok){ const b=await r.arrayBuffer(); if(b.byteLength===49152||i===PART_N-1) return b; } }catch(e){} await new Promise(z=>setTimeout(z,400*(t+1))); } throw new Error('piece '+i); };
+      for(let i=0;i<PART_N;i+=6){ await Promise.all(Array.from({length:Math.min(6,PART_N-i)},(_,k)=>one(i+k).then(b=>{ bufs[i+k]=b; got++; if(note) note.textContent='LOADING PLAYERS… '+Math.round(99*got/PART_N)+'%'; }))); }
+      const all=new Uint8Array(PART_BYTES); let o=0; for(const b of bufs){ all.set(new Uint8Array(b),o); o+=b.byteLength; }
+      if(o!==PART_BYTES) throw new Error('model '+o+' of '+PART_BYTES+' bytes');
+      new THREE.GLTFLoader().parse(all.buffer,'assets/',done,e=>{ throw e; });
+    }catch(e){ console.error('player model failed', e); if(note) note.innerHTML='Could not load the players ('+(e&&e.message||e)+') — <a href="" style="color:var(--gold)">reload</a> to try again'; }
   }
   let wxRain=null, wxSnow=null, wxCover=null, wxField=null, wxSky=null, wxT=0, wxSnd=null;
   function initWeather3D(){
@@ -4669,6 +4692,16 @@
           const op=padOf(G.offense), ic=((PAD.used||TWO_P)&&op)?iconsNow()[i]:-1, txt=ic>=0?padGlyph(ic,op.ps):String(i+1);
           if(el.textContent!==txt) el.textContent=txt;
           const cls='rl'+(ic>=0?' g'+ic:'')+(off?' off':'')+(G.phase==='live'&&i===G.sel?' sel':'')+(G.hotSel===i?' hot':'')+(G.phase==='presnap'&&G.playType==='pass'?' tap':'')+(G.phase==='live'&&G.passState==='drop'?' pick':''); if(el.className!==cls) el.className=cls; }); } }
+    const dlab=document.getElementById('dlabels');
+    if(dlab){ const dc=document.getElementById('defcall'), showD=!repFrame && G.phase==='presnap' && humanDef() && !TWO_P && G.defenders.length && (!dc || dc.classList.contains('hidden'));
+      if(!showD){ if(dlab.childElementCount) dlab.innerHTML=''; }
+      else { const L=defOrder(); while(dlab.childElementCount<L.length){ const d=document.createElement('div'); d.className='dl'; dlab.appendChild(d); }
+        while(dlab.childElementCount>L.length) dlab.lastChild.remove();
+        const W=renderer.domElement.clientWidth||760, H=renderer.domElement.clientHeight||560;
+        L.forEach((d,i)=>{ const el=dlab.children[i]; _lab.set(WX(d.x),2.45,WZ(d.y)).project(camera);
+          el.style.left=Math.max(12,Math.min(W-12,(_lab.x+1)/2*W)).toFixed(1)+'px'; el.style.top=Math.max(28,Math.min(H-6,(1-_lab.y)/2*H)).toFixed(1)+'px';
+          const t=i<9?String(i+1):i===9?'0':''; if(el.textContent!==t) el.textContent=t;
+          const c='dl'+(d===G.userDef?' sel':''); if(el.className!==c) el.className=c; }); } }
     const bar=_presnapBar||(_presnapBar=document.getElementById('presnap-bar'));
     if(bar){ const on=!repFrame && G.offense==='user' && G.phase==='presnap'; if(bar.classList.contains('hidden')===on) bar.classList.toggle('hidden',!on); }
   }
@@ -5743,6 +5776,8 @@
     if(pickRec([...el.parentNode.children].indexOf(el))) startThrow('tap', e.pointerId); });
   // (only that finger lets go: lifting the one on the stick must not turn a bullet into a lob)
   ['pointerup','pointercancel'].forEach(ev=> addEventListener(ev,e=>releaseThrow('tap', e.pointerId)));
+  document.getElementById('dlabels').addEventListener('pointerdown',e=>{ const el=e.target.closest('.dl'); if(!el) return;
+    e.preventDefault(); e.stopPropagation(); pickDef([...el.parentNode.children].indexOf(el)); });
   // Touch: tap a receiver's number before the snap for his hot-route menu.
   document.getElementById('rlabels').addEventListener('click',e=>{ const el=e.target.closest('.rl'); if(!el || G.phase!=='presnap' || G.offense!=='user' || G.playType!=='pass') return;
     const i=[...el.parentNode.children].indexOf(el), r=G.receivers[i]; if(!r) return;
